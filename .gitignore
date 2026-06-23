@@ -1,0 +1,22 @@
+.DS_Store
+.env
+.env.*
+!.env.example
+
+# Local agent/runtime state
+.omx/
+.codex/
+
+# Node / frontend builds
+node_modules/
+dist/
+build/
+.next/
+.turbo/
+coverage/
+
+# Logs and local databases
+*.log
+*.sqlite
+*.sqlite3
+
