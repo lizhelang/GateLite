@@ -197,7 +197,7 @@ export function WebServicesPage({ dashboard, onRefresh }: WebServicesPageProps) 
         <CardHeader>
           <div className="grid gap-3 md:flex md:items-center md:justify-between">
             <div className="grid min-w-0 gap-1">
-              <CardDescription>{t("01 Web Services", "01 Web 服务")}</CardDescription>
+              <CardDescription>{t("02 Web Services", "02 Web 服务")}</CardDescription>
               <CardTitle className="text-2xl">{t("Domain-first routing control", "以域名为中心的路由管理")}</CardTitle>
               <CardDescription>{t("Lucky-style service operations mapped to Traefik file-provider routers and live dashboard status.", "把 Lucky 风格的服务操作映射到 Traefik file provider 路由和实时运行状态。")}</CardDescription>
             </div>

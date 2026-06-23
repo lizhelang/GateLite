@@ -97,7 +97,7 @@ export function CertificatesPage({ dashboard, onRefresh }: CertificatesPageProps
         <CardHeader>
           <div className="grid gap-3 md:flex md:items-center md:justify-between">
             <div className="grid min-w-0 gap-1">
-              <CardDescription>{t("02 SSL/TLS Certificates", "02 SSL/TLS 证书")}</CardDescription>
+              <CardDescription>{t("03 SSL/TLS Certificates", "03 SSL/TLS 证书")}</CardDescription>
               <CardTitle className="text-2xl">{t("Certificate setup without YAML first", "无需先写 YAML 的证书配置")}</CardTitle>
               <CardDescription>{t("Track certificate source, expiry, SAN coverage, status, and which domains are bound to each certificate.", "跟踪证书来源、过期时间、SAN 覆盖、状态，以及每张证书绑定的域名。")}</CardDescription>
             </div>

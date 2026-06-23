@@ -1,9 +1,7 @@
-import { Activity, Globe2, Languages, RefreshCw, ShieldCheck, TerminalSquare } from "lucide-react";
+import { Activity, Globe2, Languages, LayoutDashboard, RefreshCw, ShieldCheck, TerminalSquare, type LucideIcon } from "lucide-react";
 import { useEffect, useState, type CSSProperties } from "react";
 import type { DashboardPayload } from "../shared/types";
 import { getDashboard } from "./api";
-import { TrafficOverview } from "./components/TrafficOverview";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import {
@@ -20,12 +18,19 @@ import {
 } from "@/components/ui/sidebar";
 import { useLanguage } from "./i18n";
 import { CertificatesPage } from "./pages/CertificatesPage";
+import { DashboardPage } from "./pages/DashboardPage";
 import { RuntimePage } from "./pages/RuntimePage";
 import { WebServicesPage } from "./pages/WebServicesPage";
 
-type ViewKey = "web" | "certificates" | "runtime";
+type ViewKey = "dashboard" | "web" | "certificates" | "runtime";
 
-const views: Array<{ key: ViewKey; label: { en: string; zh: string }; description: { en: string; zh: string }; icon: typeof Globe2 }> = [
+const views: Array<{ key: ViewKey; label: { en: string; zh: string }; description: { en: string; zh: string }; icon: LucideIcon }> = [
+  {
+    key: "dashboard",
+    label: { en: "Dashboard", zh: "仪表盘" },
+    description: { en: "Traffic, status, runtime summary", zh: "流量、状态、运行摘要" },
+    icon: LayoutDashboard
+  },
   {
     key: "web",
     label: { en: "Web Services", zh: "Web 服务" },
@@ -48,7 +53,7 @@ const views: Array<{ key: ViewKey; label: { en: string; zh: string }; descriptio
 
 export function App() {
   const { language, t, toggleLanguage } = useLanguage();
-  const [activeView, setActiveView] = useState<ViewKey>("web");
+  const [activeView, setActiveView] = useState<ViewKey>("dashboard");
   const [dashboard, setDashboard] = useState<DashboardPayload | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -70,9 +75,6 @@ export function App() {
   }, []);
 
   const active = views.find((view) => view.key === activeView) || views[0];
-  const serviceCount = dashboard?.webServices.length || 0;
-  const certificateCount = dashboard?.certificates.length || 0;
-  const connected = dashboard?.runtime.connected;
 
   return (
     <SidebarProvider
@@ -105,34 +107,13 @@ export function App() {
         </header>
 
         <main className="gate-grid @container/main flex min-h-svh flex-1 flex-col gap-4 p-4 md:gap-6 md:p-6">
-          <section className="grid gap-4">
-            <div className="flex flex-wrap items-end justify-between gap-3">
-              <div>
-                <p className="text-xs font-medium uppercase tracking-wide text-cyan-200/80">{t("Local Traefik companion", "本地 Traefik 伴侣面板")}</p>
-                <h2 className="mt-1 text-2xl font-semibold tracking-tight md:text-3xl">GateLite</h2>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <Badge variant="outline" className={connected ? "border-emerald-400/40 bg-emerald-400/10 text-emerald-200" : "border-zinc-400/30 bg-zinc-400/10 text-zinc-300"}>
-                  {connected ? t("Traefik connected", "Traefik 已连接") : loading ? t("Connecting", "连接中") : t("Traefik offline", "Traefik 离线")}
-                </Badge>
-                <Badge variant="outline">{t(`${serviceCount} services`, `${serviceCount} 个服务`)}</Badge>
-                <Badge variant="outline">{t(`${certificateCount} certificates`, `${certificateCount} 张证书`)}</Badge>
-              </div>
-            </div>
-
-            <TrafficOverview dashboard={dashboard} loading={loading} />
-          </section>
-
           {error ? <div className="rounded-xl border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">{error}</div> : null}
           {loading && !dashboard ? <div className="rounded-xl border bg-card/70 p-4 text-sm text-muted-foreground">{t("Loading GateLite state and Traefik runtime...", "正在加载 GateLite 状态和 Traefik 运行时...")}</div> : null}
 
-          {dashboard ? (
-            <>
-              {activeView === "web" ? <WebServicesPage dashboard={dashboard} onRefresh={load} /> : null}
-              {activeView === "certificates" ? <CertificatesPage dashboard={dashboard} onRefresh={load} /> : null}
-              {activeView === "runtime" ? <RuntimePage runtime={dashboard.runtime} /> : null}
-            </>
-          ) : null}
+          {activeView === "dashboard" ? <DashboardPage dashboard={dashboard} loading={loading} /> : null}
+          {dashboard && activeView === "web" ? <WebServicesPage dashboard={dashboard} onRefresh={load} /> : null}
+          {dashboard && activeView === "certificates" ? <CertificatesPage dashboard={dashboard} onRefresh={load} /> : null}
+          {dashboard && activeView === "runtime" ? <RuntimePage runtime={dashboard.runtime} /> : null}
         </main>
       </SidebarInset>
     </SidebarProvider>
