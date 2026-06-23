@@ -102,7 +102,8 @@ button:disabled {
 
 .brand-mark,
 .toolbar,
-.stage-metrics,
+.panel-heading,
+.visual-stat-top,
 .service-title,
 .row-actions,
 .domain-row,
@@ -132,7 +133,7 @@ button:disabled {
 }
 
 .brand-mark h1,
-.stage-copy h2,
+.panel-heading h2,
 .section-heading h2,
 .detail-panel h3,
 .service-title h3,
@@ -148,8 +149,8 @@ button:disabled {
 }
 
 .brand-mark p,
-.stage-copy p,
 .section-heading p,
+.visual-stat p,
 .runtime-row p,
 .service-meta,
 .detail-list dd,
@@ -294,15 +295,6 @@ button:disabled {
   min-width: 0;
 }
 
-.story-stage {
-  min-height: 34vh;
-  display: grid;
-  grid-template-columns: minmax(0, 1.3fr) minmax(280px, 0.7fr);
-  gap: 2rem;
-  align-items: center;
-  padding: clamp(2rem, 6vw, 5rem) 0;
-}
-
 .eyebrow {
   margin: 0 0 0.65rem;
   color: var(--accent-3);
@@ -311,24 +303,17 @@ button:disabled {
   text-transform: uppercase;
 }
 
-.stage-copy h2 {
-  max-width: 900px;
-  font-size: clamp(2.35rem, 6vw, 5.9rem);
-  line-height: 0.98;
+.visual-stage {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(250px, 0.65fr);
+  gap: 1rem;
+  align-items: stretch;
+  padding: 1.25rem 0 1.05rem;
 }
 
-.stage-copy p {
-  font-size: 0.9rem;
-  text-transform: uppercase;
-}
-
-.stage-metrics {
-  justify-content: flex-end;
-  gap: 0.75rem;
-  flex-wrap: wrap;
-}
-
-.metric,
+.overview-panel,
+.visual-stat,
+.preset-strip,
 .runtime-stat {
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -336,30 +321,242 @@ button:disabled {
   box-shadow: var(--shadow);
 }
 
-.metric {
-  min-width: 132px;
+.overview-panel {
+  min-width: 0;
   padding: 1rem;
+  background:
+    linear-gradient(135deg, rgba(55, 214, 194, 0.08), rgba(233, 69, 96, 0.04)),
+    rgba(255, 255, 255, 0.06);
+  overflow: hidden;
 }
 
-.metric span,
+.traffic-panel {
+  position: relative;
+}
+
+.traffic-panel::after {
+  content: "";
+  position: absolute;
+  inset: auto -4rem -5rem auto;
+  width: 16rem;
+  height: 16rem;
+  border: 1px solid rgba(55, 214, 194, 0.24);
+  border-radius: 50%;
+  opacity: 0.35;
+}
+
+.panel-heading {
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.55rem;
+}
+
+.panel-heading h2 {
+  font-size: clamp(1.35rem, 2.2vw, 2.45rem);
+  line-height: 1;
+}
+
+.live-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-height: 32px;
+  padding: 0.35rem 0.62rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--text-soft);
+  background: rgba(8, 11, 20, 0.48);
+  font-size: 0.78rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.live-pill.online {
+  border-color: rgba(99, 212, 113, 0.42);
+  color: #dcffe3;
+  background: rgba(99, 212, 113, 0.1);
+}
+
+.live-pill.offline {
+  border-color: rgba(255, 102, 120, 0.42);
+  color: #ffe3e7;
+  background: rgba(255, 102, 120, 0.1);
+}
+
+.traffic-chart {
+  position: relative;
+  z-index: 1;
+  display: block;
+  width: 100%;
+  height: clamp(180px, 22vw, 260px);
+  margin-top: 0.25rem;
+}
+
+.chart-grid-line {
+  stroke: rgba(255, 255, 255, 0.13);
+  stroke-width: 1;
+}
+
+.chart-grid-line.soft {
+  stroke: rgba(255, 255, 255, 0.07);
+}
+
+.chart-area {
+  fill: url("#trafficFill");
+}
+
+.chart-line {
+  fill: none;
+  stroke-width: 3.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  filter: drop-shadow(0 0 10px rgba(55, 214, 194, 0.22));
+}
+
+.chart-dot {
+  stroke: rgba(8, 11, 20, 0.86);
+  stroke-width: 2;
+}
+
+.axis-label {
+  fill: rgba(215, 222, 234, 0.62);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0;
+}
+
+.chart-legend {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  gap: 0.45rem;
+  flex-wrap: wrap;
+}
+
+.legend-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.38rem;
+  max-width: 100%;
+  min-height: 30px;
+  padding: 0.32rem 0.5rem;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 999px;
+  color: var(--text-soft);
+  background: rgba(8, 11, 20, 0.42);
+  font-size: 0.75rem;
+  overflow-wrap: anywhere;
+}
+
+.legend-chip i {
+  width: 0.54rem;
+  height: 0.54rem;
+  border-radius: 50%;
+}
+
+.legend-chip strong {
+  color: #fff;
+  font-size: 0.72rem;
+}
+
+.overview-stack {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.visual-stat,
+.preset-strip {
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.visual-stat {
+  min-width: 0;
+  padding: 0.85rem;
+}
+
+.visual-stat-top {
+  gap: 0.42rem;
+  color: var(--text-muted);
+  font-size: 0.76rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.visual-stat strong {
+  display: block;
+  margin-top: 0.55rem;
+  color: #fff;
+  font-size: clamp(1.35rem, 2.4vw, 2.1rem);
+  line-height: 1;
+}
+
+.visual-stat p {
+  min-height: 2.4em;
+  margin: 0.45rem 0 0;
+  font-size: 0.78rem;
+}
+
+.mini-meter,
+.runway-bars {
+  height: 8px;
+  overflow: hidden;
+  margin-top: 0.75rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.mini-meter i,
+.runway-bars i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+}
+
+.mini-meter i {
+  background: linear-gradient(90deg, var(--accent-3), var(--good));
+}
+
+.runway-bars {
+  display: flex;
+}
+
+.runway-bars .valid {
+  background: var(--good);
+}
+
+.runway-bars .expiring {
+  background: var(--warn);
+}
+
+.runway-bars .expired {
+  background: var(--bad);
+}
+
+.preset-strip {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+  min-height: 46px;
+  padding: 0.7rem 0.85rem;
+  color: var(--text-soft);
+  font-size: 0.84rem;
+  font-weight: 800;
+}
+
+.preset-strip span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .runtime-stat span {
   display: block;
   color: var(--text-muted);
   font-size: 0.8rem;
-}
-
-.metric strong {
-  display: block;
-  margin-top: 0.45rem;
-  font-size: 1.35rem;
-}
-
-.metric.good strong {
-  color: var(--good);
-}
-
-.metric.bad strong {
-  color: var(--bad);
 }
 
 .workspace-section {
@@ -846,7 +1043,7 @@ button:disabled {
     width: auto;
   }
 
-  .story-stage,
+  .visual-stage,
   .content-grid,
   .runtime-columns {
     grid-template-columns: 1fr;
@@ -862,9 +1059,21 @@ button:disabled {
     padding-inline: 0.85rem;
   }
 
-  .story-stage {
-    min-height: auto;
-    padding: 2rem 0;
+  .visual-stage {
+    padding: 1rem 0 0.9rem;
+  }
+
+  .panel-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .traffic-chart {
+    height: 196px;
+  }
+
+  .overview-stack {
+    grid-template-columns: 1fr;
   }
 
   .section-heading {

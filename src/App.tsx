@@ -1,6 +1,7 @@
 import { Activity, Globe2, RefreshCw, ShieldCheck } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { getDashboard } from "./api";
+import { TrafficOverview } from "./components/TrafficOverview";
 import { CertificatesPage } from "./pages/CertificatesPage";
 import { RuntimePage } from "./pages/RuntimePage";
 import { WebServicesPage } from "./pages/WebServicesPage";
@@ -35,11 +36,6 @@ export function App() {
   useEffect(() => {
     void load();
   }, []);
-
-  const domainCount = useMemo(() => {
-    if (!dashboard) return 0;
-    return new Set(dashboard.webServices.flatMap((service) => service.domains)).size;
-  }, [dashboard]);
 
   return (
     <div className="app-shell">
@@ -77,17 +73,7 @@ export function App() {
         </aside>
 
         <main className="story-main">
-          <section className="story-stage">
-            <div className="stage-copy">
-              <p className="eyebrow">Local Traefik companion</p>
-              <h2>Domains, certificates, and runtime truth in one control surface.</h2>
-            </div>
-            <div className="stage-metrics">
-              <Metric label="Traefik" value={dashboard?.runtime.connected ? "Online" : "Offline"} tone={dashboard?.runtime.connected ? "good" : "bad"} />
-              <Metric label="Domains" value={String(domainCount)} />
-              <Metric label="Certificates" value={String(dashboard?.certificates.length || 0)} />
-            </div>
-          </section>
+          <TrafficOverview dashboard={dashboard} loading={loading} />
 
           {error ? <div className="notice error">{error}</div> : null}
           {loading && !dashboard ? <div className="notice">Loading GateLite state and Traefik runtime...</div> : null}
@@ -101,15 +87,6 @@ export function App() {
           ) : null}
         </main>
       </div>
-    </div>
-  );
-}
-
-function Metric({ label, value, tone }: { label: string; value: string; tone?: "good" | "bad" }) {
-  return (
-    <div className={`metric ${tone || ""}`}>
-      <span>{label}</span>
-      <strong>{value}</strong>
     </div>
   );
 }
