@@ -106,11 +106,15 @@ Run checks:
 npm run build
 npm run test
 npm run verify:local
+npm run verify:crud
 ```
 
 `npm run verify:local` assumes `npm run compose:up` and `npm run dev` are
 already running. It checks the local Traefik API, the GateLite API connection,
 the generated dynamic configuration, and both seeded HTTP/HTTPS whoami routes.
+`npm run verify:crud` uses temporary `*.localhost` domains to exercise Web
+service, group, and certificate create/edit/toggle/reorder/delete flows against
+the same local Traefik stack, then removes those temporary resources.
 
 ## References
 
