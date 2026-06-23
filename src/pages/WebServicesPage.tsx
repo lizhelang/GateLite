@@ -27,6 +27,7 @@ import {
 } from "../api";
 import { Modal } from "../components/Modal";
 import { StatusBadge } from "../components/StatusBadge";
+import { useLanguage } from "../i18n";
 
 interface WebServicesPageProps {
   dashboard: DashboardPayload;
@@ -64,6 +65,7 @@ const emptyDraft: DraftService = {
 };
 
 export function WebServicesPage({ dashboard, onRefresh }: WebServicesPageProps) {
+  const { t } = useLanguage();
   const [editing, setEditing] = useState<WebServiceWithRuntime | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [selectedId, setSelectedId] = useState(dashboard.webServices[0]?.id || "");
@@ -99,18 +101,18 @@ export function WebServicesPage({ dashboard, onRefresh }: WebServicesPageProps) 
       await toggleWebService(service.id, !service.enabled);
       await onRefresh();
     } catch (toggleError) {
-      setError(toggleError instanceof Error ? toggleError.message : "Toggle failed.");
+      setError(toggleError instanceof Error ? toggleError.message : t("Toggle failed.", "切换失败。"));
     }
   };
 
   const handleDelete = async (service: WebServiceWithRuntime) => {
-    if (!window.confirm(`Delete Web service "${service.name}"?`)) return;
+    if (!window.confirm(t(`Delete Web service "${service.name}"?`, `删除 Web 服务「${service.name}」？`))) return;
     setError(null);
     try {
       await deleteWebService(service.id);
       await onRefresh();
     } catch (deleteError) {
-      setError(deleteError instanceof Error ? deleteError.message : "Delete failed.");
+      setError(deleteError instanceof Error ? deleteError.message : t("Delete failed.", "删除失败。"));
     }
   };
 
@@ -120,46 +122,46 @@ export function WebServicesPage({ dashboard, onRefresh }: WebServicesPageProps) 
       await updateGroup(group.id, { collapsed: !group.collapsed });
       await onRefresh();
     } catch (groupError) {
-      setError(groupError instanceof Error ? groupError.message : "Group update failed.");
+      setError(groupError instanceof Error ? groupError.message : t("Group update failed.", "分组更新失败。"));
     }
   };
 
   const handleAddGroup = async () => {
-    const name = window.prompt("New group name");
+    const name = window.prompt(t("New group name", "新分组名称"));
     if (!name?.trim()) return;
     setError(null);
     try {
       await createGroup(name.trim());
       await onRefresh();
     } catch (groupError) {
-      setError(groupError instanceof Error ? groupError.message : "Group create failed.");
+      setError(groupError instanceof Error ? groupError.message : t("Group create failed.", "分组创建失败。"));
     }
   };
 
   const handleRenameGroup = async (group: ServiceGroup) => {
-    const name = window.prompt("Rename group", group.name);
+    const name = window.prompt(t("Rename group", "重命名分组"), group.name);
     if (!name?.trim() || name.trim() === group.name) return;
     setError(null);
     try {
       await updateGroup(group.id, { name: name.trim() });
       await onRefresh();
     } catch (groupError) {
-      setError(groupError instanceof Error ? groupError.message : "Group rename failed.");
+      setError(groupError instanceof Error ? groupError.message : t("Group rename failed.", "分组重命名失败。"));
     }
   };
 
   const handleDeleteGroup = async (group: ServiceGroup, serviceCount: number) => {
     if (serviceCount > 0) {
-      setError("Move or delete services before deleting this group.");
+      setError(t("Move or delete services before deleting this group.", "删除分组前请先移动或删除其中的服务。"));
       return;
     }
-    if (!window.confirm(`Delete empty group "${group.name}"?`)) return;
+    if (!window.confirm(t(`Delete empty group "${group.name}"?`, `删除空分组「${group.name}」？`))) return;
     setError(null);
     try {
       await deleteGroup(group.id);
       await onRefresh();
     } catch (groupError) {
-      setError(groupError instanceof Error ? groupError.message : "Group delete failed.");
+      setError(groupError instanceof Error ? groupError.message : t("Group delete failed.", "分组删除失败。"));
     }
   };
 
@@ -183,18 +185,18 @@ export function WebServicesPage({ dashboard, onRefresh }: WebServicesPageProps) 
     <section className="workspace-section">
       <header className="section-heading sticky-story">
         <div>
-          <p className="eyebrow">01 Web Services</p>
-          <h2>Domain-first routing control</h2>
-          <p>Lucky-style service operations mapped to Traefik file-provider routers and live dashboard status.</p>
+          <p className="eyebrow">{t("01 Web Services", "01 Web 服务")}</p>
+          <h2>{t("Domain-first routing control", "以域名为中心的路由管理")}</h2>
+          <p>{t("Lucky-style service operations mapped to Traefik file-provider routers and live dashboard status.", "把 Lucky 风格的服务操作映射到 Traefik file provider 路由和实时运行状态。")}</p>
         </div>
         <div className="toolbar">
           <button type="button" className="secondary-button" onClick={handleAddGroup}>
             <Layers size={16} />
-            Group
+            {t("Group", "分组")}
           </button>
           <button type="button" className="primary-button" onClick={openCreate}>
             <Plus size={16} />
-            New service
+            {t("New service", "新建服务")}
           </button>
         </div>
       </header>
@@ -206,16 +208,16 @@ export function WebServicesPage({ dashboard, onRefresh }: WebServicesPageProps) 
           {grouped.map(({ group, services }) => (
             <section className="group-band" key={group.id}>
               <div className="group-header">
-                <button className="group-toggle" type="button" onClick={() => void handleGroupToggle(group)} aria-label={`${group.collapsed ? "Expand" : "Collapse"} ${group.name}`}>
+                <button className="group-toggle" type="button" onClick={() => void handleGroupToggle(group)} aria-label={t(`${group.collapsed ? "Expand" : "Collapse"} ${group.name}`, `${group.collapsed ? "展开" : "折叠"} ${group.name}`)}>
                   {group.collapsed ? <ChevronRight size={17} /> : <ChevronDown size={17} />}
                   <strong>{group.name}</strong>
-                  <span>{services.length} services</span>
+                  <span>{t(`${services.length} services`, `${services.length} 个服务`)}</span>
                 </button>
                 <div className="group-actions">
-                  <button className="icon-button" type="button" onClick={() => void handleRenameGroup(group)} aria-label={`Rename group ${group.name}`}>
+                  <button className="icon-button" type="button" onClick={() => void handleRenameGroup(group)} aria-label={t(`Rename group ${group.name}`, `重命名分组 ${group.name}`)}>
                     <Pencil size={16} />
                   </button>
-                  <button className="icon-button danger" type="button" onClick={() => void handleDeleteGroup(group, services.length)} disabled={services.length > 0 || dashboard.groups.length <= 1} aria-label={`Delete group ${group.name}`}>
+                  <button className="icon-button danger" type="button" onClick={() => void handleDeleteGroup(group, services.length)} disabled={services.length > 0 || dashboard.groups.length <= 1} aria-label={t(`Delete group ${group.name}`, `删除分组 ${group.name}`)}>
                     <Trash2 size={16} />
                   </button>
                 </div>
@@ -232,14 +234,14 @@ export function WebServicesPage({ dashboard, onRefresh }: WebServicesPageProps) 
                       onDrop={() => void handleDrop(service.id)}
                       onClick={() => setSelectedId(service.id)}
                     >
-                      <button className="drag-handle" aria-label="Drag to reorder" type="button">
+                      <button className="drag-handle" aria-label={t("Drag to reorder", "拖拽排序")} type="button">
                         <GripVertical size={18} />
                       </button>
                       <div className="service-main">
                         <div className="service-title">
                           <h3>{service.name}</h3>
-                          <StatusBadge status={service.enabled ? "enabled" : "disabled"} label={service.enabled ? "Enabled" : "Disabled"} />
-                          {service.runtime ? <StatusBadge status={service.runtime.status} label={service.runtime.status} /> : <StatusBadge status="unknown" label="Not seen" />}
+                          <StatusBadge status={service.enabled ? "enabled" : "disabled"} />
+                          {service.runtime ? <StatusBadge status={service.runtime.status} /> : <StatusBadge status="unknown" label={t("Not seen", "未发现")} />}
                         </div>
                         <div className="domain-row">
                           {service.domains.map((domain) => (
@@ -252,23 +254,23 @@ export function WebServicesPage({ dashboard, onRefresh }: WebServicesPageProps) 
                         <div className="service-meta">
                           <span>{service.entryPoints.join(", ")}</span>
                           <span>{service.targetUrl}</span>
-                          <span>{service.tls.mode === "none" ? "No TLS" : service.tls.mode}</span>
+                          <span>{service.tls.mode === "none" ? t("No TLS", "无 TLS") : service.tls.mode}</span>
                         </div>
                       </div>
                       <div className="row-actions" onClick={(event) => event.stopPropagation()}>
-                        <button className="icon-button" type="button" onClick={() => void handleToggle(service)} aria-label="Toggle service">
+                        <button className="icon-button" type="button" onClick={() => void handleToggle(service)} aria-label={t("Toggle service", "切换服务启用状态")}>
                           <Power size={17} />
                         </button>
-                        <button className="icon-button" type="button" onClick={() => openEdit(service)} aria-label="Edit service">
+                        <button className="icon-button" type="button" onClick={() => openEdit(service)} aria-label={t("Edit service", "编辑服务")}>
                           <Pencil size={17} />
                         </button>
-                        <button className="icon-button danger" type="button" onClick={() => void handleDelete(service)} aria-label="Delete service">
+                        <button className="icon-button danger" type="button" onClick={() => void handleDelete(service)} aria-label={t("Delete service", "删除服务")}>
                           <Trash2 size={17} />
                         </button>
                       </div>
                     </article>
                   ))}
-                  {services.length === 0 ? <div className="empty-inline">No services in this group yet.</div> : null}
+                  {services.length === 0 ? <div className="empty-inline">{t("No services in this group yet.", "这个分组里还没有服务。")}</div> : null}
                 </div>
               ) : null}
             </section>
@@ -278,39 +280,39 @@ export function WebServicesPage({ dashboard, onRefresh }: WebServicesPageProps) 
         <aside className="detail-panel">
           {selected ? (
             <>
-              <p className="eyebrow">Selected route</p>
+              <p className="eyebrow">{t("Selected route", "选中路由")}</p>
               <h3>{selected.name}</h3>
               <dl className="detail-list">
                 <div>
                   <dt>
                     <Route size={15} />
-                    Rule
+                    {t("Rule", "规则")}
                   </dt>
                   <dd>{selected.domains.map((domain) => `Host(${domain})`).join(" OR ")}</dd>
                 </div>
                 <div>
                   <dt>
                     <Server size={15} />
-                    Backend
+                    {t("Backend", "后端")}
                   </dt>
                   <dd>{selected.targetUrl}</dd>
                 </div>
                 <div>
                   <dt>TLS</dt>
-                  <dd>{selected.tls.mode === "file-certificate" ? `Certificate ${selected.tls.certificateId}` : selected.tls.mode}</dd>
+                  <dd>{selected.tls.mode === "file-certificate" ? t(`Certificate ${selected.tls.certificateId}`, `证书 ${selected.tls.certificateId}`) : selected.tls.mode}</dd>
                 </div>
                 <div>
-                  <dt>Runtime</dt>
-                  <dd>{selected.runtime ? `${selected.runtime.name} · ${selected.runtime.status}` : "Waiting for Traefik file provider"}</dd>
+                  <dt>{t("Runtime", "运行时")}</dt>
+                  <dd>{selected.runtime ? `${selected.runtime.name} · ${selected.runtime.status}` : t("Waiting for Traefik file provider", "等待 Traefik file provider 同步")}</dd>
                 </div>
                 <div>
-                  <dt>Notes</dt>
-                  <dd>{selected.notes || "No notes"}</dd>
+                  <dt>{t("Notes", "备注")}</dt>
+                  <dd>{selected.notes || t("No notes", "无备注")}</dd>
                 </div>
               </dl>
             </>
           ) : (
-            <p>No service selected.</p>
+            <p>{t("No service selected.", "未选择服务。")}</p>
           )}
         </aside>
       </div>
@@ -334,7 +336,7 @@ export function WebServicesPage({ dashboard, onRefresh }: WebServicesPageProps) 
               setShowForm(false);
               await onRefresh();
             } catch (saveError) {
-              setError(saveError instanceof Error ? saveError.message : "Save failed.");
+              setError(saveError instanceof Error ? saveError.message : t("Save failed.", "保存失败。"));
             } finally {
               setSaving(false);
             }
@@ -360,6 +362,7 @@ function ServiceForm({
   onClose: () => void;
   onSubmit: (input: WebServiceInput) => Promise<void>;
 }) {
+  const { t } = useLanguage();
   const [draft, setDraft] = useState<DraftService>(() =>
     service
       ? {
@@ -400,14 +403,14 @@ function ServiceForm({
   };
 
   return (
-    <Modal title={service ? "Edit Web service" : "New Web service"} subtitle="Generate Traefik routers and services without hand-writing YAML." onClose={onClose}>
+    <Modal title={service ? t("Edit Web service", "编辑 Web 服务") : t("New Web service", "新建 Web 服务")} subtitle={t("Generate Traefik routers and services without hand-writing YAML.", "无需手写 YAML 即可生成 Traefik routers 和 services。")} onClose={onClose}>
       <form className="form-grid" onSubmit={(event) => void submit(event)}>
         <label>
-          Service name
+          {t("Service name", "服务名称")}
           <input value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} required />
         </label>
         <label>
-          Group
+          {t("Group", "分组")}
           <select value={draft.groupId} onChange={(event) => setDraft({ ...draft, groupId: event.target.value })}>
             {groups.map((group) => (
               <option key={group.id} value={group.id}>
@@ -417,34 +420,34 @@ function ServiceForm({
           </select>
         </label>
         <label className="span-2">
-          Domains
+          {t("Domains", "域名")}
           <input value={draft.domainsText} onChange={(event) => setDraft({ ...draft, domainsText: event.target.value })} placeholder="app.localhost, www.example.com" required />
         </label>
         <label>
-          Host port
+          {t("Host port", "主机端口")}
           <input type="number" min="1" max="65535" value={draft.listenPort} onChange={(event) => setDraft({ ...draft, listenPort: Number(event.target.value) })} />
         </label>
         <label>
-          Entrypoints
+          {t("Entrypoints", "入口点")}
           <input value={draft.entryPointsText} onChange={(event) => setDraft({ ...draft, entryPointsText: event.target.value })} placeholder="web, websecure" required />
         </label>
         <label className="span-2">
-          Forward target
+          {t("Forward target", "转发目标")}
           <input value={draft.targetUrl} onChange={(event) => setDraft({ ...draft, targetUrl: event.target.value })} placeholder="http://whoami:80" required />
         </label>
         <label>
-          TLS mode
+          {t("TLS mode", "TLS 模式")}
           <select value={draft.tlsMode} onChange={(event) => setDraft({ ...draft, tlsMode: event.target.value as DraftService["tlsMode"] })}>
-            <option value="none">No TLS</option>
-            <option value="file-certificate">File certificate</option>
-            <option value="resolver">ACME resolver</option>
+            <option value="none">{t("No TLS", "无 TLS")}</option>
+            <option value="file-certificate">{t("File certificate", "文件证书")}</option>
+            <option value="resolver">{t("ACME resolver", "ACME 解析器")}</option>
           </select>
         </label>
         {draft.tlsMode === "file-certificate" ? (
           <label>
-            Certificate
+            {t("Certificate", "证书")}
             <select value={draft.certificateId} onChange={(event) => setDraft({ ...draft, certificateId: event.target.value })}>
-              <option value="">Select certificate</option>
+              <option value="">{t("Select certificate", "选择证书")}</option>
               {certificates.map((certificate) => (
                 <option key={certificate.id} value={certificate.id}>
                   {certificate.name}
@@ -455,29 +458,29 @@ function ServiceForm({
         ) : null}
         {draft.tlsMode === "resolver" ? (
           <label>
-            Resolver
+            {t("Resolver", "解析器")}
             <input value={draft.resolver} onChange={(event) => setDraft({ ...draft, resolver: event.target.value })} />
           </label>
         ) : null}
         <label className="span-2">
-          Middlewares
+          {t("Middlewares", "中间件")}
           <input value={draft.middlewaresText} onChange={(event) => setDraft({ ...draft, middlewaresText: event.target.value })} placeholder="auth@file, compress@file" />
         </label>
         <label className="span-2">
-          Notes
+          {t("Notes", "备注")}
           <textarea value={draft.notes} onChange={(event) => setDraft({ ...draft, notes: event.target.value })} rows={3} />
         </label>
         <label className="switch-line span-2">
           <input type="checkbox" checked={draft.enabled} onChange={(event) => setDraft({ ...draft, enabled: event.target.checked })} />
-          Enabled
+          {t("Enabled", "启用")}
         </label>
         <footer className="form-actions span-2">
           <button type="button" className="secondary-button" onClick={onClose}>
-            Cancel
+            {t("Cancel", "取消")}
           </button>
           <button type="submit" className="primary-button" disabled={saving}>
             <Save size={16} />
-            {saving ? "Saving..." : "Save"}
+            {saving ? t("Saving...", "保存中...") : t("Save", "保存")}
           </button>
         </footer>
       </form>

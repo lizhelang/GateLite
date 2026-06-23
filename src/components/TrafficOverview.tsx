@@ -1,5 +1,6 @@
 import { ChartSpline, Clock3, Gauge, Globe2, Route, ShieldCheck } from "lucide-react";
 import type { CertificateWithBindings, DashboardPayload, TrafficOverview as TrafficOverviewData, WebServiceWithRuntime } from "../../shared/types";
+import { useLanguage } from "../i18n";
 
 interface TrafficOverviewProps {
   dashboard: DashboardPayload | null;
@@ -20,6 +21,7 @@ const chartHeight = 254;
 const chartPadding = { top: 20, right: 28, bottom: 34, left: 38 };
 
 export function TrafficOverview({ dashboard, loading }: TrafficOverviewProps) {
+  const { t } = useLanguage();
   const services = dashboard?.webServices || [];
   const certificates = dashboard?.certificates || [];
   const domains = uniqueDomains(services);
@@ -32,20 +34,20 @@ export function TrafficOverview({ dashboard, loading }: TrafficOverviewProps) {
   const hasPrometheusTraffic = series.some((item) => item.source === "prometheus");
 
   return (
-    <section className="visual-stage" aria-label="GateLite overview">
+    <section className="visual-stage" aria-label={t("GateLite overview", "GateLite 概览")}>
       <div className="overview-panel traffic-panel">
         <div className="panel-heading">
           <div>
-            <p className="eyebrow">Local Traefik companion</p>
-            <h2>Reverse proxy traffic</h2>
+            <p className="eyebrow">{t("Local Traefik companion", "本地 Traefik 伴侣面板")}</p>
+            <h2>{t("Reverse proxy traffic", "反代域名流量")}</h2>
           </div>
           <span className={dashboard?.runtime.connected ? "live-pill online" : "live-pill offline"}>
             <Gauge size={15} />
-            {hasPrometheusTraffic ? "Prometheus metrics" : dashboard?.runtime.connected ? "Preview data" : loading ? "Connecting" : "Offline"}
+            {hasPrometheusTraffic ? t("Prometheus metrics", "Prometheus 指标") : dashboard?.runtime.connected ? t("Preview data", "预览数据") : loading ? t("Connecting", "连接中") : t("Offline", "离线")}
           </span>
         </div>
 
-        <svg className="traffic-chart" viewBox={`0 0 ${chartWidth} ${chartHeight}`} role="img" aria-label="Traffic line chart for managed domains">
+        <svg className="traffic-chart" viewBox={`0 0 ${chartWidth} ${chartHeight}`} role="img" aria-label={t("Traffic line chart for managed domains", "托管域名流量折线图")}>
           <defs>
             <linearGradient id="trafficFill" x1="0" x2="0" y1="0" y2="1">
               <stop offset="0%" stopColor="#37d6c2" stopOpacity="0.34" />
@@ -66,14 +68,14 @@ export function TrafficOverview({ dashboard, loading }: TrafficOverviewProps) {
             <circle key={`${dot.domain}-${dot.x}-${dot.y}`} className="chart-dot" cx={dot.x} cy={dot.y} r="3.4" fill={dot.color} />
           ))}
           <text className="axis-label" x={chartPadding.left} y={chartHeight - 10}>
-            last 12 intervals
+            {t("last 12 intervals", "最近 12 个采样")}
           </text>
           <text className="axis-label" x={chartWidth - chartPadding.right} y={chartHeight - 10} textAnchor="end">
-            {hasPrometheusTraffic ? "requests / sample" : "req/min preview"}
+            {hasPrometheusTraffic ? t("requests / sample", "请求 / 采样") : t("req/min preview", "请求/分钟预览")}
           </text>
         </svg>
 
-        <div className="chart-legend" aria-label="Domains in traffic chart">
+        <div className="chart-legend" aria-label={t("Domains in traffic chart", "流量图中的域名")}>
           {series.map((item) => (
             <span key={item.domain} className="legend-chip">
               <i style={{ background: item.color }} />
@@ -85,11 +87,11 @@ export function TrafficOverview({ dashboard, loading }: TrafficOverviewProps) {
       </div>
 
       <div className="overview-stack">
-        <VisualStat icon={Globe2} label="Domains" value={String(domains.length)} caption={`${services.length} managed services`} />
-        <VisualStat icon={Route} label="Routers" value={`${routeTotals.online}/${routeTotals.total}`} caption="online in Traefik" progress={routeTotals.total ? routeTotals.online / routeTotals.total : 0} />
-        <VisualStat icon={ShieldCheck} label="TLS coverage" value={`${tlsCoverage.secured}/${tlsCoverage.total}`} caption="domains with TLS mode" progress={tlsCoverage.total ? tlsCoverage.secured / tlsCoverage.total : 0} />
+        <VisualStat icon={Globe2} label={t("Domains", "域名")} value={String(domains.length)} caption={t(`${services.length} managed services`, `${services.length} 个托管服务`)} />
+        <VisualStat icon={Route} label={t("Routers", "路由")} value={`${routeTotals.online}/${routeTotals.total}`} caption={t("online in Traefik", "在 Traefik 中在线")} progress={routeTotals.total ? routeTotals.online / routeTotals.total : 0} />
+        <VisualStat icon={ShieldCheck} label={t("TLS coverage", "TLS 覆盖")} value={`${tlsCoverage.secured}/${tlsCoverage.total}`} caption={t("domains with TLS mode", "个域名启用 TLS 模式")} progress={tlsCoverage.total ? tlsCoverage.secured / tlsCoverage.total : 0} />
         <CertificateRunway summary={certSummary} />
-        <div className="preset-strip" aria-label="Entrypoint presets">
+        <div className="preset-strip" aria-label={t("Entrypoint presets", "入口点预设")}>
           <Clock3 size={16} />
           <span>{entryPoints.length ? entryPoints.join(" / ") : "web / websecure"}</span>
         </div>
@@ -129,16 +131,17 @@ function VisualStat({
 }
 
 function CertificateRunway({ summary }: { summary: ReturnType<typeof getCertificateSummary> }) {
+  const { t } = useLanguage();
   const total = Math.max(1, summary.total);
   return (
     <article className="visual-stat cert-runway">
       <div className="visual-stat-top">
         <ChartSpline size={17} />
-        <span>Certificate runway</span>
+        <span>{t("Certificate runway", "证书有效期")}</span>
       </div>
       <strong>{summary.valid}</strong>
-      <p>{summary.expiring + summary.expired + summary.pending} need attention</p>
-      <div className="runway-bars" aria-label="Certificate status distribution">
+      <p>{t(`${summary.expiring + summary.expired + summary.pending} need attention`, `${summary.expiring + summary.expired + summary.pending} 个需要关注`)}</p>
+      <div className="runway-bars" aria-label={t("Certificate status distribution", "证书状态分布")}>
         <i className="valid" style={{ width: `${(summary.valid / total) * 100}%` }} />
         <i className="expiring" style={{ width: `${(summary.expiring / total) * 100}%` }} />
         <i className="expired" style={{ width: `${((summary.expired + summary.pending) / total) * 100}%` }} />

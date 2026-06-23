@@ -3,12 +3,14 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import type { TraefikRuntime } from "../../shared/types";
 import { getGeneratedConfig } from "../api";
 import { StatusBadge } from "../components/StatusBadge";
+import { useLanguage } from "../i18n";
 
 interface RuntimePageProps {
   runtime: TraefikRuntime;
 }
 
 export function RuntimePage({ runtime }: RuntimePageProps) {
+  const { t } = useLanguage();
   const [generatedConfig, setGeneratedConfig] = useState("");
   const [configLoading, setConfigLoading] = useState(true);
   const [configError, setConfigError] = useState<string | null>(null);
@@ -27,7 +29,7 @@ export function RuntimePage({ runtime }: RuntimePageProps) {
     try {
       setGeneratedConfig(await getGeneratedConfig());
     } catch (error) {
-      setConfigError(error instanceof Error ? error.message : "Unable to load generated Traefik config.");
+      setConfigError(error instanceof Error ? error.message : t("Unable to load generated Traefik config.", "无法加载生成的 Traefik 配置。"));
     } finally {
       setConfigLoading(false);
     }
@@ -43,7 +45,7 @@ export function RuntimePage({ runtime }: RuntimePageProps) {
       setCopied(true);
       window.setTimeout(() => setCopied(false), 1500);
     } catch {
-      setConfigError("Clipboard access failed. You can still select and copy the YAML manually.");
+      setConfigError(t("Clipboard access failed. You can still select and copy the YAML manually.", "剪贴板访问失败。你仍然可以手动选择并复制 YAML。"));
     }
   };
 
@@ -60,69 +62,69 @@ export function RuntimePage({ runtime }: RuntimePageProps) {
     <section className="workspace-section">
       <header className="section-heading sticky-story">
         <div>
-          <p className="eyebrow">03 Traefik Runtime</p>
-          <h2>Dashboard parity surface</h2>
-          <p>Routers, services, middlewares, entrypoints, providers, raw config and status from the local Traefik API.</p>
+          <p className="eyebrow">{t("03 Traefik Runtime", "03 Traefik 运行时")}</p>
+          <h2>{t("Dashboard parity surface", "Dashboard 对等运行面板")}</h2>
+          <p>{t("Routers, services, middlewares, entrypoints, providers, raw config and status from the local Traefik API.", "展示来自本地 Traefik API 的 routers、services、middlewares、entrypoints、providers、原始配置和状态。")}</p>
         </div>
-        <StatusBadge status={runtime.connected ? "online" : "offline"} label={runtime.connected ? "Connected" : "Offline"} />
+        <StatusBadge status={runtime.connected ? "online" : "offline"} label={runtime.connected ? t("Connected", "已连接") : t("Offline", "离线")} />
       </header>
 
       {runtime.error ? <div className="notice error">{runtime.error}</div> : null}
 
       <div className="runtime-matrix">
-        <RuntimeStat icon={<Activity size={18} />} label="Version" value={runtime.version || "Unknown"} />
-        <RuntimeStat icon={<Network size={18} />} label="Entrypoints" value={String(entryPoints.length)} />
-        <RuntimeStat icon={<Boxes size={18} />} label="Routers" value={String(runtime.routers.length)} />
-        <RuntimeStat icon={<Server size={18} />} label="Services" value={String(runtime.services.length)} />
-        <RuntimeStat icon={<FileCode2 size={18} />} label="Middlewares" value={String(middlewares.length)} />
-        <RuntimeStat icon={<Activity size={18} />} label="Providers" value={String(providers.length)} />
+        <RuntimeStat icon={<Activity size={18} />} label={t("Version", "版本")} value={runtime.version || t("Unknown", "未知")} />
+        <RuntimeStat icon={<Network size={18} />} label={t("Entrypoints", "入口点")} value={String(entryPoints.length)} />
+        <RuntimeStat icon={<Boxes size={18} />} label={t("Routers", "路由")} value={String(runtime.routers.length)} />
+        <RuntimeStat icon={<Server size={18} />} label={t("Services", "服务")} value={String(runtime.services.length)} />
+        <RuntimeStat icon={<FileCode2 size={18} />} label={t("Middlewares", "中间件")} value={String(middlewares.length)} />
+        <RuntimeStat icon={<Activity size={18} />} label={t("Providers", "Provider")} value={String(providers.length)} />
       </div>
 
       <div className="runtime-columns">
         <section className="runtime-list">
-          <h3>Routers</h3>
+          <h3>{t("Routers", "路由")}</h3>
           {runtime.routers.map((router) => (
             <article key={router.name} className="runtime-row">
               <div>
                 <strong>{router.name}</strong>
-                <p>{router.rule || "No rule"}</p>
+                <p>{router.rule || t("No rule", "无规则")}</p>
               </div>
               <div className="runtime-tags">
-                <StatusBadge status={router.status} label={router.status} />
+                <StatusBadge status={router.status} />
                 {router.provider ? <span>{router.provider}</span> : null}
                 {router.tls ? <span>TLS</span> : null}
               </div>
             </article>
           ))}
-          {runtime.routers.length === 0 ? <div className="empty-inline">No routers visible from Traefik yet.</div> : null}
+          {runtime.routers.length === 0 ? <div className="empty-inline">{t("No routers visible from Traefik yet.", "Traefik 中还没有可见路由。")}</div> : null}
         </section>
 
         <section className="runtime-list">
-          <h3>Services</h3>
+          <h3>{t("Services", "服务")}</h3>
           {runtime.services.map((service) => (
             <article key={service.name} className="runtime-row">
               <div>
                 <strong>{service.name}</strong>
-                <p>{service.servers.join(", ") || "No servers listed"}</p>
+                <p>{service.servers.join(", ") || t("No servers listed", "未列出 server")}</p>
               </div>
               <div className="runtime-tags">
-                <StatusBadge status={service.status} label={service.status} />
+                <StatusBadge status={service.status} />
                 {service.provider ? <span>{service.provider}</span> : null}
               </div>
             </article>
           ))}
-          {runtime.services.length === 0 ? <div className="empty-inline">No services visible from Traefik yet.</div> : null}
+          {runtime.services.length === 0 ? <div className="empty-inline">{t("No services visible from Traefik yet.", "Traefik 中还没有可见服务。")}</div> : null}
         </section>
       </div>
 
       <div className="runtime-columns">
         <section className="runtime-list">
-          <h3>Entrypoints</h3>
+          <h3>{t("Entrypoints", "入口点")}</h3>
           {entryPoints.map((entryPoint) => (
             <article key={entryPoint.name} className="runtime-row">
               <div>
                 <strong>{entryPoint.name}</strong>
-                <p>{entryPoint.address || "No address"} · read {entryPoint.readTimeout || "default"} · idle {entryPoint.idleTimeout || "default"}</p>
+                <p>{entryPoint.address || t("No address", "无地址")} · {t("read", "读取")} {entryPoint.readTimeout || t("default", "默认")} · {t("idle", "空闲")} {entryPoint.idleTimeout || t("default", "默认")}</p>
               </div>
               <div className="runtime-tags">
                 <span>{entryPoint.http2 ? "HTTP/2" : "HTTP"}</span>
@@ -130,45 +132,45 @@ export function RuntimePage({ runtime }: RuntimePageProps) {
               </div>
             </article>
           ))}
-          {entryPoints.length === 0 ? <div className="empty-inline">No entrypoints visible from Traefik yet.</div> : null}
+          {entryPoints.length === 0 ? <div className="empty-inline">{t("No entrypoints visible from Traefik yet.", "Traefik 中还没有可见入口点。")}</div> : null}
         </section>
 
         <section className="runtime-list">
-          <h3>Middlewares</h3>
+          <h3>{t("Middlewares", "中间件")}</h3>
           {middlewares.map((middleware) => (
             <article key={middleware.name} className="runtime-row">
               <div>
                 <strong>{middleware.name}</strong>
-                <p>{middleware.type || "unknown"} · used by {middleware.usedBy.length ? middleware.usedBy.join(", ") : "no routers"}</p>
+                <p>{middleware.type || t("unknown", "未知")} · {t("used by", "被使用于")} {middleware.usedBy.length ? middleware.usedBy.join(", ") : t("no routers", "无路由")}</p>
               </div>
               <div className="runtime-tags">
-                <StatusBadge status={middleware.status} label={middleware.status} />
+                <StatusBadge status={middleware.status} />
                 {middleware.provider ? <span>{middleware.provider}</span> : null}
               </div>
             </article>
           ))}
-          {middlewares.length === 0 ? <div className="empty-inline">No HTTP middlewares visible from Traefik yet.</div> : null}
+          {middlewares.length === 0 ? <div className="empty-inline">{t("No HTTP middlewares visible from Traefik yet.", "Traefik 中还没有可见 HTTP 中间件。")}</div> : null}
         </section>
       </div>
 
       <section className="runtime-list">
-        <h3>Providers and feature flags</h3>
+        <h3>{t("Providers and feature flags", "Provider 与功能开关")}</h3>
         <div className="provider-grid">
           <div className="provider-card">
-            <span>Providers</span>
-            <strong>{providers.length ? providers.join(" / ") : "Unknown"}</strong>
+            <span>{t("Providers", "Provider")}</span>
+            <strong>{providers.length ? providers.join(" / ") : t("Unknown", "未知")}</strong>
           </div>
           <div className="provider-card">
-            <span>Metrics</span>
-            <strong>{features.metrics || "Disabled"}</strong>
+            <span>{t("Metrics", "指标")}</span>
+            <strong>{features.metrics || t("Disabled", "已停用")}</strong>
           </div>
           <div className="provider-card">
-            <span>Tracing</span>
-            <strong>{features.tracing || "Disabled"}</strong>
+            <span>{t("Tracing", "链路追踪")}</span>
+            <strong>{features.tracing || t("Disabled", "已停用")}</strong>
           </div>
           <div className="provider-card">
-            <span>Access log</span>
-            <strong>{features.accessLog ? "Enabled" : "Disabled"}</strong>
+            <span>{t("Access log", "访问日志")}</span>
+            <strong>{features.accessLog ? t("Enabled", "已启用") : t("Disabled", "已停用")}</strong>
           </div>
         </div>
 
@@ -177,7 +179,7 @@ export function RuntimePage({ runtime }: RuntimePageProps) {
             <article key={summary.protocol} className="protocol-card">
               <span>{summary.protocol}</span>
               <strong>{summary.total}</strong>
-              <p>{summary.warnings} warnings · {summary.errors} errors</p>
+              <p>{t(`${summary.warnings} warnings · ${summary.errors} errors`, `${summary.warnings} 个警告 · ${summary.errors} 个错误`)}</p>
             </article>
           ))}
         </div>
@@ -186,20 +188,20 @@ export function RuntimePage({ runtime }: RuntimePageProps) {
       <section className="config-preview-panel">
         <div className="config-preview-header">
           <div>
-            <p className="eyebrow">Generated file-provider config</p>
+            <p className="eyebrow">{t("Generated file-provider config", "生成的 file-provider 配置")}</p>
             <h3>
               <FileCode2 size={18} />
-              Traefik YAML preview
+              {t("Traefik YAML preview", "Traefik YAML 预览")}
             </h3>
           </div>
           <div className="toolbar">
             <button type="button" className="secondary-button" onClick={() => void loadGeneratedConfig()} disabled={configLoading}>
               <RefreshCw size={16} />
-              Refresh
+              {t("Refresh", "刷新")}
             </button>
             <button type="button" className="secondary-button" onClick={() => void handleCopy()} disabled={!generatedConfig}>
               {copied ? <Check size={16} /> : <Copy size={16} />}
-              {copied ? "Copied" : "Copy"}
+              {copied ? t("Copied", "已复制") : t("Copy", "复制")}
             </button>
             <button type="button" className="secondary-button" onClick={handleDownload} disabled={!generatedConfig}>
               <Download size={16} />
@@ -208,22 +210,22 @@ export function RuntimePage({ runtime }: RuntimePageProps) {
           </div>
         </div>
 
-        <div className="config-stat-strip" aria-label="Generated config summary">
-          <ConfigStat label="Routers" value={String(configStats.routers)} />
-          <ConfigStat label="Services" value={String(configStats.services)} />
-          <ConfigStat label="TLS certs" value={String(configStats.certificates)} />
-          <ConfigStat label="Size" value={`${configStats.bytes} B`} />
+        <div className="config-stat-strip" aria-label={t("Generated config summary", "生成配置摘要")}>
+          <ConfigStat label={t("Routers", "路由")} value={String(configStats.routers)} />
+          <ConfigStat label={t("Services", "服务")} value={String(configStats.services)} />
+          <ConfigStat label={t("TLS certs", "TLS 证书")} value={String(configStats.certificates)} />
+          <ConfigStat label={t("Size", "大小")} value={`${configStats.bytes} B`} />
         </div>
 
         {configError ? <div className="notice error">{configError}</div> : null}
-        {configLoading && !generatedConfig ? <div className="notice">Loading generated Traefik YAML...</div> : null}
-        <pre className="yaml-preview">{generatedConfig || "Generated config will appear here after GateLite writes runtime/traefik/gatelite.yml."}</pre>
+        {configLoading && !generatedConfig ? <div className="notice">{t("Loading generated Traefik YAML...", "正在加载生成的 Traefik YAML...")}</div> : null}
+        <pre className="yaml-preview">{generatedConfig || t("Generated config will appear here after GateLite writes runtime/traefik/gatelite.yml.", "GateLite 写入 runtime/traefik/gatelite.yml 后，生成配置会显示在这里。")}</pre>
       </section>
 
       <section className="raw-panel">
         <h3>
           <FileCode2 size={18} />
-          Raw data snapshot
+          {t("Raw data snapshot", "原始数据快照")}
         </h3>
         <pre>{JSON.stringify(runtime.rawData || runtime.overview || {}, null, 2)}</pre>
       </section>

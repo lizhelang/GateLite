@@ -102,6 +102,7 @@ button:disabled {
 
 .brand-mark,
 .toolbar,
+.topbar-actions,
 .panel-heading,
 .visual-stat-top,
 .service-title,
@@ -597,6 +598,11 @@ button:disabled {
 .toolbar {
   gap: 0.6rem;
   flex-wrap: wrap;
+}
+
+.topbar-actions {
+  gap: 0.6rem;
+  justify-content: flex-end;
 }
 
 .content-grid {
