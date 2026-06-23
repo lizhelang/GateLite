@@ -24,6 +24,10 @@ export type CertificateInput = {
     dnsProvider?: string;
     resolver?: string;
   };
+  sync?: {
+    target?: string;
+    lastSyncTime?: string;
+  };
 };
 
 export async function getDashboard(): Promise<DashboardPayload> {
