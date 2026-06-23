@@ -823,7 +823,7 @@ button:disabled {
 
 .runtime-matrix {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: 0.8rem;
 }
 
@@ -861,6 +861,57 @@ button:disabled {
   justify-content: flex-end;
   gap: 0.35rem;
   flex-wrap: wrap;
+}
+
+.provider-grid,
+.protocol-grid {
+  display: grid;
+  gap: 0.7rem;
+}
+
+.provider-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.protocol-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.provider-card,
+.protocol-card {
+  min-width: 0;
+  padding: 0.85rem;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  background: rgba(8, 11, 20, 0.5);
+}
+
+.provider-card span,
+.protocol-card span {
+  display: block;
+  color: var(--text-muted);
+  font-size: 0.74rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.provider-card strong,
+.protocol-card strong {
+  display: block;
+  margin-top: 0.35rem;
+  color: #fff;
+  font-size: 1rem;
+  overflow-wrap: anywhere;
+}
+
+.protocol-card strong {
+  font-size: 1.45rem;
+}
+
+.protocol-card p {
+  margin: 0.35rem 0 0;
+  color: var(--text-muted);
+  font-size: 0.8rem;
 }
 
 .config-preview-panel {
@@ -1119,6 +1170,11 @@ button:disabled {
     grid-template-columns: 1fr;
   }
 
+  .provider-grid,
+  .runtime-matrix {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
   .config-preview-header {
     align-items: stretch;
     flex-direction: column;
@@ -1172,6 +1228,8 @@ button:disabled {
   }
 
   .config-stat-strip,
+  .provider-grid,
+  .protocol-grid,
   .runtime-matrix,
   .form-grid {
     grid-template-columns: 1fr;
