@@ -189,6 +189,43 @@ app.patch("/api/certificates/:id/toggle", (request, response) => {
   response.json(next.certificates.find((item) => item.id === certificate.id));
 });
 
+app.post("/api/certificates/reorder", (request, response) => {
+  const { orderedIds } = reorderSchema.parse(request.body);
+  const state = loadState();
+  const order = new Map(orderedIds.map((id, index) => [id, index + 1]));
+  state.certificates = state.certificates.map((certificate) => ({
+    ...certificate,
+    order: order.get(certificate.id) ?? certificate.order
+  }));
+  const next = saveState(state, "certificate.reorder", "Reordered certificates.");
+  response.json(next.certificates);
+});
+
+app.get("/api/certificates/:id/download", (request, response) => {
+  const state = loadState();
+  const certificate = state.certificates.find((item) => item.id === request.params.id);
+  if (!certificate) return response.status(404).json({ error: "Certificate not found." });
+  if (!certificate.certPath || !fs.existsSync(certificate.certPath)) {
+    return response.status(409).json({ error: "Certificate PEM file is not available for download." });
+  }
+
+  const parts = [
+    `# ${certificate.name}`,
+    `# Domains: ${certificate.domains.join(", ") || "none"}`,
+    "",
+    fs.readFileSync(certificate.certPath, "utf8").trim(),
+    ""
+  ];
+  if (certificate.keyPath && fs.existsSync(certificate.keyPath)) {
+    parts.push(fs.readFileSync(certificate.keyPath, "utf8").trim(), "");
+  }
+
+  const fileName = `${certificate.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || certificate.id}.pem`;
+  response.setHeader("Content-Type", "application/x-pem-file; charset=utf-8");
+  response.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
+  response.send(parts.join("\n"));
+});
+
 app.delete("/api/certificates/:id", (request, response) => {
   const state = loadState();
   const certificate = state.certificates.find((item) => item.id === request.params.id);

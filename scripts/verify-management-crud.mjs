@@ -24,6 +24,8 @@ try {
 
   const certificate = await createAndVerifyCertificate();
   created.certificateId = certificate.id;
+  await downloadAndVerifyCertificate(certificate.id);
+  await reorderAndVerifyCertificates(certificate.id);
 
   const httpService = await createAndVerifyHttpService(group.id);
   created.httpServiceId = httpService.id;
@@ -116,6 +118,33 @@ async function createAndVerifyCertificate() {
   }
   console.log("[ok] Certificate create, edit, status, expiry, and enable toggles work.");
   return enabled;
+}
+
+async function downloadAndVerifyCertificate(certificateId) {
+  const response = await request(`${gateliteApiUrl}/api/certificates/${certificateId}/download`);
+  if (response.status !== 200) {
+    throw new Error(`Certificate download returned HTTP ${response.status}: ${response.body.slice(0, 300)}`);
+  }
+  assertIncludes(response.body, "BEGIN CERTIFICATE", "certificate download");
+  if (!/BEGIN (RSA )?PRIVATE KEY/.test(response.body)) {
+    throw new Error("Certificate download did not include a private key PEM block.");
+  }
+  console.log("[ok] Certificate download returns a PEM bundle.");
+}
+
+async function reorderAndVerifyCertificates(certificateId) {
+  const dashboard = await apiJson("/api/dashboard");
+  const remainingIds = dashboard.certificates.map((certificate) => certificate.id).filter((id) => id !== certificateId);
+  await apiJson("/api/certificates/reorder", {
+    method: "POST",
+    body: { orderedIds: [certificateId, ...remainingIds] }
+  });
+  const next = await apiJson("/api/dashboard");
+  const orderedIds = next.certificates.map((certificate) => certificate.id);
+  if (orderedIds[0] !== certificateId) {
+    throw new Error("Certificate reorder was not persisted.");
+  }
+  console.log("[ok] Certificate reorder persists list order.");
 }
 
 async function createAndVerifyHttpService(groupId) {

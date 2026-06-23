@@ -117,6 +117,13 @@ export async function toggleCertificate(id: string, enabled: boolean): Promise<C
   });
 }
 
+export async function reorderCertificates(orderedIds: string[]): Promise<CertificateWithBindings[]> {
+  return request<CertificateWithBindings[]>("/api/certificates/reorder", {
+    method: "POST",
+    body: JSON.stringify({ orderedIds })
+  });
+}
+
 export async function deleteCertificate(id: string): Promise<void> {
   await request<void>(`/api/certificates/${id}`, { method: "DELETE" });
 }

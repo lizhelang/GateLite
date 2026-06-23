@@ -1,7 +1,7 @@
-import { CalendarClock, FileKey2, KeyRound, Pencil, Plus, Power, Save, Trash2, Upload } from "lucide-react";
+import { CalendarClock, Download, FileKey2, GripVertical, KeyRound, Pencil, Plus, Power, Save, Trash2, Upload } from "lucide-react";
 import { FormEvent, useMemo, useState, type ReactNode } from "react";
 import type { CertificateWithBindings, DashboardPayload } from "../../shared/types";
-import { createCertificate, deleteCertificate, toggleCertificate, updateCertificate, type CertificateInput } from "../api";
+import { createCertificate, deleteCertificate, reorderCertificates, toggleCertificate, updateCertificate, type CertificateInput } from "../api";
 import { Modal } from "../components/Modal";
 import { StatusBadge } from "../components/StatusBadge";
 import { Badge } from "@/components/ui/badge";
@@ -64,6 +64,7 @@ export function CertificatesPage({ dashboard, onRefresh }: CertificatesPageProps
   const [initialSource, setInitialSource] = useState<CertificateInput["source"]>("self-signed");
   const [selectedId, setSelectedId] = useState("");
   const [filter, setFilter] = useState<CertificateFilter>("all");
+  const [draggingId, setDraggingId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -115,6 +116,34 @@ export function CertificatesPage({ dashboard, onRefresh }: CertificatesPageProps
     }
   };
 
+  const handleDrop = async (targetId: string) => {
+    if (!draggingId || draggingId === targetId) {
+      setDraggingId(null);
+      return;
+    }
+    const ids = certificates.map((certificate) => certificate.id);
+    const from = ids.indexOf(draggingId);
+    const to = ids.indexOf(targetId);
+    if (from === -1 || to === -1) {
+      setDraggingId(null);
+      return;
+    }
+    const [moved] = ids.splice(from, 1);
+    ids.splice(to, 0, moved);
+    setDraggingId(null);
+    setError(null);
+    try {
+      await reorderCertificates(ids);
+      await onRefresh();
+    } catch (reorderError) {
+      setError(reorderError instanceof Error ? reorderError.message : t("Reorder failed.", "排序失败。"));
+    }
+  };
+
+  const handleDownload = (certificate: CertificateWithBindings) => {
+    window.location.href = `/api/certificates/${certificate.id}/download`;
+  };
+
   return (
     <section className="grid gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -153,8 +182,12 @@ export function CertificatesPage({ dashboard, onRefresh }: CertificatesPageProps
         certificates={filteredCertificates}
         selected={selected}
         selectedId={selectedId}
+        draggingId={draggingId}
+        onDragStart={setDraggingId}
+        onDrop={handleDrop}
         onSelect={setSelectedId}
         onToggle={handleToggle}
+        onDownload={handleDownload}
         onEdit={openEdit}
         onDelete={handleDelete}
       />
@@ -192,16 +225,24 @@ function CertificateDataTable({
   certificates,
   selected,
   selectedId,
+  draggingId,
+  onDragStart,
+  onDrop,
   onSelect,
   onToggle,
+  onDownload,
   onEdit,
   onDelete
 }: {
   certificates: CertificateWithBindings[];
   selected?: CertificateWithBindings;
   selectedId: string;
+  draggingId: string | null;
+  onDragStart: (id: string) => void;
+  onDrop: (id: string) => Promise<void>;
   onSelect: (id: string) => void;
   onToggle: (certificate: CertificateWithBindings) => Promise<void>;
+  onDownload: (certificate: CertificateWithBindings) => void;
   onEdit: (certificate: CertificateWithBindings) => void;
   onDelete: (certificate: CertificateWithBindings) => Promise<void>;
 }) {
@@ -215,6 +256,7 @@ function CertificateDataTable({
           <Table className="min-w-[980px]">
             <TableHeader className="bg-muted/45">
               <TableRow className="hover:bg-transparent">
+                <TableHead className="w-10" />
                 <TableHead className="w-10">
                   <Checkbox aria-label={t("Select visible certificates", "选择当前证书")} checked={selectedCount > 0} onCheckedChange={(checked) => onSelect(checked ? certificates[0]?.id || "" : "")} />
                 </TableHead>
@@ -232,7 +274,20 @@ function CertificateDataTable({
               {certificates.map((certificate) => {
                 const rowSelected = certificate.id === selectedId;
                 return (
-                  <TableRow key={certificate.id} className={rowSelected ? "bg-muted/50" : ""} onClick={() => onSelect(certificate.id)}>
+                  <TableRow
+                    key={certificate.id}
+                    className={`${rowSelected ? "bg-muted/50" : ""} ${draggingId === certificate.id ? "outline outline-1 outline-cyan-300/70" : ""}`}
+                    draggable
+                    onDragStart={() => onDragStart(certificate.id)}
+                    onDragOver={(event) => event.preventDefault()}
+                    onDrop={() => void onDrop(certificate.id)}
+                    onClick={() => onSelect(certificate.id)}
+                  >
+                    <TableCell>
+                      <Button variant="ghost" size="icon-xs" aria-label={t("Drag to reorder", "拖拽排序")}>
+                        <GripVertical className="size-3.5" />
+                      </Button>
+                    </TableCell>
                     <TableCell>
                       <Checkbox checked={rowSelected} aria-label={t(`Select ${certificate.name}`, `选择 ${certificate.name}`)} onClick={(event) => event.stopPropagation()} onCheckedChange={(checked) => onSelect(checked ? certificate.id : "")} />
                     </TableCell>
@@ -290,6 +345,9 @@ function CertificateDataTable({
                         <Button variant="outline" size="icon-xs" onClick={() => void onToggle(certificate)} aria-label={t("Toggle certificate", "切换证书启用状态")}>
                           <Power className="size-3.5" />
                         </Button>
+                        <Button variant="outline" size="icon-xs" onClick={() => onDownload(certificate)} disabled={!certificate.certPath} aria-label={t("Download PEM", "下载 PEM")}>
+                          <Download className="size-3.5" />
+                        </Button>
                         <Button variant="outline" size="icon-xs" onClick={() => onEdit(certificate)} aria-label={t("Edit certificate", "编辑证书")}>
                           <Pencil className="size-3.5" />
                         </Button>
@@ -303,7 +361,7 @@ function CertificateDataTable({
               })}
               {certificates.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={9} className="h-24 text-center text-sm text-muted-foreground">
+                  <TableCell colSpan={10} className="h-24 text-center text-sm text-muted-foreground">
                     {t("No certificates in this view.", "这个视图里没有证书。")}
                   </TableCell>
                 </TableRow>

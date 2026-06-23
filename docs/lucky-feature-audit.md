@@ -63,6 +63,8 @@ GateLite MVP mapping:
 - Certificate status from `openssl x509` metadata where files are available.
 - Expiry status: valid, expiring, expired, pending, invalid.
 - Binding view from Web services using a certificate ID.
+- PEM bundle download for locally readable certificate/key pairs.
+- Drag reorder for certificate list metadata and generated TLS certificate order.
 
 ## Parallax Storytelling Design Mapping
 
@@ -78,4 +80,3 @@ GateLite adapts this to an operational tool by using:
 - Sticky section headers as narrative anchors.
 - Progressive page sections for Web services, certificates, and runtime truth.
 - Dense, readable operational rows instead of marketing-only story panels.
-
