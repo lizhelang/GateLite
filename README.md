@@ -105,7 +105,12 @@ Run checks:
 ```bash
 npm run build
 npm run test
+npm run verify:local
 ```
+
+`npm run verify:local` assumes `npm run compose:up` and `npm run dev` are
+already running. It checks the local Traefik API, the GateLite API connection,
+the generated dynamic configuration, and both seeded HTTP/HTTPS whoami routes.
 
 ## References
 

@@ -9,6 +9,7 @@
     "server": "tsx server/index.ts",
     "build": "tsc --noEmit && vite build",
     "test": "vitest run",
+    "verify:local": "node scripts/verify-local-traefik.mjs",
     "compose:up": "docker compose up -d",
     "compose:down": "docker compose down"
   },
