@@ -1,6 +1,11 @@
-import { X } from "lucide-react";
 import type { ReactNode } from "react";
-import { useLanguage } from "../i18n";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle
+} from "@/components/ui/dialog";
 
 interface ModalProps {
   title: string;
@@ -10,21 +15,15 @@ interface ModalProps {
 }
 
 export function Modal({ title, subtitle, children, onClose }: ModalProps) {
-  const { t } = useLanguage();
   return (
-    <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
-      <section className="modal-panel" role="dialog" aria-modal="true" aria-label={title} onMouseDown={(event) => event.stopPropagation()}>
-        <header className="modal-header">
-          <div>
-            <h2>{title}</h2>
-            {subtitle ? <p>{subtitle}</p> : null}
-          </div>
-          <button className="icon-button" type="button" onClick={onClose} aria-label={t("Close", "关闭")}>
-            <X size={18} />
-          </button>
-        </header>
+    <Dialog open onOpenChange={(open) => (!open ? onClose() : undefined)}>
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
+        <DialogHeader>
+          <DialogTitle>{title}</DialogTitle>
+          {subtitle ? <DialogDescription>{subtitle}</DialogDescription> : null}
+        </DialogHeader>
         {children}
-      </section>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }

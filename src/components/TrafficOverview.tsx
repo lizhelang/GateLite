@@ -1,5 +1,9 @@
-import { ChartSpline, Clock3, Gauge, Globe2, Route, ShieldCheck } from "lucide-react";
+import { Activity, ChartSpline, Clock3, Globe2, Route, ShieldCheck } from "lucide-react";
+import { CartesianGrid, Line, LineChart, XAxis } from "recharts";
 import type { CertificateWithBindings, DashboardPayload, TrafficOverview as TrafficOverviewData, WebServiceWithRuntime } from "../../shared/types";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart";
 import { useLanguage } from "../i18n";
 
 interface TrafficOverviewProps {
@@ -8,6 +12,7 @@ interface TrafficOverviewProps {
 }
 
 type Series = {
+  key: string;
   domain: string;
   color: string;
   values: number[];
@@ -15,10 +20,7 @@ type Series = {
   source: "prometheus" | "preview";
 };
 
-const palette = ["#37d6c2", "#f39c12", "#e94560", "#8fb7ff", "#63d471"];
-const chartWidth = 760;
-const chartHeight = 254;
-const chartPadding = { top: 20, right: 28, bottom: 34, left: 38 };
+const palette = ["var(--chart-1)", "var(--chart-2)", "var(--chart-3)", "var(--chart-4)", "var(--chart-5)"];
 
 export function TrafficOverview({ dashboard, loading }: TrafficOverviewProps) {
   const { t } = useLanguage();
@@ -26,127 +28,102 @@ export function TrafficOverview({ dashboard, loading }: TrafficOverviewProps) {
   const certificates = dashboard?.certificates || [];
   const domains = uniqueDomains(services);
   const series = buildTrafficSeries(services, dashboard?.traffic);
-  const chart = buildChart(series);
   const routeTotals = getRouteTotals(dashboard);
   const tlsCoverage = getTlsCoverage(services, domains.length);
   const certSummary = getCertificateSummary(certificates);
   const entryPoints = Array.from(new Set(services.flatMap((service) => service.entryPoints))).filter(Boolean);
   const hasPrometheusTraffic = series.some((item) => item.source === "prometheus");
+  const chartConfig = Object.fromEntries(
+    series.map((item) => [
+      item.key,
+      {
+        label: item.domain,
+        color: item.color
+      }
+    ])
+  ) satisfies ChartConfig;
+  const chartData = Array.from({ length: 12 }, (_, index) => ({
+    interval: String(index + 1).padStart(2, "0"),
+    ...Object.fromEntries(series.map((item) => [item.key, item.values[index] ?? 0]))
+  }));
 
   return (
-    <section className="visual-stage" aria-label={t("GateLite overview", "GateLite 概览")}>
-      <div className="overview-panel traffic-panel">
-        <div className="panel-heading">
-          <div>
-            <p className="eyebrow">{t("Local Traefik companion", "本地 Traefik 伴侣面板")}</p>
-            <h2>{t("Reverse proxy traffic", "反代域名流量")}</h2>
+    <div className="grid gap-4 lg:grid-cols-[minmax(0,1.45fr)_minmax(280px,0.55fr)]">
+      <Card className="bg-card/80 shadow-xs">
+        <CardHeader className="border-b">
+          <CardDescription>{t("Local Traefik companion", "本地 Traefik 伴侣面板")}</CardDescription>
+          <CardTitle className="text-2xl">{t("Reverse proxy traffic", "反代域名流量")}</CardTitle>
+          <CardAction>
+            <Badge variant="outline" className="gap-1 border-cyan-300/40 bg-cyan-300/10 text-cyan-100">
+              <Activity className="size-3.5" />
+              {hasPrometheusTraffic ? t("Prometheus metrics", "Prometheus 指标") : dashboard?.runtime.connected ? t("Preview data", "预览数据") : loading ? t("Connecting", "连接中") : t("Offline", "离线")}
+            </Badge>
+          </CardAction>
+        </CardHeader>
+        <CardContent className="pt-4">
+          <ChartContainer config={chartConfig} className="h-[260px] w-full">
+            <LineChart accessibilityLayer data={chartData} margin={{ left: 8, right: 18, top: 12, bottom: 8 }}>
+              <CartesianGrid vertical={false} strokeDasharray="3 3" />
+              <XAxis dataKey="interval" tickLine={false} axisLine={false} tickMargin={8} />
+              <ChartTooltip cursor={false} content={<ChartTooltipContent indicator="line" />} />
+              {series.map((item) => (
+                <Line key={item.key} dataKey={item.key} type="monotone" stroke={`var(--color-${item.key})`} strokeWidth={2.5} dot={false} />
+              ))}
+            </LineChart>
+          </ChartContainer>
+          <div className="mt-4 flex flex-wrap gap-2" aria-label={t("Domains in traffic chart", "流量图中的域名")}>
+            {series.map((item) => (
+              <Badge key={item.key} variant="outline" className="gap-2 bg-background/40">
+                <span className="size-2 rounded-full" style={{ background: item.color }} />
+                {item.domain}
+                <span className="text-muted-foreground">{item.total}</span>
+              </Badge>
+            ))}
           </div>
-          <span className={dashboard?.runtime.connected ? "live-pill online" : "live-pill offline"}>
-            <Gauge size={15} />
-            {hasPrometheusTraffic ? t("Prometheus metrics", "Prometheus 指标") : dashboard?.runtime.connected ? t("Preview data", "预览数据") : loading ? t("Connecting", "连接中") : t("Offline", "离线")}
-          </span>
-        </div>
+        </CardContent>
+      </Card>
 
-        <svg className="traffic-chart" viewBox={`0 0 ${chartWidth} ${chartHeight}`} role="img" aria-label={t("Traffic line chart for managed domains", "托管域名流量折线图")}>
-          <defs>
-            <linearGradient id="trafficFill" x1="0" x2="0" y1="0" y2="1">
-              <stop offset="0%" stopColor="#37d6c2" stopOpacity="0.34" />
-              <stop offset="100%" stopColor="#37d6c2" stopOpacity="0" />
-            </linearGradient>
-          </defs>
-          {chart.gridY.map((y) => (
-            <line key={`y-${y}`} className="chart-grid-line" x1={chartPadding.left} x2={chartWidth - chartPadding.right} y1={y} y2={y} />
-          ))}
-          {chart.gridX.map((x) => (
-            <line key={`x-${x}`} className="chart-grid-line soft" x1={x} x2={x} y1={chartPadding.top} y2={chartHeight - chartPadding.bottom} />
-          ))}
-          {chart.primaryArea ? <path className="chart-area" d={chart.primaryArea} /> : null}
-          {chart.lines.map((line) => (
-            <path key={line.domain} className="chart-line" d={line.path} stroke={line.color} />
-          ))}
-          {chart.dots.map((dot) => (
-            <circle key={`${dot.domain}-${dot.x}-${dot.y}`} className="chart-dot" cx={dot.x} cy={dot.y} r="3.4" fill={dot.color} />
-          ))}
-          <text className="axis-label" x={chartPadding.left} y={chartHeight - 10}>
-            {t("last 12 intervals", "最近 12 个采样")}
-          </text>
-          <text className="axis-label" x={chartWidth - chartPadding.right} y={chartHeight - 10} textAnchor="end">
-            {hasPrometheusTraffic ? t("requests / sample", "请求 / 采样") : t("req/min preview", "请求/分钟预览")}
-          </text>
-        </svg>
-
-        <div className="chart-legend" aria-label={t("Domains in traffic chart", "流量图中的域名")}>
-          {series.map((item) => (
-            <span key={item.domain} className="legend-chip">
-              <i style={{ background: item.color }} />
-              {item.domain}
-              <strong>{item.total}</strong>
-            </span>
-          ))}
-        </div>
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-1">
+        <MetricCard icon={Globe2} label={t("Domains", "域名")} value={String(domains.length)} caption={t(`${services.length} managed services`, `${services.length} 个托管服务`)} />
+        <MetricCard icon={Route} label={t("Routers", "路由")} value={`${routeTotals.online}/${routeTotals.total}`} caption={t("online in Traefik", "在 Traefik 中在线")} />
+        <MetricCard icon={ShieldCheck} label={t("TLS coverage", "TLS 覆盖")} value={`${tlsCoverage.secured}/${tlsCoverage.total}`} caption={t("domains with TLS mode", "个域名启用 TLS 模式")} />
+        <MetricCard icon={ChartSpline} label={t("Certificate runway", "证书有效期")} value={String(certSummary.valid)} caption={t(`${certSummary.expiring + certSummary.expired + certSummary.pending} need attention`, `${certSummary.expiring + certSummary.expired + certSummary.pending} 个需要关注`)} />
+        <Card className="bg-card/70 sm:col-span-2 lg:col-span-1">
+          <CardHeader className="flex-row items-center gap-3">
+            <Clock3 className="size-4 text-muted-foreground" />
+            <div>
+              <CardDescription>{t("Entrypoint presets", "入口点预设")}</CardDescription>
+              <CardTitle className="text-base">{entryPoints.length ? entryPoints.join(" / ") : "web / websecure"}</CardTitle>
+            </div>
+          </CardHeader>
+        </Card>
       </div>
-
-      <div className="overview-stack">
-        <VisualStat icon={Globe2} label={t("Domains", "域名")} value={String(domains.length)} caption={t(`${services.length} managed services`, `${services.length} 个托管服务`)} />
-        <VisualStat icon={Route} label={t("Routers", "路由")} value={`${routeTotals.online}/${routeTotals.total}`} caption={t("online in Traefik", "在 Traefik 中在线")} progress={routeTotals.total ? routeTotals.online / routeTotals.total : 0} />
-        <VisualStat icon={ShieldCheck} label={t("TLS coverage", "TLS 覆盖")} value={`${tlsCoverage.secured}/${tlsCoverage.total}`} caption={t("domains with TLS mode", "个域名启用 TLS 模式")} progress={tlsCoverage.total ? tlsCoverage.secured / tlsCoverage.total : 0} />
-        <CertificateRunway summary={certSummary} />
-        <div className="preset-strip" aria-label={t("Entrypoint presets", "入口点预设")}>
-          <Clock3 size={16} />
-          <span>{entryPoints.length ? entryPoints.join(" / ") : "web / websecure"}</span>
-        </div>
-      </div>
-    </section>
+    </div>
   );
 }
 
-function VisualStat({
+function MetricCard({
   icon: Icon,
   label,
   value,
-  caption,
-  progress
+  caption
 }: {
   icon: typeof Globe2;
   label: string;
   value: string;
   caption: string;
-  progress?: number;
 }) {
   return (
-    <article className="visual-stat">
-      <div className="visual-stat-top">
-        <Icon size={17} />
-        <span>{label}</span>
-      </div>
-      <strong>{value}</strong>
-      <p>{caption}</p>
-      {typeof progress === "number" ? (
-        <div className="mini-meter" aria-hidden="true">
-          <i style={{ width: `${Math.max(6, Math.min(100, progress * 100))}%` }} />
-        </div>
-      ) : null}
-    </article>
-  );
-}
-
-function CertificateRunway({ summary }: { summary: ReturnType<typeof getCertificateSummary> }) {
-  const { t } = useLanguage();
-  const total = Math.max(1, summary.total);
-  return (
-    <article className="visual-stat cert-runway">
-      <div className="visual-stat-top">
-        <ChartSpline size={17} />
-        <span>{t("Certificate runway", "证书有效期")}</span>
-      </div>
-      <strong>{summary.valid}</strong>
-      <p>{t(`${summary.expiring + summary.expired + summary.pending} need attention`, `${summary.expiring + summary.expired + summary.pending} 个需要关注`)}</p>
-      <div className="runway-bars" aria-label={t("Certificate status distribution", "证书状态分布")}>
-        <i className="valid" style={{ width: `${(summary.valid / total) * 100}%` }} />
-        <i className="expiring" style={{ width: `${(summary.expiring / total) * 100}%` }} />
-        <i className="expired" style={{ width: `${((summary.expired + summary.pending) / total) * 100}%` }} />
-      </div>
-    </article>
+    <Card className="bg-card/70">
+      <CardHeader>
+        <CardDescription className="flex items-center gap-2">
+          <Icon className="size-4" />
+          {label}
+        </CardDescription>
+        <CardTitle className="text-3xl tabular-nums">{value}</CardTitle>
+        <CardDescription>{caption}</CardDescription>
+      </CardHeader>
+    </Card>
   );
 }
 
@@ -157,6 +134,7 @@ function uniqueDomains(services: WebServiceWithRuntime[]) {
 function buildTrafficSeries(services: WebServiceWithRuntime[], traffic: TrafficOverviewData | undefined): Series[] {
   if (traffic?.connected && traffic.series.length) {
     return traffic.series.slice(0, 5).map((item, index) => ({
+      key: `series${index + 1}`,
       domain: item.domain,
       color: palette[index % palette.length],
       values: normalizeMeasuredValues(item.points.map((point) => point.value), item.totalRequests),
@@ -180,6 +158,7 @@ function buildTrafficSeries(services: WebServiceWithRuntime[], traffic: TrafficO
     });
 
     return {
+      key: `series${domainIndex + 1}`,
       domain,
       color: palette[domainIndex % palette.length],
       values,
@@ -191,76 +170,35 @@ function buildTrafficSeries(services: WebServiceWithRuntime[], traffic: TrafficO
 
 function normalizeMeasuredValues(values: number[], total: number): number[] {
   const measured = values.length ? values : [total];
-  const padded = measured.length < 12 ? [...Array(12 - measured.length).fill(0), ...measured] : measured.slice(-12);
-  return padded.map((value) => Math.max(0, Math.round(value)));
+  if (measured.length >= 12) return measured.slice(-12).map((value) => Math.max(0, Math.round(value)));
+  return Array.from({ length: 12 }, (_, index) => {
+    const sourceIndex = Math.min(measured.length - 1, Math.floor((index / 12) * measured.length));
+    return Math.max(0, Math.round(measured[sourceIndex] ?? 0));
+  });
 }
 
-function buildChart(series: Series[]) {
-  const allValues = series.flatMap((item) => item.values);
-  const isMeasured = series.some((item) => item.source === "prometheus");
-  const highest = Math.max(1, ...allValues);
-  const max = isMeasured ? highest + Math.max(1, highest * 0.2) : Math.max(80, highest) + 10;
-  const min = isMeasured ? 0 : Math.max(0, Math.min(...allValues) - 10);
-  const drawableWidth = chartWidth - chartPadding.left - chartPadding.right;
-  const drawableHeight = chartHeight - chartPadding.top - chartPadding.bottom;
-  const toPoint = (value: number, index: number, count: number) => {
-    const x = chartPadding.left + (index / Math.max(1, count - 1)) * drawableWidth;
-    const y = chartPadding.top + (1 - (value - min) / Math.max(1, max - min)) * drawableHeight;
-    return { x, y };
-  };
-  const pointSets = series.map((item) => ({
-    ...item,
-    points: item.values.map((value, index) => toPoint(value, index, item.values.length))
-  }));
-  const lines = pointSets.map((item) => ({
-    domain: item.domain,
-    color: item.color,
-    path: item.points.map((point, index) => `${index === 0 ? "M" : "L"} ${point.x.toFixed(1)} ${point.y.toFixed(1)}`).join(" ")
-  }));
-  const firstSeries = pointSets[0];
-  const primaryArea = firstSeries
-    ? `${lines[0].path} L ${firstSeries.points[firstSeries.points.length - 1].x.toFixed(1)} ${(chartHeight - chartPadding.bottom).toFixed(1)} L ${firstSeries.points[0].x.toFixed(1)} ${(chartHeight - chartPadding.bottom).toFixed(1)} Z`
-    : "";
-
-  return {
-    lines,
-    primaryArea,
-    dots: pointSets.flatMap((item) =>
-      item.points
-        .filter((_, index) => index === item.points.length - 1)
-        .map((point) => ({ domain: item.domain, color: item.color, x: point.x, y: point.y }))
-    ),
-    gridY: [0, 1, 2, 3].map((step) => chartPadding.top + (step / 3) * drawableHeight),
-    gridX: [0, 1, 2, 3, 4].map((step) => chartPadding.left + (step / 4) * drawableWidth)
-  };
+function hashDomain(domain: string) {
+  return domain.split("").reduce((sum, char) => sum + char.charCodeAt(0), 0);
 }
 
 function getRouteTotals(dashboard: DashboardPayload | null) {
-  const routers = dashboard?.runtime.routers || [];
-  const total = routers.length || dashboard?.webServices.length || 0;
-  const online = routers.length ? routers.filter((router) => router.status === "online").length : dashboard?.webServices.filter((service) => service.runtime?.status === "online").length || 0;
+  const total = dashboard?.runtime.routers.length || 0;
+  const online = dashboard?.runtime.routers.filter((router) => router.status === "online").length || 0;
   return { total, online };
 }
 
-function getTlsCoverage(services: WebServiceWithRuntime[], domainTotal: number) {
-  const secured = new Set(services.filter((service) => service.tls.mode !== "none").flatMap((service) => service.domains)).size;
-  return { total: domainTotal, secured };
+function getTlsCoverage(services: WebServiceWithRuntime[], domainCount: number) {
+  const secured = uniqueDomains(services.filter((service) => service.tls.mode !== "none")).length;
+  return { secured, total: domainCount };
 }
 
 function getCertificateSummary(certificates: CertificateWithBindings[]) {
   return certificates.reduce(
     (summary, certificate) => {
       summary.total += 1;
-      if (certificate.status === "valid") summary.valid += 1;
-      if (certificate.status === "expiring") summary.expiring += 1;
-      if (certificate.status === "expired" || certificate.status === "invalid") summary.expired += 1;
-      if (certificate.status === "pending") summary.pending += 1;
+      summary[certificate.status] += 1;
       return summary;
     },
-    { total: 0, valid: 0, expiring: 0, expired: 0, pending: 0 }
+    { total: 0, valid: 0, expiring: 0, expired: 0, pending: 0, invalid: 0 } as Record<CertificateWithBindings["status"] | "total", number>
   );
-}
-
-function hashDomain(domain: string) {
-  return domain.split("").reduce((value, character) => value + character.charCodeAt(0), 0);
 }

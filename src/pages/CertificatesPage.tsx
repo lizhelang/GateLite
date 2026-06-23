@@ -4,6 +4,13 @@ import type { CertificateWithBindings, DashboardPayload } from "../../shared/typ
 import { createCertificate, deleteCertificate, toggleCertificate, updateCertificate, type CertificateInput } from "../api";
 import { Modal } from "../components/Modal";
 import { StatusBadge } from "../components/StatusBadge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Separator } from "@/components/ui/separator";
+import { Switch } from "@/components/ui/switch";
+import { Textarea } from "@/components/ui/textarea";
 import { useLanguage } from "../i18n";
 
 interface CertificatesPageProps {
@@ -40,6 +47,8 @@ const emptyDraft: DraftCertificate = {
   email: "",
   dnsProvider: "cloudflare"
 };
+
+const selectClass = "h-8 w-full rounded-lg border border-input bg-background px-2.5 text-sm outline-none transition-colors focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50";
 
 export function CertificatesPage({ dashboard, onRefresh }: CertificatesPageProps) {
   const { t } = useLanguage();
@@ -83,106 +92,90 @@ export function CertificatesPage({ dashboard, onRefresh }: CertificatesPageProps
   };
 
   return (
-    <section className="workspace-section">
-      <header className="section-heading sticky-story">
-        <div>
-          <p className="eyebrow">{t("02 SSL/TLS Certificates", "02 SSL/TLS 证书")}</p>
-          <h2>{t("Certificate setup without YAML first", "无需先写 YAML 的证书配置")}</h2>
-          <p>{t("Track certificate source, expiry, SAN coverage, status, and which domains are bound to each certificate.", "跟踪证书来源、过期时间、SAN 覆盖、状态，以及每张证书绑定的域名。")}</p>
-        </div>
-        <button type="button" className="primary-button" onClick={openCreate}>
-          <Plus size={16} />
-          {t("New certificate", "新建证书")}
-        </button>
-      </header>
+    <section className="grid gap-4">
+      <Card className="bg-card/80">
+        <CardHeader>
+          <div className="grid gap-3 md:flex md:items-center md:justify-between">
+            <div className="grid min-w-0 gap-1">
+              <CardDescription>{t("02 SSL/TLS Certificates", "02 SSL/TLS 证书")}</CardDescription>
+              <CardTitle className="text-2xl">{t("Certificate setup without YAML first", "无需先写 YAML 的证书配置")}</CardTitle>
+              <CardDescription>{t("Track certificate source, expiry, SAN coverage, status, and which domains are bound to each certificate.", "跟踪证书来源、过期时间、SAN 覆盖、状态，以及每张证书绑定的域名。")}</CardDescription>
+            </div>
+            <Button type="button" onClick={openCreate} className="w-fit">
+              <Plus className="size-4" />
+              {t("New certificate", "新建证书")}
+            </Button>
+          </div>
+        </CardHeader>
+      </Card>
 
-      {error ? <div className="notice error">{error}</div> : null}
+      {error ? <div className="rounded-xl border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">{error}</div> : null}
 
-      <div className="content-grid">
-        <div className="certificate-list">
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
+        <div className="grid gap-3">
           {dashboard.certificates.map((certificate) => (
-            <article key={certificate.id} className="certificate-row" onClick={() => setSelectedId(certificate.id)}>
-              <div className="cert-icon">
-                {certificate.status === "valid" ? <ShieldCheck size={22} /> : <ShieldAlert size={22} />}
-              </div>
-              <div className="certificate-main">
-                <div className="service-title">
-                  <h3>{certificate.name}</h3>
-                  <StatusBadge status={certificate.status} />
-                  <StatusBadge status={certificate.enabled ? "enabled" : "disabled"} />
+            <Card key={certificate.id} className="bg-card/75">
+              <CardContent className="grid gap-3 pt-4 md:grid-cols-[auto_minmax(0,1fr)_auto]" onClick={() => setSelectedId(certificate.id)}>
+                <div className="flex size-10 items-center justify-center rounded-lg border bg-background/50 text-cyan-100">
+                  {certificate.status === "valid" ? <ShieldCheck className="size-5" /> : <ShieldAlert className="size-5" />}
                 </div>
-                <div className="domain-row">
-                  {certificate.domains.length ? certificate.domains.map((domain) => <span key={domain}>{domain}</span>) : <span>{t("No domains recorded", "未记录域名")}</span>}
+                <div className="min-w-0 space-y-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h3 className="font-medium">{certificate.name}</h3>
+                    <StatusBadge status={certificate.status} />
+                    <StatusBadge status={certificate.enabled ? "enabled" : "disabled"} />
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {certificate.domains.length ? (
+                      certificate.domains.map((domain) => (
+                        <span key={domain} className="rounded-lg border bg-background/40 px-2 py-1 text-xs">
+                          {domain}
+                        </span>
+                      ))
+                    ) : (
+                      <span className="text-sm text-muted-foreground">{t("No domains recorded", "未记录域名")}</span>
+                    )}
+                  </div>
+                  <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
+                    <span>{certificate.source}</span>
+                    <span>{certificate.notAfter ? t(`Expires ${formatDate(certificate.notAfter)}`, `过期于 ${formatDate(certificate.notAfter)}`) : t("No expiry data", "无过期数据")}</span>
+                    <span>{t(`${certificate.boundServices.length} bindings`, `${certificate.boundServices.length} 个绑定`)}</span>
+                  </div>
                 </div>
-                <div className="service-meta">
-                  <span>{certificate.source}</span>
-                  <span>{certificate.notAfter ? t(`Expires ${formatDate(certificate.notAfter)}`, `过期于 ${formatDate(certificate.notAfter)}`) : t("No expiry data", "无过期数据")}</span>
-                  <span>{t(`${certificate.boundServices.length} bindings`, `${certificate.boundServices.length} 个绑定`)}</span>
+                <div className="flex items-center gap-1" onClick={(event) => event.stopPropagation()}>
+                  <Button variant="outline" size="icon-sm" onClick={() => void handleToggle(certificate)} aria-label={t("Toggle certificate", "切换证书启用状态")}>
+                    <Power className="size-4" />
+                  </Button>
+                  <Button variant="outline" size="icon-sm" onClick={() => openEdit(certificate)} aria-label={t("Edit certificate", "编辑证书")}>
+                    <Pencil className="size-4" />
+                  </Button>
+                  <Button variant="destructive" size="icon-sm" onClick={() => void handleDelete(certificate)} disabled={certificate.boundServices.length > 0} aria-label={t("Delete certificate", "删除证书")}>
+                    <Trash2 className="size-4" />
+                  </Button>
                 </div>
-              </div>
-              <div className="row-actions" onClick={(event) => event.stopPropagation()}>
-                <button className="icon-button" type="button" onClick={() => void handleToggle(certificate)} aria-label={t("Toggle certificate", "切换证书启用状态")}>
-                  <Power size={17} />
-                </button>
-                <button className="icon-button" type="button" onClick={() => openEdit(certificate)} aria-label={t("Edit certificate", "编辑证书")}>
-                  <Pencil size={17} />
-                </button>
-                <button className="icon-button danger" type="button" onClick={() => void handleDelete(certificate)} disabled={certificate.boundServices.length > 0} aria-label={t("Delete certificate", "删除证书")}>
-                  <Trash2 size={17} />
-                </button>
-              </div>
-            </article>
+              </CardContent>
+            </Card>
           ))}
         </div>
 
-        <aside className="detail-panel">
-          {selected ? (
-            <>
-              <p className="eyebrow">{t("Selected certificate", "选中证书")}</p>
-              <h3>{selected.name}</h3>
-              <dl className="detail-list">
-                <div>
-                  <dt>
-                    <FileKey2 size={15} />
-                    {t("Source", "来源")}
-                  </dt>
-                  <dd>{selected.source}</dd>
-                </div>
-                <div>
-                  <dt>
-                    <CalendarClock size={15} />
-                    {t("Validity", "有效期")}
-                  </dt>
-                  <dd>
-                    {selected.notBefore ? formatDate(selected.notBefore) : t("Unknown", "未知")} {t("to", "至")} {selected.notAfter ? formatDate(selected.notAfter) : t("Unknown", "未知")}
-                  </dd>
-                </div>
-                <div>
-                  <dt>{t("Subject", "主体")}</dt>
-                  <dd>{selected.subject || t("Unknown", "未知")}</dd>
-                </div>
-                <div>
-                  <dt>{t("Issuer", "签发者")}</dt>
-                  <dd>{selected.issuer || t("Unknown", "未知")}</dd>
-                </div>
-                <div>
-                  <dt>{t("Bindings", "绑定")}</dt>
-                  <dd>
-                    {selected.boundServices.length
-                      ? selected.boundServices.map((service) => `${service.name} (${service.domains.join(", ")})`).join("; ")
-                      : t("Not bound to a Web service", "未绑定到 Web 服务")}
-                  </dd>
-                </div>
-                <div>
-                  <dt>{t("Status detail", "状态详情")}</dt>
-                  <dd>{selected.statusMessage || selected.status}</dd>
-                </div>
+        <Card className="h-fit bg-card/80">
+          <CardHeader>
+            <CardDescription>{t("Selected certificate", "选中证书")}</CardDescription>
+            <CardTitle>{selected?.name || t("No certificate selected.", "未选择证书。")}</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {selected ? (
+              <dl className="grid gap-4 text-sm">
+                <DetailItem icon={<FileKey2 className="size-4" />} label={t("Source", "来源")} value={selected.source} />
+                <DetailItem icon={<CalendarClock className="size-4" />} label={t("Validity", "有效期")} value={`${selected.notBefore ? formatDate(selected.notBefore) : t("Unknown", "未知")} ${t("to", "至")} ${selected.notAfter ? formatDate(selected.notAfter) : t("Unknown", "未知")}`} />
+                <DetailItem label={t("Subject", "主体")} value={selected.subject || t("Unknown", "未知")} />
+                <DetailItem label={t("Issuer", "签发者")} value={selected.issuer || t("Unknown", "未知")} />
+                <DetailItem label={t("Bindings", "绑定")} value={selected.boundServices.length ? selected.boundServices.map((service) => `${service.name} (${service.domains.join(", ")})`).join("; ") : t("Not bound to a Web service", "未绑定到 Web 服务")} />
+                <DetailItem label={t("Status detail", "状态详情")} value={selected.statusMessage || selected.status} />
               </dl>
-            </>
-          ) : (
-            <p>{t("No certificate selected.", "未选择证书。")}</p>
-          )}
-        </aside>
+            ) : null}
+          </CardContent>
+        </Card>
       </div>
 
       {showForm ? (
@@ -210,6 +203,18 @@ export function CertificatesPage({ dashboard, onRefresh }: CertificatesPageProps
         />
       ) : null}
     </section>
+  );
+}
+
+function DetailItem({ icon, label, value }: { icon?: React.ReactNode; label: string; value: string }) {
+  return (
+    <div className="grid gap-1">
+      <dt className="flex items-center gap-2 text-muted-foreground">
+        {icon}
+        {label}
+      </dt>
+      <dd className="break-words font-medium">{value}</dd>
+    </div>
   );
 }
 
@@ -269,91 +274,90 @@ function CertificateForm({
 
   return (
     <Modal title={certificate ? t("Edit certificate", "编辑证书") : t("New certificate", "新建证书")} subtitle={t("Generate or register certificates for Traefik TLS configuration.", "为 Traefik TLS 配置生成或登记证书。")} onClose={onClose}>
-      <form className="form-grid" onSubmit={(event) => void submit(event)}>
-        <label>
-          {t("Certificate name", "证书名称")}
-          <input value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} required />
-        </label>
-        <label>
-          {t("Source", "来源")}
-          <select value={draft.source} onChange={(event) => setDraft({ ...draft, source: event.target.value as DraftCertificate["source"] })}>
+      <form className="grid gap-4 md:grid-cols-2" onSubmit={(event) => void submit(event)}>
+        <Field label={t("Certificate name", "证书名称")}>
+          <Input value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} required />
+        </Field>
+        <Field label={t("Source", "来源")}>
+          <select className={selectClass} value={draft.source} onChange={(event) => setDraft({ ...draft, source: event.target.value as DraftCertificate["source"] })}>
             <option value="self-signed">{t("Self-signed local", "本地自签")}</option>
             <option value="upload">{t("Upload PEM", "上传 PEM")}</option>
             <option value="path">{t("Existing path", "已有路径")}</option>
             <option value="acme">{t("ACME resolver reference", "ACME 解析器引用")}</option>
             <option value="sync">{t("Sync target", "同步目标")}</option>
           </select>
-        </label>
-        <label className="span-2">
-          {t("Domains / SANs", "域名 / SAN")}
-          <input value={draft.domainsText} onChange={(event) => setDraft({ ...draft, domainsText: event.target.value })} placeholder="secure.localhost, app.example.com" />
-        </label>
+        </Field>
+        <Field className="md:col-span-2" label={t("Domains / SANs", "域名 / SAN")}>
+          <Input value={draft.domainsText} onChange={(event) => setDraft({ ...draft, domainsText: event.target.value })} placeholder="secure.localhost, app.example.com" />
+        </Field>
 
         {draft.source === "self-signed" ? (
-          <label>
-            {t("Valid days", "有效天数")}
-            <input type="number" min="1" max="3980" value={draft.days} onChange={(event) => setDraft({ ...draft, days: Number(event.target.value) })} />
-          </label>
+          <Field label={t("Valid days", "有效天数")}>
+            <Input type="number" min="1" max="3980" value={draft.days} onChange={(event) => setDraft({ ...draft, days: Number(event.target.value) })} />
+          </Field>
         ) : null}
 
         {draft.source === "upload" ? (
           <>
-            <label className="span-2">
-              {t("Certificate PEM", "证书 PEM")}
-              <textarea value={draft.certPem} onChange={(event) => setDraft({ ...draft, certPem: event.target.value })} rows={6} placeholder="-----BEGIN CERTIFICATE-----" />
-            </label>
-            <label className="span-2">
-              {t("Private key PEM", "私钥 PEM")}
-              <textarea value={draft.keyPem} onChange={(event) => setDraft({ ...draft, keyPem: event.target.value })} rows={6} placeholder="-----BEGIN PRIVATE KEY-----" />
-            </label>
+            <Field className="md:col-span-2" label={t("Certificate PEM", "证书 PEM")}>
+              <Textarea value={draft.certPem} onChange={(event) => setDraft({ ...draft, certPem: event.target.value })} rows={6} placeholder="-----BEGIN CERTIFICATE-----" />
+            </Field>
+            <Field className="md:col-span-2" label={t("Private key PEM", "私钥 PEM")}>
+              <Textarea value={draft.keyPem} onChange={(event) => setDraft({ ...draft, keyPem: event.target.value })} rows={6} placeholder="-----BEGIN PRIVATE KEY-----" />
+            </Field>
           </>
         ) : null}
 
         {draft.source === "path" ? (
           <>
-            <label>
-              {t("Certificate path", "证书路径")}
-              <input value={draft.certPath} onChange={(event) => setDraft({ ...draft, certPath: event.target.value })} placeholder="/absolute/path/fullchain.pem" />
-            </label>
-            <label>
-              {t("Private key path", "私钥路径")}
-              <input value={draft.keyPath} onChange={(event) => setDraft({ ...draft, keyPath: event.target.value })} placeholder="/absolute/path/privkey.pem" />
-            </label>
+            <Field label={t("Certificate path", "证书路径")}>
+              <Input value={draft.certPath} onChange={(event) => setDraft({ ...draft, certPath: event.target.value })} placeholder="/absolute/path/fullchain.pem" />
+            </Field>
+            <Field label={t("Private key path", "私钥路径")}>
+              <Input value={draft.keyPath} onChange={(event) => setDraft({ ...draft, keyPath: event.target.value })} placeholder="/absolute/path/privkey.pem" />
+            </Field>
           </>
         ) : null}
 
         {draft.source === "acme" ? (
           <>
-            <label>
-              {t("Resolver name", "解析器名称")}
-              <input value={draft.resolver} onChange={(event) => setDraft({ ...draft, resolver: event.target.value })} />
-            </label>
-            <label>
-              {t("Email", "邮箱")}
-              <input value={draft.email} onChange={(event) => setDraft({ ...draft, email: event.target.value })} placeholder="admin@example.com" />
-            </label>
-            <label>
-              {t("DNS provider", "DNS 提供商")}
-              <input value={draft.dnsProvider} onChange={(event) => setDraft({ ...draft, dnsProvider: event.target.value })} />
-            </label>
+            <Field label={t("Resolver name", "解析器名称")}>
+              <Input value={draft.resolver} onChange={(event) => setDraft({ ...draft, resolver: event.target.value })} />
+            </Field>
+            <Field label={t("Email", "邮箱")}>
+              <Input value={draft.email} onChange={(event) => setDraft({ ...draft, email: event.target.value })} placeholder="admin@example.com" />
+            </Field>
+            <Field label={t("DNS provider", "DNS 提供商")}>
+              <Input value={draft.dnsProvider} onChange={(event) => setDraft({ ...draft, dnsProvider: event.target.value })} />
+            </Field>
           </>
         ) : null}
 
-        <label className="switch-line span-2">
-          <input type="checkbox" checked={draft.enabled} onChange={(event) => setDraft({ ...draft, enabled: event.target.checked })} />
-          {t("Enabled", "启用")}
-        </label>
-        <footer className="form-actions span-2">
-          <button type="button" className="secondary-button" onClick={onClose}>
+        <div className="flex items-center gap-3 md:col-span-2">
+          <Switch checked={draft.enabled} onCheckedChange={(checked) => setDraft({ ...draft, enabled: checked })} />
+          <span className="text-sm">{t("Enabled", "启用")}</span>
+        </div>
+        <Separator className="md:col-span-2" />
+        <footer className="flex justify-end gap-2 md:col-span-2">
+          <Button type="button" variant="outline" onClick={onClose}>
             {t("Cancel", "取消")}
-          </button>
-          <button type="submit" className="primary-button" disabled={saving}>
-            {draft.source === "upload" ? <Upload size={16} /> : <KeyRound size={16} />}
+          </Button>
+          <Button type="submit" disabled={saving}>
+            {draft.source === "upload" ? <Upload className="size-4" /> : <KeyRound className="size-4" />}
             {saving ? t("Saving...", "保存中...") : t("Save", "保存")}
-          </button>
+          </Button>
         </footer>
       </form>
     </Modal>
+  );
+}
+
+function Field({ label, children, className }: { label: string; children: React.ReactNode; className?: string }) {
+  return (
+    <Label className={`grid gap-2 text-sm ${className || ""}`}>
+      <span>{label}</span>
+      {children}
+    </Label>
   );
 }
 

@@ -27,6 +27,14 @@ import {
 } from "../api";
 import { Modal } from "../components/Modal";
 import { StatusBadge } from "../components/StatusBadge";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Separator } from "@/components/ui/separator";
+import { Switch } from "@/components/ui/switch";
+import { Textarea } from "@/components/ui/textarea";
 import { useLanguage } from "../i18n";
 
 interface WebServicesPageProps {
@@ -63,6 +71,8 @@ const emptyDraft: DraftService = {
   resolver: "letsencrypt",
   notes: ""
 };
+
+const selectClass = "h-8 w-full rounded-lg border border-input bg-background px-2.5 text-sm outline-none transition-colors focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50";
 
 export function WebServicesPage({ dashboard, onRefresh }: WebServicesPageProps) {
   const { t } = useLanguage();
@@ -182,139 +192,124 @@ export function WebServicesPage({ dashboard, onRefresh }: WebServicesPageProps) 
   };
 
   return (
-    <section className="workspace-section">
-      <header className="section-heading sticky-story">
-        <div>
-          <p className="eyebrow">{t("01 Web Services", "01 Web 服务")}</p>
-          <h2>{t("Domain-first routing control", "以域名为中心的路由管理")}</h2>
-          <p>{t("Lucky-style service operations mapped to Traefik file-provider routers and live dashboard status.", "把 Lucky 风格的服务操作映射到 Traefik file provider 路由和实时运行状态。")}</p>
-        </div>
-        <div className="toolbar">
-          <button type="button" className="secondary-button" onClick={handleAddGroup}>
-            <Layers size={16} />
-            {t("Group", "分组")}
-          </button>
-          <button type="button" className="primary-button" onClick={openCreate}>
-            <Plus size={16} />
-            {t("New service", "新建服务")}
-          </button>
-        </div>
-      </header>
+    <section className="grid gap-4">
+      <Card className="bg-card/80">
+        <CardHeader>
+          <div className="grid gap-3 md:flex md:items-center md:justify-between">
+            <div className="grid min-w-0 gap-1">
+              <CardDescription>{t("01 Web Services", "01 Web 服务")}</CardDescription>
+              <CardTitle className="text-2xl">{t("Domain-first routing control", "以域名为中心的路由管理")}</CardTitle>
+              <CardDescription>{t("Lucky-style service operations mapped to Traefik file-provider routers and live dashboard status.", "把 Lucky 风格的服务操作映射到 Traefik file provider 路由和实时运行状态。")}</CardDescription>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button type="button" variant="outline" onClick={handleAddGroup}>
+                <Layers className="size-4" />
+                {t("Group", "分组")}
+              </Button>
+              <Button type="button" onClick={openCreate}>
+                <Plus className="size-4" />
+                {t("New service", "新建服务")}
+              </Button>
+            </div>
+          </div>
+        </CardHeader>
+      </Card>
 
-      {error ? <div className="notice error">{error}</div> : null}
+      {error ? <div className="rounded-xl border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">{error}</div> : null}
 
-      <div className="content-grid">
-        <div className="service-groups">
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
+        <div className="grid gap-4">
           {grouped.map(({ group, services }) => (
-            <section className="group-band" key={group.id}>
-              <div className="group-header">
-                <button className="group-toggle" type="button" onClick={() => void handleGroupToggle(group)} aria-label={t(`${group.collapsed ? "Expand" : "Collapse"} ${group.name}`, `${group.collapsed ? "展开" : "折叠"} ${group.name}`)}>
-                  {group.collapsed ? <ChevronRight size={17} /> : <ChevronDown size={17} />}
-                  <strong>{group.name}</strong>
-                  <span>{t(`${services.length} services`, `${services.length} 个服务`)}</span>
-                </button>
-                <div className="group-actions">
-                  <button className="icon-button" type="button" onClick={() => void handleRenameGroup(group)} aria-label={t(`Rename group ${group.name}`, `重命名分组 ${group.name}`)}>
-                    <Pencil size={16} />
-                  </button>
-                  <button className="icon-button danger" type="button" onClick={() => void handleDeleteGroup(group, services.length)} disabled={services.length > 0 || dashboard.groups.length <= 1} aria-label={t(`Delete group ${group.name}`, `删除分组 ${group.name}`)}>
-                    <Trash2 size={16} />
-                  </button>
+            <Card key={group.id} className="bg-card/75">
+              <CardHeader className="border-b">
+                <div className="flex min-w-0 items-center gap-2">
+                  <Button variant="ghost" className="min-w-0 flex-1 justify-start gap-2 px-0 text-base" onClick={() => void handleGroupToggle(group)} aria-label={t(`${group.collapsed ? "Expand" : "Collapse"} ${group.name}`, `${group.collapsed ? "展开" : "折叠"} ${group.name}`)}>
+                    {group.collapsed ? <ChevronRight className="size-4" /> : <ChevronDown className="size-4" />}
+                    <span className="truncate">{group.name}</span>
+                  </Button>
+                  <Badge variant="outline">{t(`${services.length} services`, `${services.length} 个服务`)}</Badge>
+                  <Button variant="ghost" size="icon-sm" onClick={() => void handleRenameGroup(group)} aria-label={t(`Rename group ${group.name}`, `重命名分组 ${group.name}`)}>
+                    <Pencil className="size-4" />
+                  </Button>
+                  <Button variant="destructive" size="icon-sm" onClick={() => void handleDeleteGroup(group, services.length)} disabled={services.length > 0 || dashboard.groups.length <= 1} aria-label={t(`Delete group ${group.name}`, `删除分组 ${group.name}`)}>
+                    <Trash2 className="size-4" />
+                  </Button>
                 </div>
-              </div>
+              </CardHeader>
               {!group.collapsed ? (
-                <div className="service-list">
+                <CardContent className="grid gap-3 pt-4">
                   {services.map((service) => (
                     <article
                       key={service.id}
-                      className={`service-card ${draggingId === service.id ? "dragging" : ""}`}
+                      className={`grid gap-3 rounded-xl border bg-background/35 p-3 transition-colors hover:bg-muted/40 md:grid-cols-[auto_minmax(0,1fr)_auto] ${draggingId === service.id ? "border-cyan-300/70" : ""}`}
                       draggable
                       onDragStart={() => setDraggingId(service.id)}
                       onDragOver={(event) => event.preventDefault()}
                       onDrop={() => void handleDrop(service.id)}
                       onClick={() => setSelectedId(service.id)}
                     >
-                      <button className="drag-handle" aria-label={t("Drag to reorder", "拖拽排序")} type="button">
-                        <GripVertical size={18} />
-                      </button>
-                      <div className="service-main">
-                        <div className="service-title">
-                          <h3>{service.name}</h3>
+                      <Button variant="ghost" size="icon-sm" className="self-center" aria-label={t("Drag to reorder", "拖拽排序")}>
+                        <GripVertical className="size-4" />
+                      </Button>
+                      <div className="min-w-0 space-y-2">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h3 className="font-medium">{service.name}</h3>
                           <StatusBadge status={service.enabled ? "enabled" : "disabled"} />
                           {service.runtime ? <StatusBadge status={service.runtime.status} /> : <StatusBadge status="unknown" label={t("Not seen", "未发现")} />}
                         </div>
-                        <div className="domain-row">
+                        <div className="flex flex-wrap gap-2">
                           {service.domains.map((domain) => (
-                            <a key={domain} href={`http://${domain}:${service.listenPort}`} target="_blank" rel="noreferrer" onClick={(event) => event.stopPropagation()}>
-                              {domain}
-                              <ExternalLink size={12} />
-                            </a>
+                            <Button key={domain} asChild variant="outline" size="xs" onClick={(event) => event.stopPropagation()}>
+                              <a href={`http://${domain}:${service.listenPort}`} target="_blank" rel="noreferrer">
+                                {domain}
+                                <ExternalLink className="size-3" />
+                              </a>
+                            </Button>
                           ))}
                         </div>
-                        <div className="service-meta">
+                        <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
                           <span>{service.entryPoints.join(", ")}</span>
                           <span>{service.targetUrl}</span>
                           <span>{service.tls.mode === "none" ? t("No TLS", "无 TLS") : service.tls.mode}</span>
                         </div>
                       </div>
-                      <div className="row-actions" onClick={(event) => event.stopPropagation()}>
-                        <button className="icon-button" type="button" onClick={() => void handleToggle(service)} aria-label={t("Toggle service", "切换服务启用状态")}>
-                          <Power size={17} />
-                        </button>
-                        <button className="icon-button" type="button" onClick={() => openEdit(service)} aria-label={t("Edit service", "编辑服务")}>
-                          <Pencil size={17} />
-                        </button>
-                        <button className="icon-button danger" type="button" onClick={() => void handleDelete(service)} aria-label={t("Delete service", "删除服务")}>
-                          <Trash2 size={17} />
-                        </button>
+                      <div className="flex items-center gap-1" onClick={(event) => event.stopPropagation()}>
+                        <Button variant="outline" size="icon-sm" onClick={() => void handleToggle(service)} aria-label={t("Toggle service", "切换服务启用状态")}>
+                          <Power className="size-4" />
+                        </Button>
+                        <Button variant="outline" size="icon-sm" onClick={() => openEdit(service)} aria-label={t("Edit service", "编辑服务")}>
+                          <Pencil className="size-4" />
+                        </Button>
+                        <Button variant="destructive" size="icon-sm" onClick={() => void handleDelete(service)} aria-label={t("Delete service", "删除服务")}>
+                          <Trash2 className="size-4" />
+                        </Button>
                       </div>
                     </article>
                   ))}
-                  {services.length === 0 ? <div className="empty-inline">{t("No services in this group yet.", "这个分组里还没有服务。")}</div> : null}
-                </div>
+                  {services.length === 0 ? <div className="rounded-xl border border-dashed p-6 text-sm text-muted-foreground">{t("No services in this group yet.", "这个分组里还没有服务。")}</div> : null}
+                </CardContent>
               ) : null}
-            </section>
+            </Card>
           ))}
         </div>
 
-        <aside className="detail-panel">
-          {selected ? (
-            <>
-              <p className="eyebrow">{t("Selected route", "选中路由")}</p>
-              <h3>{selected.name}</h3>
-              <dl className="detail-list">
-                <div>
-                  <dt>
-                    <Route size={15} />
-                    {t("Rule", "规则")}
-                  </dt>
-                  <dd>{selected.domains.map((domain) => `Host(${domain})`).join(" OR ")}</dd>
-                </div>
-                <div>
-                  <dt>
-                    <Server size={15} />
-                    {t("Backend", "后端")}
-                  </dt>
-                  <dd>{selected.targetUrl}</dd>
-                </div>
-                <div>
-                  <dt>TLS</dt>
-                  <dd>{selected.tls.mode === "file-certificate" ? t(`Certificate ${selected.tls.certificateId}`, `证书 ${selected.tls.certificateId}`) : selected.tls.mode}</dd>
-                </div>
-                <div>
-                  <dt>{t("Runtime", "运行时")}</dt>
-                  <dd>{selected.runtime ? `${selected.runtime.name} · ${selected.runtime.status}` : t("Waiting for Traefik file provider", "等待 Traefik file provider 同步")}</dd>
-                </div>
-                <div>
-                  <dt>{t("Notes", "备注")}</dt>
-                  <dd>{selected.notes || t("No notes", "无备注")}</dd>
-                </div>
+        <Card className="h-fit bg-card/80">
+          <CardHeader>
+            <CardDescription>{t("Selected route", "选中路由")}</CardDescription>
+            <CardTitle>{selected?.name || t("No service selected.", "未选择服务。")}</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {selected ? (
+              <dl className="grid gap-4 text-sm">
+                <DetailItem icon={<Route className="size-4" />} label={t("Rule", "规则")} value={selected.domains.map((domain) => `Host(${domain})`).join(" OR ")} />
+                <DetailItem icon={<Server className="size-4" />} label={t("Backend", "后端")} value={selected.targetUrl} />
+                <DetailItem label="TLS" value={selected.tls.mode === "file-certificate" ? t(`Certificate ${selected.tls.certificateId}`, `证书 ${selected.tls.certificateId}`) : selected.tls.mode} />
+                <DetailItem label={t("Runtime", "运行时")} value={selected.runtime ? `${selected.runtime.name} · ${selected.runtime.status}` : t("Waiting for Traefik file provider", "等待 Traefik file provider 同步")} />
+                <DetailItem label={t("Notes", "备注")} value={selected.notes || t("No notes", "无备注")} />
               </dl>
-            </>
-          ) : (
-            <p>{t("No service selected.", "未选择服务。")}</p>
-          )}
-        </aside>
+            ) : null}
+          </CardContent>
+        </Card>
       </div>
 
       {showForm ? (
@@ -344,6 +339,18 @@ export function WebServicesPage({ dashboard, onRefresh }: WebServicesPageProps) 
         />
       ) : null}
     </section>
+  );
+}
+
+function DetailItem({ icon, label, value }: { icon?: React.ReactNode; label: string; value: string }) {
+  return (
+    <div className="grid gap-1">
+      <dt className="flex items-center gap-2 text-muted-foreground">
+        {icon}
+        {label}
+      </dt>
+      <dd className="break-words font-medium">{value}</dd>
+    </div>
   );
 }
 
@@ -404,49 +411,41 @@ function ServiceForm({
 
   return (
     <Modal title={service ? t("Edit Web service", "编辑 Web 服务") : t("New Web service", "新建 Web 服务")} subtitle={t("Generate Traefik routers and services without hand-writing YAML.", "无需手写 YAML 即可生成 Traefik routers 和 services。")} onClose={onClose}>
-      <form className="form-grid" onSubmit={(event) => void submit(event)}>
-        <label>
-          {t("Service name", "服务名称")}
-          <input value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} required />
-        </label>
-        <label>
-          {t("Group", "分组")}
-          <select value={draft.groupId} onChange={(event) => setDraft({ ...draft, groupId: event.target.value })}>
+      <form className="grid gap-4 md:grid-cols-2" onSubmit={(event) => void submit(event)}>
+        <Field label={t("Service name", "服务名称")}>
+          <Input value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} required />
+        </Field>
+        <Field label={t("Group", "分组")}>
+          <select className={selectClass} value={draft.groupId} onChange={(event) => setDraft({ ...draft, groupId: event.target.value })}>
             {groups.map((group) => (
               <option key={group.id} value={group.id}>
                 {group.name}
               </option>
             ))}
           </select>
-        </label>
-        <label className="span-2">
-          {t("Domains", "域名")}
-          <input value={draft.domainsText} onChange={(event) => setDraft({ ...draft, domainsText: event.target.value })} placeholder="app.localhost, www.example.com" required />
-        </label>
-        <label>
-          {t("Host port", "主机端口")}
-          <input type="number" min="1" max="65535" value={draft.listenPort} onChange={(event) => setDraft({ ...draft, listenPort: Number(event.target.value) })} />
-        </label>
-        <label>
-          {t("Entrypoints", "入口点")}
-          <input value={draft.entryPointsText} onChange={(event) => setDraft({ ...draft, entryPointsText: event.target.value })} placeholder="web, websecure" required />
-        </label>
-        <label className="span-2">
-          {t("Forward target", "转发目标")}
-          <input value={draft.targetUrl} onChange={(event) => setDraft({ ...draft, targetUrl: event.target.value })} placeholder="http://whoami:80" required />
-        </label>
-        <label>
-          {t("TLS mode", "TLS 模式")}
-          <select value={draft.tlsMode} onChange={(event) => setDraft({ ...draft, tlsMode: event.target.value as DraftService["tlsMode"] })}>
+        </Field>
+        <Field className="md:col-span-2" label={t("Domains", "域名")}>
+          <Input value={draft.domainsText} onChange={(event) => setDraft({ ...draft, domainsText: event.target.value })} placeholder="app.localhost, www.example.com" required />
+        </Field>
+        <Field label={t("Host port", "主机端口")}>
+          <Input type="number" min="1" max="65535" value={draft.listenPort} onChange={(event) => setDraft({ ...draft, listenPort: Number(event.target.value) })} />
+        </Field>
+        <Field label={t("Entrypoints", "入口点")}>
+          <Input value={draft.entryPointsText} onChange={(event) => setDraft({ ...draft, entryPointsText: event.target.value })} placeholder="web, websecure" required />
+        </Field>
+        <Field className="md:col-span-2" label={t("Forward target", "转发目标")}>
+          <Input value={draft.targetUrl} onChange={(event) => setDraft({ ...draft, targetUrl: event.target.value })} placeholder="http://whoami:80" required />
+        </Field>
+        <Field label={t("TLS mode", "TLS 模式")}>
+          <select className={selectClass} value={draft.tlsMode} onChange={(event) => setDraft({ ...draft, tlsMode: event.target.value as DraftService["tlsMode"] })}>
             <option value="none">{t("No TLS", "无 TLS")}</option>
             <option value="file-certificate">{t("File certificate", "文件证书")}</option>
             <option value="resolver">{t("ACME resolver", "ACME 解析器")}</option>
           </select>
-        </label>
+        </Field>
         {draft.tlsMode === "file-certificate" ? (
-          <label>
-            {t("Certificate", "证书")}
-            <select value={draft.certificateId} onChange={(event) => setDraft({ ...draft, certificateId: event.target.value })}>
+          <Field label={t("Certificate", "证书")}>
+            <select className={selectClass} value={draft.certificateId} onChange={(event) => setDraft({ ...draft, certificateId: event.target.value })}>
               <option value="">{t("Select certificate", "选择证书")}</option>
               {certificates.map((certificate) => (
                 <option key={certificate.id} value={certificate.id}>
@@ -454,37 +453,44 @@ function ServiceForm({
                 </option>
               ))}
             </select>
-          </label>
+          </Field>
         ) : null}
         {draft.tlsMode === "resolver" ? (
-          <label>
-            {t("Resolver", "解析器")}
-            <input value={draft.resolver} onChange={(event) => setDraft({ ...draft, resolver: event.target.value })} />
-          </label>
+          <Field label={t("Resolver", "解析器")}>
+            <Input value={draft.resolver} onChange={(event) => setDraft({ ...draft, resolver: event.target.value })} />
+          </Field>
         ) : null}
-        <label className="span-2">
-          {t("Middlewares", "中间件")}
-          <input value={draft.middlewaresText} onChange={(event) => setDraft({ ...draft, middlewaresText: event.target.value })} placeholder="auth@file, compress@file" />
-        </label>
-        <label className="span-2">
-          {t("Notes", "备注")}
-          <textarea value={draft.notes} onChange={(event) => setDraft({ ...draft, notes: event.target.value })} rows={3} />
-        </label>
-        <label className="switch-line span-2">
-          <input type="checkbox" checked={draft.enabled} onChange={(event) => setDraft({ ...draft, enabled: event.target.checked })} />
-          {t("Enabled", "启用")}
-        </label>
-        <footer className="form-actions span-2">
-          <button type="button" className="secondary-button" onClick={onClose}>
+        <Field className="md:col-span-2" label={t("Middlewares", "中间件")}>
+          <Input value={draft.middlewaresText} onChange={(event) => setDraft({ ...draft, middlewaresText: event.target.value })} placeholder="auth@file, compress@file" />
+        </Field>
+        <Field className="md:col-span-2" label={t("Notes", "备注")}>
+          <Textarea value={draft.notes} onChange={(event) => setDraft({ ...draft, notes: event.target.value })} rows={3} />
+        </Field>
+        <div className="flex items-center gap-3 md:col-span-2">
+          <Switch checked={draft.enabled} onCheckedChange={(checked) => setDraft({ ...draft, enabled: checked })} />
+          <span className="text-sm">{t("Enabled", "启用")}</span>
+        </div>
+        <Separator className="md:col-span-2" />
+        <footer className="flex justify-end gap-2 md:col-span-2">
+          <Button type="button" variant="outline" onClick={onClose}>
             {t("Cancel", "取消")}
-          </button>
-          <button type="submit" className="primary-button" disabled={saving}>
-            <Save size={16} />
+          </Button>
+          <Button type="submit" disabled={saving}>
+            <Save className="size-4" />
             {saving ? t("Saving...", "保存中...") : t("Save", "保存")}
-          </button>
+          </Button>
         </footer>
       </form>
     </Modal>
+  );
+}
+
+function Field({ label, children, className }: { label: string; children: React.ReactNode; className?: string }) {
+  return (
+    <Label className={`grid gap-2 text-sm ${className || ""}`}>
+      <span>{label}</span>
+      {children}
+    </Label>
   );
 }
 
