@@ -134,6 +134,18 @@ app.patch("/api/groups/:id", (request, response) => {
   response.json(next.groups.find((item) => item.id === group.id));
 });
 
+app.delete("/api/groups/:id", (request, response) => {
+  const state = loadState();
+  const group = state.groups.find((item) => item.id === request.params.id);
+  if (!group) return response.status(404).json({ error: "Group not found." });
+  if (state.groups.length <= 1) return response.status(409).json({ error: "At least one group is required." });
+  const serviceCount = state.webServices.filter((service) => service.groupId === group.id).length;
+  if (serviceCount > 0) return response.status(409).json({ error: "Group is not empty. Move or delete its Web services first." });
+  state.groups = state.groups.filter((item) => item.id !== group.id);
+  const next = saveState(state, "group.delete", `Deleted group ${group.name}.`);
+  response.json(next.groups);
+});
+
 app.get("/api/certificates", async (_request, response) => {
   const payload = await dashboardPayload();
   response.json(payload.certificates);

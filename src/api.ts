@@ -88,6 +88,10 @@ export async function updateGroup(id: string, input: Partial<ServiceGroup>): Pro
   });
 }
 
+export async function deleteGroup(id: string): Promise<ServiceGroup[]> {
+  return request<ServiceGroup[]>(`/api/groups/${id}`, { method: "DELETE" });
+}
+
 export async function createCertificate(input: CertificateInput): Promise<CertificateWithBindings> {
   return request<CertificateWithBindings>("/api/certificates", {
     method: "POST",

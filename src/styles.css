@@ -110,6 +110,8 @@ button:disabled {
 .service-meta,
 .runtime-tags,
 .group-header,
+.group-toggle,
+.group-actions,
 .form-actions {
   display: flex;
   align-items: center;
@@ -623,19 +625,38 @@ button:disabled {
 
 .group-header {
   width: 100%;
-  justify-content: flex-start;
-  gap: 0.5rem;
-  padding: 0.85rem 1rem;
-  border: 0;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.7rem 0.8rem;
   color: #fff;
   background: rgba(255, 255, 255, 0.05);
+}
+
+.group-toggle {
+  min-width: 0;
+  flex: 1;
+  justify-content: flex-start;
+  gap: 0.5rem;
+  border: 0;
+  color: inherit;
+  background: transparent;
   text-align: left;
 }
 
-.group-header span {
+.group-toggle span {
   margin-left: auto;
   color: var(--text-muted);
   font-size: 0.85rem;
+}
+
+.group-actions {
+  gap: 0.35rem;
+  flex: 0 0 auto;
+}
+
+.group-actions .icon-button {
+  width: 32px;
+  height: 32px;
 }
 
 .service-list {

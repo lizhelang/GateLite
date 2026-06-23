@@ -17,6 +17,7 @@ import type { DashboardPayload, ServiceGroup, WebServiceWithRuntime } from "../.
 import {
   createGroup,
   createWebService,
+  deleteGroup,
   deleteWebService,
   reorderWebServices,
   toggleWebService,
@@ -114,15 +115,52 @@ export function WebServicesPage({ dashboard, onRefresh }: WebServicesPageProps) 
   };
 
   const handleGroupToggle = async (group: ServiceGroup) => {
-    await updateGroup(group.id, { collapsed: !group.collapsed });
-    await onRefresh();
+    setError(null);
+    try {
+      await updateGroup(group.id, { collapsed: !group.collapsed });
+      await onRefresh();
+    } catch (groupError) {
+      setError(groupError instanceof Error ? groupError.message : "Group update failed.");
+    }
   };
 
   const handleAddGroup = async () => {
     const name = window.prompt("New group name");
     if (!name?.trim()) return;
-    await createGroup(name.trim());
-    await onRefresh();
+    setError(null);
+    try {
+      await createGroup(name.trim());
+      await onRefresh();
+    } catch (groupError) {
+      setError(groupError instanceof Error ? groupError.message : "Group create failed.");
+    }
+  };
+
+  const handleRenameGroup = async (group: ServiceGroup) => {
+    const name = window.prompt("Rename group", group.name);
+    if (!name?.trim() || name.trim() === group.name) return;
+    setError(null);
+    try {
+      await updateGroup(group.id, { name: name.trim() });
+      await onRefresh();
+    } catch (groupError) {
+      setError(groupError instanceof Error ? groupError.message : "Group rename failed.");
+    }
+  };
+
+  const handleDeleteGroup = async (group: ServiceGroup, serviceCount: number) => {
+    if (serviceCount > 0) {
+      setError("Move or delete services before deleting this group.");
+      return;
+    }
+    if (!window.confirm(`Delete empty group "${group.name}"?`)) return;
+    setError(null);
+    try {
+      await deleteGroup(group.id);
+      await onRefresh();
+    } catch (groupError) {
+      setError(groupError instanceof Error ? groupError.message : "Group delete failed.");
+    }
   };
 
   const handleDrop = async (targetId: string) => {
@@ -167,11 +205,21 @@ export function WebServicesPage({ dashboard, onRefresh }: WebServicesPageProps) 
         <div className="service-groups">
           {grouped.map(({ group, services }) => (
             <section className="group-band" key={group.id}>
-              <button className="group-header" type="button" onClick={() => void handleGroupToggle(group)}>
-                {group.collapsed ? <ChevronRight size={17} /> : <ChevronDown size={17} />}
-                <strong>{group.name}</strong>
-                <span>{services.length} services</span>
-              </button>
+              <div className="group-header">
+                <button className="group-toggle" type="button" onClick={() => void handleGroupToggle(group)} aria-label={`${group.collapsed ? "Expand" : "Collapse"} ${group.name}`}>
+                  {group.collapsed ? <ChevronRight size={17} /> : <ChevronDown size={17} />}
+                  <strong>{group.name}</strong>
+                  <span>{services.length} services</span>
+                </button>
+                <div className="group-actions">
+                  <button className="icon-button" type="button" onClick={() => void handleRenameGroup(group)} aria-label={`Rename group ${group.name}`}>
+                    <Pencil size={16} />
+                  </button>
+                  <button className="icon-button danger" type="button" onClick={() => void handleDeleteGroup(group, services.length)} disabled={services.length > 0 || dashboard.groups.length <= 1} aria-label={`Delete group ${group.name}`}>
+                    <Trash2 size={16} />
+                  </button>
+                </div>
+              </div>
               {!group.collapsed ? (
                 <div className="service-list">
                   {services.map((service) => (
@@ -443,4 +491,3 @@ function splitList(value: string): string[] {
     .map((item) => item.trim())
     .filter(Boolean);
 }
-
