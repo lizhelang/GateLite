@@ -1,4 +1,4 @@
-import type { DomainTrafficSeries, TrafficOverview, WebService } from "../shared/types";
+import type { DomainTrafficSeries, TrafficOverview, WebService, WebServiceTrafficStats } from "../shared/types";
 import { config } from "./config";
 import { traefikName } from "./ids";
 
@@ -16,27 +16,50 @@ type ParsedMetric = {
 const maxSamples = 12;
 const samplesByDomain = new Map<string, TrafficSample[]>();
 
+type RouterTrafficStats = {
+  totalRequests: number;
+  requestBytes: number;
+  responseBytes: number;
+};
+
+export type TrafficSnapshot = {
+  overview: TrafficOverview;
+  statsByServiceId: Map<string, WebServiceTrafficStats>;
+};
+
 export async function getTrafficOverview(services: WebService[]): Promise<TrafficOverview> {
+  return (await getTrafficSnapshot(services)).overview;
+}
+
+export async function getTrafficSnapshot(services: WebService[]): Promise<TrafficSnapshot> {
   const updatedAt = new Date().toISOString();
 
   try {
     const text = await fetchTraefikMetrics();
-    const routerTotals = readRouterRequestTotals(text);
+    const routerStats = readRouterTrafficStats(text);
+    const routerTotals = new Map(Array.from(routerStats.entries()).map(([router, stats]) => [router, stats.totalRequests]));
+    const openConnectionsByEntrypoint = readEntrypointOpenConnections(text);
     const series = buildDomainSeries(services, routerTotals, updatedAt);
 
     return {
-      connected: true,
-      source: "prometheus",
-      updatedAt,
-      series
+      overview: {
+        connected: true,
+        source: "prometheus",
+        updatedAt,
+        series
+      },
+      statsByServiceId: buildServiceTrafficStats(services, routerStats, openConnectionsByEntrypoint, updatedAt, "prometheus")
     };
   } catch (error) {
     return {
-      connected: false,
-      source: "unavailable",
-      updatedAt,
-      series: [],
-      error: error instanceof Error ? error.message : "Unable to load Traefik metrics."
+      overview: {
+        connected: false,
+        source: "unavailable",
+        updatedAt,
+        series: [],
+        error: error instanceof Error ? error.message : "Unable to load Traefik metrics."
+      },
+      statsByServiceId: buildServiceTrafficStats(services, new Map(), new Map(), updatedAt, "unavailable")
     };
   }
 }
@@ -52,6 +75,42 @@ export function readRouterRequestTotals(text: string): Map<string, number> {
   }
 
   return totals;
+}
+
+export function readRouterTrafficStats(text: string): Map<string, RouterTrafficStats> {
+  const stats = new Map<string, RouterTrafficStats>();
+
+  for (const metric of parsePrometheusMetrics(text)) {
+    const router = metric.labels.router;
+    if (!router || !Number.isFinite(metric.value)) continue;
+    if (!["traefik_router_requests_total", "traefik_router_requests_bytes_total", "traefik_router_responses_bytes_total"].includes(metric.name)) continue;
+
+    const current = stats.get(router) || {
+      totalRequests: 0,
+      requestBytes: 0,
+      responseBytes: 0
+    };
+
+    if (metric.name === "traefik_router_requests_total") current.totalRequests += metric.value;
+    if (metric.name === "traefik_router_requests_bytes_total") current.requestBytes += metric.value;
+    if (metric.name === "traefik_router_responses_bytes_total") current.responseBytes += metric.value;
+    stats.set(router, current);
+  }
+
+  return stats;
+}
+
+export function readEntrypointOpenConnections(text: string): Map<string, number> {
+  const connections = new Map<string, number>();
+
+  for (const metric of parsePrometheusMetrics(text)) {
+    if (metric.name !== "traefik_open_connections") continue;
+    const entrypoint = metric.labels.entrypoint;
+    if (!entrypoint || !Number.isFinite(metric.value)) continue;
+    connections.set(entrypoint, (connections.get(entrypoint) || 0) + metric.value);
+  }
+
+  return connections;
 }
 
 export function parsePrometheusMetrics(text: string): ParsedMetric[] {
@@ -71,6 +130,37 @@ export function parsePrometheusMetrics(text: string): ParsedMetric[] {
   }
 
   return metrics;
+}
+
+function buildServiceTrafficStats(
+  services: WebService[],
+  routerStats: Map<string, RouterTrafficStats>,
+  openConnectionsByEntrypoint: Map<string, number>,
+  updatedAt: string,
+  source: WebServiceTrafficStats["source"]
+): Map<string, WebServiceTrafficStats> {
+  const statsByServiceId = new Map<string, WebServiceTrafficStats>();
+
+  for (const service of services) {
+    const routerName = traefikName("gatelite", service.id);
+    const stats = routerStats.get(`${routerName}@file`) || routerStats.get(routerName) || {
+      totalRequests: 0,
+      requestBytes: 0,
+      responseBytes: 0
+    };
+    const openConnections = service.entryPoints.reduce((total, entrypoint) => total + (openConnectionsByEntrypoint.get(entrypoint) || 0), 0);
+
+    statsByServiceId.set(service.id, {
+      source,
+      updatedAt,
+      totalRequests: stats.totalRequests,
+      requestBytes: stats.requestBytes,
+      responseBytes: stats.responseBytes,
+      openConnections
+    });
+  }
+
+  return statsByServiceId;
 }
 
 function buildDomainSeries(services: WebService[], routerTotals: Map<string, number>, at: string): DomainTrafficSeries[] {

@@ -131,9 +131,19 @@ export interface TrafficOverview {
   error?: string;
 }
 
+export interface WebServiceTrafficStats {
+  source: "prometheus" | "unavailable";
+  updatedAt: string;
+  totalRequests: number;
+  requestBytes: number;
+  responseBytes: number;
+  openConnections: number;
+}
+
 export interface WebServiceWithRuntime extends WebService {
   runtime?: RuntimeRouter;
   groupName?: string;
+  traffic?: WebServiceTrafficStats;
 }
 
 export interface CertificateWithBindings extends CertificateItem {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parsePrometheusMetrics, readRouterRequestTotals } from "../server/metrics";
+import { parsePrometheusMetrics, readEntrypointOpenConnections, readRouterRequestTotals, readRouterTrafficStats } from "../server/metrics";
 
 describe("Traefik Prometheus metrics parsing", () => {
   it("sums router request counters across labels", () => {
@@ -30,5 +30,27 @@ traefik_entrypoint_requests_total{code="200",entrypoint="web",method="GET",proto
         value: 1
       }
     ]);
+  });
+
+  it("sums router byte counters and entrypoint open connections", () => {
+    const text = `
+traefik_router_requests_total{code="200",router="gatelite-svc-one@file",service="gatelite-service-svc-one@file"} 3
+traefik_router_requests_total{code="404",router="gatelite-svc-one@file",service="gatelite-service-svc-one@file"} 2
+traefik_router_requests_bytes_total{code="200",router="gatelite-svc-one@file",service="gatelite-service-svc-one@file"} 128
+traefik_router_responses_bytes_total{code="200",router="gatelite-svc-one@file",service="gatelite-service-svc-one@file"} 2048
+traefik_open_connections{entrypoint="web",protocol="TCP"} 4
+traefik_open_connections{entrypoint="websecure",protocol="TCP"} 1
+`;
+
+    const stats = readRouterTrafficStats(text);
+    expect(stats.get("gatelite-svc-one@file")).toEqual({
+      totalRequests: 5,
+      requestBytes: 128,
+      responseBytes: 2048
+    });
+
+    const connections = readEntrypointOpenConnections(text);
+    expect(connections.get("web")).toBe(4);
+    expect(connections.get("websecure")).toBe(1);
   });
 });

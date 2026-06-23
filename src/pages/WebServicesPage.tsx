@@ -93,6 +93,7 @@ const selectClass = "h-8 w-full rounded-lg border border-input bg-background px-
 export function WebServicesPage({ dashboard, onRefresh }: WebServicesPageProps) {
   const { t } = useLanguage();
   const [editing, setEditing] = useState<WebServiceWithRuntime | null>(null);
+  const [createMode, setCreateMode] = useState<"rule" | "subrule">("rule");
   const [showForm, setShowForm] = useState(false);
   const [selectedId, setSelectedId] = useState("");
   const [activeRoot, setActiveRoot] = useState("__all");
@@ -108,13 +109,15 @@ export function WebServicesPage({ dashboard, onRefresh }: WebServicesPageProps) 
   const allRoutes = zones.flatMap((zone) => zone.routes);
   const activeRoutes = activeRoot === "__all" ? allRoutes : zones.find((zone) => zone.root === activeRoot)?.routes || allRoutes;
 
-  const openCreate = () => {
+  const openCreate = (mode: "rule" | "subrule" = "rule") => {
     setEditing(null);
+    setCreateMode(mode);
     setShowForm(true);
   };
 
   const openEdit = (service: WebServiceWithRuntime) => {
     setEditing(service);
+    setCreateMode("subrule");
     setShowForm(true);
   };
 
@@ -228,9 +231,13 @@ export function WebServicesPage({ dashboard, onRefresh }: WebServicesPageProps) 
             <Layers className="size-4" />
             {t("Groups", "分组")}
           </Button>
-          <Button type="button" onClick={openCreate}>
+          <Button type="button" variant="outline" onClick={() => openCreate("subrule")} disabled={activeRoot === "__all"} title={activeRoot === "__all" ? t("Select a root domain before adding a sub-rule.", "先选择一个根域名，再添加子规则。") : undefined}>
             <Plus className="size-4" />
-            {t("New route", "新建路由")}
+            {t("New sub-rule", "新建子规则")}
+          </Button>
+          <Button type="button" onClick={() => openCreate("rule")}>
+            <Plus className="size-4" />
+            {t("New rule", "新建规则")}
           </Button>
         </div>
       </div>
@@ -260,6 +267,8 @@ export function WebServicesPage({ dashboard, onRefresh }: WebServicesPageProps) 
       {showForm ? (
         <ServiceForm
           service={editing}
+          mode={createMode}
+          activeRoot={activeRoot}
           groups={dashboard.groups}
           certificates={dashboard.certificates}
           saving={saving}
@@ -315,19 +324,20 @@ function RouteDataTable({
     <Card className="overflow-hidden bg-card/70">
       <CardContent className="p-0">
         <div className="overflow-x-auto">
-          <Table className="min-w-[820px]">
+          <Table className="min-w-[980px]">
             <TableHeader className="bg-muted/45">
               <TableRow className="hover:bg-transparent">
                 <TableHead className="w-10" />
                 <TableHead className="w-10">
                   <Checkbox aria-label={t("Select visible routes", "选择当前路由")} checked={selectedCount > 0} onCheckedChange={(checked) => onSelect(checked ? routes[0]?.service.id || "" : "")} />
                 </TableHead>
-                <TableHead>{t("Route", "路由")}</TableHead>
-                <TableHead>{t("Subdomain", "子域名")}</TableHead>
+                <TableHead>{t("Rule / sub-rule", "规则 / 子规则")}</TableHead>
+                <TableHead>{t("Frontend domain", "前端域名")}</TableHead>
+                <TableHead>{t("Backend IP:port", "后端 IP:端口")}</TableHead>
+                <TableHead>{t("Traffic", "上下行流量")}</TableHead>
+                <TableHead>{t("Live conn.", "实时连接")}</TableHead>
                 <TableHead>{t("Status", "状态")}</TableHead>
-                <TableHead>{t("Target", "目标")}</TableHead>
                 <TableHead>TLS</TableHead>
-                <TableHead>{t("Group", "分组")}</TableHead>
                 <TableHead className="w-28 text-right">{t("Actions", "操作")}</TableHead>
               </TableRow>
             </TableHeader>
@@ -336,6 +346,8 @@ function RouteDataTable({
                 const service = route.service;
                 const selected = service.id === selectedId;
                 const link = service.tls.mode === "none" ? `http://${route.primaryDomain}:${service.listenPort}` : `https://${route.primaryDomain}:${service.listenPort}`;
+                const backend = formatBackendTarget(service.targetUrl);
+                const traffic = service.traffic;
                 return (
                   <TableRow
                     key={service.id}
@@ -357,32 +369,44 @@ function RouteDataTable({
                     <TableCell>
                       <div className="grid min-w-0 gap-0.5">
                         <span className="truncate font-medium">{service.name}</span>
-                        <span className="truncate text-xs text-muted-foreground">{route.primaryDomain}</span>
+                        <span className="truncate text-xs text-muted-foreground">{route.groupName}</span>
                       </div>
                     </TableCell>
                     <TableCell>
-                      <a className="inline-flex max-w-56 items-center gap-1 truncate rounded-md border bg-background/55 px-2 py-1 text-xs text-cyan-100 hover:bg-muted" href={link} target="_blank" rel="noreferrer" onClick={(event) => event.stopPropagation()}>
-                        <span className="truncate">{route.labels.join(", ") || "@"}</span>
+                      <a className="inline-flex max-w-72 items-center gap-1 truncate rounded-md border bg-background/55 px-2 py-1 text-xs text-cyan-100 hover:bg-muted" href={link} target="_blank" rel="noreferrer" onClick={(event) => event.stopPropagation()}>
+                        <span className="truncate">{route.primaryDomain}</span>
                         <ExternalLink className="size-3 shrink-0" />
                       </a>
+                      {service.domains.length > 1 ? <span className="ml-2 text-xs text-muted-foreground">+{service.domains.length - 1}</span> : null}
+                    </TableCell>
+                    <TableCell>
+                      <div className="grid max-w-64 grid-cols-[1rem_minmax(0,1fr)] items-center gap-1 text-xs leading-tight">
+                        <ArrowRight className="size-3.5 text-muted-foreground" />
+                        <span className="truncate font-mono text-foreground">{backend.hostPort}</span>
+                        <span />
+                        <span className="truncate text-muted-foreground">{backend.scheme}</span>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="grid gap-0.5 text-xs leading-tight">
+                        <span className="font-mono text-cyan-100">↓ {formatBytes(traffic?.responseBytes || 0)}</span>
+                        <span className="font-mono text-amber-100">↑ {formatBytes(traffic?.requestBytes || 0)}</span>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="grid gap-0.5 text-xs leading-tight">
+                        <span className="font-mono text-foreground">{traffic?.openConnections ?? 0}</span>
+                        <span className="text-muted-foreground">{t("current", "当前")}</span>
+                      </div>
                     </TableCell>
                     <TableCell>
                       <StatusBadge status={service.runtime?.status || (service.enabled ? "unknown" : "offline")} label={service.enabled ? undefined : t("Disabled", "停用")} />
-                    </TableCell>
-                    <TableCell>
-                      <div className="grid max-w-64 grid-cols-[1rem_minmax(0,1fr)] items-center gap-1 text-xs">
-                        <ArrowRight className="size-3.5 text-muted-foreground" />
-                        <span className="truncate font-mono text-muted-foreground">{service.targetUrl}</span>
-                      </div>
                     </TableCell>
                     <TableCell>
                       <div className="grid gap-0.5 text-xs">
                         <span className="font-medium">{service.tls.mode === "none" ? "HTTP" : "TLS"}</span>
                         <span className="truncate text-muted-foreground">{service.entryPoints.join(", ")}</span>
                       </div>
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant="outline">{route.groupName}</Badge>
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center justify-end gap-1" onClick={(event) => event.stopPropagation()}>
@@ -402,7 +426,7 @@ function RouteDataTable({
               })}
               {routes.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={9} className="h-24 text-center text-sm text-muted-foreground">
+                  <TableCell colSpan={10} className="h-24 text-center text-sm text-muted-foreground">
                     {t("No routes in this domain view.", "这个域名视图里还没有路由。")}
                   </TableCell>
                 </TableRow>
@@ -462,6 +486,8 @@ function GroupStrip({
 
 function ServiceForm({
   service,
+  mode,
+  activeRoot,
   groups,
   certificates,
   saving,
@@ -469,6 +495,8 @@ function ServiceForm({
   onSubmit
 }: {
   service: WebServiceWithRuntime | null;
+  mode: "rule" | "subrule";
+  activeRoot: string;
   groups: ServiceGroup[];
   certificates: DashboardPayload["certificates"];
   saving: boolean;
@@ -477,7 +505,8 @@ function ServiceForm({
 }) {
   const { t } = useLanguage();
   const [draft, setDraft] = useState<DraftService>(() => {
-    const domains = service ? domainsToDraft(service.domains) : { domainRoot: emptyDraft.domainRoot, subdomainsText: "" };
+    const createRoot = mode === "subrule" && activeRoot !== "__all" ? activeRoot : emptyDraft.domainRoot;
+    const domains = service ? domainsToDraft(service.domains) : { domainRoot: createRoot, subdomainsText: "" };
     return service
       ? {
           name: service.name,
@@ -494,9 +523,18 @@ function ServiceForm({
           resolver: service.tls.resolver || "letsencrypt",
           notes: service.notes || ""
         }
-      : { ...emptyDraft, groupId: groups[0]?.id || "local" };
+      : { ...emptyDraft, groupId: groups[0]?.id || "local", domainRoot: createRoot };
   });
   const domainPreview = composeDomains(draft.domainRoot, draft.subdomainsText);
+  const title = service
+    ? t("Edit sub-rule", "编辑子规则")
+    : mode === "subrule"
+      ? t("New sub-rule", "新建子规则")
+      : t("New reverse proxy rule", "新建反代规则");
+  const subtitle =
+    mode === "subrule"
+      ? t("Add one frontend domain under the selected rule and point it to a backend IP:port.", "在当前规则下添加一个前端域名，并指向后端 IP:端口。")
+      : t("Create a reverse proxy rule: frontend domain, listen port, backend IP:port, and TLS mode.", "创建反代规则：前端域名、监听端口、后端 IP:端口和 TLS 模式。");
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
@@ -519,9 +557,9 @@ function ServiceForm({
   };
 
   return (
-    <Modal title={service ? t("Edit route", "编辑路由") : t("New route", "新建路由")} subtitle={t("Choose one root domain, then add one or more subdomain labels for this backend.", "选择一个根域名，再给这个后端添加一个或多个子域名标签。")} onClose={onClose}>
+    <Modal title={title} subtitle={subtitle} onClose={onClose}>
       <form className="grid gap-4 md:grid-cols-2" onSubmit={(event) => void submit(event)}>
-        <Field label={t("Route name", "路由名称")}>
+        <Field label={t("Rule name", "规则名称")}>
           <Input value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} required />
         </Field>
         <Field label={t("Group", "分组")}>
@@ -534,22 +572,22 @@ function ServiceForm({
           </select>
         </Field>
         <Field label={t("Root domain", "根域名")}>
-          <Input value={draft.domainRoot} onChange={(event) => setDraft({ ...draft, domainRoot: event.target.value })} placeholder="1804.surfacer.cc" />
+          <Input value={draft.domainRoot} onChange={(event) => setDraft({ ...draft, domainRoot: event.target.value })} placeholder="1804.surfacer.cc" disabled={mode === "subrule" && activeRoot !== "__all" && !service} />
         </Field>
-        <Field label={t("Subdomains", "子域名")}>
+        <Field label={t("Frontend address", "前端地址")}>
           <Input value={draft.subdomainsText} onChange={(event) => setDraft({ ...draft, subdomainsText: event.target.value })} placeholder="qb, mp, 8081.jb, @" required />
         </Field>
         <div className="md:col-span-2 rounded-lg border bg-background/40 px-3 py-2 text-xs text-muted-foreground">
           <span>{t("Preview", "预览")} </span>
           <span className="text-foreground">{domainPreview.length ? domainPreview.join(", ") : t("No domain yet", "还没有域名")}</span>
         </div>
-        <Field label={t("Public port", "访问端口")}>
+        <Field label={t("Listen port", "监听端口")}>
           <Input type="number" min="1" max="65535" value={draft.listenPort} onChange={(event) => setDraft({ ...draft, listenPort: Number(event.target.value) })} />
         </Field>
         <Field label={t("Entrypoints", "入口点")}>
           <Input value={draft.entryPointsText} onChange={(event) => setDraft({ ...draft, entryPointsText: event.target.value })} placeholder="web, websecure" required />
         </Field>
-        <Field className="md:col-span-2" label={t("Backend target", "后端目标")}>
+        <Field className="md:col-span-2" label={t("Backend IP:port", "后端 IP:端口")}>
           <Input value={draft.targetUrl} onChange={(event) => setDraft({ ...draft, targetUrl: event.target.value })} placeholder="http://192.168.31.26:8081" required />
         </Field>
         <Field label={t("TLS mode", "TLS 模式")}>
@@ -692,4 +730,33 @@ function domainToLabel(domainInput: string, rootInput: string): string {
 
 function normalizeDomain(value: string): string {
   return value.trim().toLowerCase().replace(/^https?:\/\//, "").replace(/\/.*$/, "").replace(/^\.+|\.+$/g, "");
+}
+
+function formatBackendTarget(value: string): { hostPort: string; scheme: string } {
+  const authority = value.replace(/^[a-z][a-z0-9+.-]*:\/\//i, "").split(/[/?#]/)[0];
+  try {
+    const url = new URL(value);
+    return {
+      hostPort: authority || url.host,
+      scheme: url.protocol.replace(":", "") || value
+    };
+  } catch {
+    return {
+      hostPort: authority || value.replace(/^https?:\/\//, ""),
+      scheme: value.startsWith("https://") ? "https" : value.startsWith("http://") ? "http" : "custom"
+    };
+  }
+}
+
+function formatBytes(value: number): string {
+  if (!Number.isFinite(value) || value <= 0) return "0 B";
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  let size = value;
+  let unitIndex = 0;
+  while (size >= 1024 && unitIndex < units.length - 1) {
+    size /= 1024;
+    unitIndex += 1;
+  }
+  const precision = size >= 10 || unitIndex === 0 ? 0 : 1;
+  return `${size.toFixed(precision)} ${units[unitIndex]}`;
 }

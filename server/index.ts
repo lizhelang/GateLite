@@ -6,7 +6,7 @@ import type { CertificateWithBindings, DashboardPayload, WebService, WebServiceW
 import { config } from "./config";
 import { createCertificateFromInput } from "./certificates";
 import { createId, traefikName } from "./ids";
-import { getTrafficOverview } from "./metrics";
+import { getTrafficSnapshot } from "./metrics";
 import { certificateInputSchema, groupInputSchema, reorderSchema, webServiceInputSchema } from "./schemas";
 import { ensureState, loadState, saveState } from "./store";
 import { getTraefikRuntime } from "./traefik";
@@ -228,7 +228,7 @@ app.listen(config.port, () => {
 
 async function dashboardPayload(): Promise<DashboardPayload> {
   const state = loadState();
-  const [runtime, traffic] = await Promise.all([getTraefikRuntime(), getTrafficOverview(state.webServices)]);
+  const [runtime, trafficSnapshot] = await Promise.all([getTraefikRuntime(), getTrafficSnapshot(state.webServices)]);
   const groupsById = new Map(state.groups.map((group) => [group.id, group]));
   const routersByManagedName = new Map(runtime.routers.map((router) => [router.name.replace(/@file$/, ""), router]));
 
@@ -237,7 +237,8 @@ async function dashboardPayload(): Promise<DashboardPayload> {
     return {
       ...service,
       groupName: groupsById.get(service.groupId)?.name || "Ungrouped",
-      runtime: routersByManagedName.get(routerName)
+      runtime: routersByManagedName.get(routerName),
+      traffic: trafficSnapshot.statsByServiceId.get(service.id)
     };
   });
 
@@ -251,7 +252,7 @@ async function dashboardPayload(): Promise<DashboardPayload> {
     groups: state.groups,
     webServices,
     certificates,
-    traffic
+    traffic: trafficSnapshot.overview
   };
 }
 
