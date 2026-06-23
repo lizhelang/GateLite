@@ -94,5 +94,33 @@ describe("generateTraefikDynamicConfig", () => {
 
     expect(generateTraefikDynamicConfig(state).yaml).not.toContain("disabled.localhost");
   });
-});
 
+  it("omits disabled certificates from the active Traefik config", () => {
+    const state: GateLiteState = {
+      version: 1,
+      groups: [],
+      webServices: [],
+      certificates: [
+        {
+          id: "cert-disabled",
+          name: "Disabled cert",
+          enabled: false,
+          source: "upload",
+          domains: ["disabled.localhost"],
+          certPath: "/tmp/disabled.crt",
+          keyPath: "/tmp/disabled.key",
+          status: "valid",
+          order: 1,
+          createdAt: "2026-06-23T00:00:00.000Z",
+          updatedAt: "2026-06-23T00:00:00.000Z"
+        }
+      ],
+      history: []
+    };
+
+    const generated = generateTraefikDynamicConfig(state).yaml;
+
+    expect(generated).not.toContain("/certs/disabled.crt");
+    expect(generated).not.toContain("/certs/disabled.key");
+  });
+});

@@ -178,6 +178,17 @@ app.put("/api/certificates/:id", (request, response) => {
   response.json(next.certificates.find((certificate) => certificate.id === request.params.id));
 });
 
+app.patch("/api/certificates/:id/toggle", (request, response) => {
+  const enabled = z.object({ enabled: z.boolean() }).parse(request.body).enabled;
+  const state = loadState();
+  const certificate = state.certificates.find((item) => item.id === request.params.id);
+  if (!certificate) return response.status(404).json({ error: "Certificate not found." });
+  certificate.enabled = enabled;
+  certificate.updatedAt = new Date().toISOString();
+  const next = saveState(state, "certificate.toggle", `${enabled ? "Enabled" : "Disabled"} certificate ${certificate.name}.`);
+  response.json(next.certificates.find((item) => item.id === certificate.id));
+});
+
 app.delete("/api/certificates/:id", (request, response) => {
   const state = loadState();
   const certificate = state.certificates.find((item) => item.id === request.params.id);

@@ -106,6 +106,13 @@ export async function updateCertificate(id: string, input: Partial<CertificateIn
   });
 }
 
+export async function toggleCertificate(id: string, enabled: boolean): Promise<CertificateWithBindings> {
+  return request<CertificateWithBindings>(`/api/certificates/${id}/toggle`, {
+    method: "PATCH",
+    body: JSON.stringify({ enabled })
+  });
+}
+
 export async function deleteCertificate(id: string): Promise<void> {
   await request<void>(`/api/certificates/${id}`, { method: "DELETE" });
 }

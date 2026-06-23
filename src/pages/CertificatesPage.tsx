@@ -1,7 +1,7 @@
-import { CalendarClock, FileKey2, KeyRound, Pencil, Plus, Save, ShieldAlert, ShieldCheck, Trash2, Upload } from "lucide-react";
+import { CalendarClock, FileKey2, KeyRound, Pencil, Plus, Power, Save, ShieldAlert, ShieldCheck, Trash2, Upload } from "lucide-react";
 import { FormEvent, useState } from "react";
 import type { CertificateWithBindings, DashboardPayload } from "../../shared/types";
-import { createCertificate, deleteCertificate, updateCertificate, type CertificateInput } from "../api";
+import { createCertificate, deleteCertificate, toggleCertificate, updateCertificate, type CertificateInput } from "../api";
 import { Modal } from "../components/Modal";
 import { StatusBadge } from "../components/StatusBadge";
 
@@ -59,6 +59,16 @@ export function CertificatesPage({ dashboard, onRefresh }: CertificatesPageProps
     setShowForm(true);
   };
 
+  const handleToggle = async (certificate: CertificateWithBindings) => {
+    setError(null);
+    try {
+      await toggleCertificate(certificate.id, !certificate.enabled);
+      await onRefresh();
+    } catch (toggleError) {
+      setError(toggleError instanceof Error ? toggleError.message : "Toggle failed.");
+    }
+  };
+
   const handleDelete = async (certificate: CertificateWithBindings) => {
     if (!window.confirm(`Delete certificate "${certificate.name}"?`)) return;
     setError(null);
@@ -109,6 +119,9 @@ export function CertificatesPage({ dashboard, onRefresh }: CertificatesPageProps
                 </div>
               </div>
               <div className="row-actions" onClick={(event) => event.stopPropagation()}>
+                <button className="icon-button" type="button" onClick={() => void handleToggle(certificate)} aria-label="Toggle certificate">
+                  <Power size={17} />
+                </button>
                 <button className="icon-button" type="button" onClick={() => openEdit(certificate)} aria-label="Edit certificate">
                   <Pencil size={17} />
                 </button>
@@ -355,4 +368,3 @@ function formatDate(value: string): string {
     day: "2-digit"
   }).format(new Date(value));
 }
-
