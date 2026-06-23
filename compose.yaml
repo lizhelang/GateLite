@@ -7,6 +7,10 @@ services:
       - --api=true
       - --api.dashboard=true
       - --api.insecure=true
+      - --metrics.prometheus=true
+      - --metrics.prometheus.addentrypointslabels=true
+      - --metrics.prometheus.addrouterslabels=true
+      - --metrics.prometheus.addserviceslabels=true
       - --entrypoints.web.address=:80
       - --entrypoints.websecure.address=:443
       - --providers.file.directory=/dynamic
@@ -39,4 +43,3 @@ services:
 networks:
   gatelite_proxy:
     name: gatelite_proxy
-

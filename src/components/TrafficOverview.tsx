@@ -1,5 +1,5 @@
 import { ChartSpline, Clock3, Gauge, Globe2, Route, ShieldCheck } from "lucide-react";
-import type { CertificateWithBindings, DashboardPayload, WebServiceWithRuntime } from "../../shared/types";
+import type { CertificateWithBindings, DashboardPayload, TrafficOverview as TrafficOverviewData, WebServiceWithRuntime } from "../../shared/types";
 
 interface TrafficOverviewProps {
   dashboard: DashboardPayload | null;
@@ -11,6 +11,7 @@ type Series = {
   color: string;
   values: number[];
   total: number;
+  source: "prometheus" | "preview";
 };
 
 const palette = ["#37d6c2", "#f39c12", "#e94560", "#8fb7ff", "#63d471"];
@@ -22,12 +23,13 @@ export function TrafficOverview({ dashboard, loading }: TrafficOverviewProps) {
   const services = dashboard?.webServices || [];
   const certificates = dashboard?.certificates || [];
   const domains = uniqueDomains(services);
-  const series = buildTrafficSeries(services);
+  const series = buildTrafficSeries(services, dashboard?.traffic);
   const chart = buildChart(series);
   const routeTotals = getRouteTotals(dashboard);
   const tlsCoverage = getTlsCoverage(services, domains.length);
   const certSummary = getCertificateSummary(certificates);
   const entryPoints = Array.from(new Set(services.flatMap((service) => service.entryPoints))).filter(Boolean);
+  const hasPrometheusTraffic = series.some((item) => item.source === "prometheus");
 
   return (
     <section className="visual-stage" aria-label="GateLite overview">
@@ -39,11 +41,11 @@ export function TrafficOverview({ dashboard, loading }: TrafficOverviewProps) {
           </div>
           <span className={dashboard?.runtime.connected ? "live-pill online" : "live-pill offline"}>
             <Gauge size={15} />
-            {dashboard?.runtime.connected ? "Live runtime" : loading ? "Connecting" : "Offline"}
+            {hasPrometheusTraffic ? "Prometheus metrics" : dashboard?.runtime.connected ? "Preview data" : loading ? "Connecting" : "Offline"}
           </span>
         </div>
 
-        <svg className="traffic-chart" viewBox={`0 0 ${chartWidth} ${chartHeight}`} role="img" aria-label="Preset traffic line chart for managed domains">
+        <svg className="traffic-chart" viewBox={`0 0 ${chartWidth} ${chartHeight}`} role="img" aria-label="Traffic line chart for managed domains">
           <defs>
             <linearGradient id="trafficFill" x1="0" x2="0" y1="0" y2="1">
               <stop offset="0%" stopColor="#37d6c2" stopOpacity="0.34" />
@@ -67,11 +69,11 @@ export function TrafficOverview({ dashboard, loading }: TrafficOverviewProps) {
             last 12 intervals
           </text>
           <text className="axis-label" x={chartWidth - chartPadding.right} y={chartHeight - 10} textAnchor="end">
-            req/min preview
+            {hasPrometheusTraffic ? "requests / sample" : "req/min preview"}
           </text>
         </svg>
 
-        <div className="chart-legend" aria-label="Domains in traffic preset">
+        <div className="chart-legend" aria-label="Domains in traffic chart">
           {series.map((item) => (
             <span key={item.domain} className="legend-chip">
               <i style={{ background: item.color }} />
@@ -149,7 +151,17 @@ function uniqueDomains(services: WebServiceWithRuntime[]) {
   return Array.from(new Set(services.flatMap((service) => service.domains))).filter(Boolean);
 }
 
-function buildTrafficSeries(services: WebServiceWithRuntime[]): Series[] {
+function buildTrafficSeries(services: WebServiceWithRuntime[], traffic: TrafficOverviewData | undefined): Series[] {
+  if (traffic?.connected && traffic.series.length) {
+    return traffic.series.slice(0, 5).map((item, index) => ({
+      domain: item.domain,
+      color: palette[index % palette.length],
+      values: normalizeMeasuredValues(item.points.map((point) => point.value), item.totalRequests),
+      total: item.totalRequests,
+      source: "prometheus"
+    }));
+  }
+
   const domains = uniqueDomains(services).slice(0, 5);
   const visibleDomains = domains.length ? domains : ["whoami.localhost", "secure.localhost"];
 
@@ -168,15 +180,24 @@ function buildTrafficSeries(services: WebServiceWithRuntime[]): Series[] {
       domain,
       color: palette[domainIndex % palette.length],
       values,
-      total: values.reduce((sum, value) => sum + value, 0)
+      total: values.reduce((sum, value) => sum + value, 0),
+      source: "preview"
     };
   });
 }
 
+function normalizeMeasuredValues(values: number[], total: number): number[] {
+  const measured = values.length ? values : [total];
+  const padded = measured.length < 12 ? [...Array(12 - measured.length).fill(0), ...measured] : measured.slice(-12);
+  return padded.map((value) => Math.max(0, Math.round(value)));
+}
+
 function buildChart(series: Series[]) {
   const allValues = series.flatMap((item) => item.values);
-  const max = Math.max(80, ...allValues) + 10;
-  const min = Math.max(0, Math.min(...allValues) - 10);
+  const isMeasured = series.some((item) => item.source === "prometheus");
+  const highest = Math.max(1, ...allValues);
+  const max = isMeasured ? highest + Math.max(1, highest * 0.2) : Math.max(80, highest) + 10;
+  const min = isMeasured ? 0 : Math.max(0, Math.min(...allValues) - 10);
   const drawableWidth = chartWidth - chartPadding.left - chartPadding.right;
   const drawableHeight = chartHeight - chartPadding.top - chartPadding.bottom;
   const toPoint = (value: number, index: number, count: number) => {

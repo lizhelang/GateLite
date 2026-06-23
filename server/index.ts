@@ -6,6 +6,7 @@ import type { CertificateWithBindings, DashboardPayload, WebService, WebServiceW
 import { config } from "./config";
 import { createCertificateFromInput } from "./certificates";
 import { createId, traefikName } from "./ids";
+import { getTrafficOverview } from "./metrics";
 import { certificateInputSchema, groupInputSchema, reorderSchema, webServiceInputSchema } from "./schemas";
 import { ensureState, loadState, saveState } from "./store";
 import { getTraefikRuntime } from "./traefik";
@@ -204,7 +205,7 @@ app.listen(config.port, () => {
 
 async function dashboardPayload(): Promise<DashboardPayload> {
   const state = loadState();
-  const runtime = await getTraefikRuntime();
+  const [runtime, traffic] = await Promise.all([getTraefikRuntime(), getTrafficOverview(state.webServices)]);
   const groupsById = new Map(state.groups.map((group) => [group.id, group]));
   const routersByManagedName = new Map(runtime.routers.map((router) => [router.name.replace(/@file$/, ""), router]));
 
@@ -226,7 +227,8 @@ async function dashboardPayload(): Promise<DashboardPayload> {
     runtime,
     groups: state.groups,
     webServices,
-    certificates
+    certificates,
+    traffic
   };
 }
 

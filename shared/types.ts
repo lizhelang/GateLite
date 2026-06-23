@@ -111,6 +111,26 @@ export interface TraefikRuntime {
   error?: string;
 }
 
+export interface DomainTrafficSeries {
+  domain: string;
+  router: string;
+  provider?: string;
+  source: "prometheus" | "preview";
+  totalRequests: number;
+  points: Array<{
+    at: string;
+    value: number;
+  }>;
+}
+
+export interface TrafficOverview {
+  connected: boolean;
+  source: "prometheus" | "unavailable";
+  updatedAt: string;
+  series: DomainTrafficSeries[];
+  error?: string;
+}
+
 export interface WebServiceWithRuntime extends WebService {
   runtime?: RuntimeRouter;
   groupName?: string;
@@ -125,5 +145,5 @@ export interface DashboardPayload {
   groups: ServiceGroup[];
   webServices: WebServiceWithRuntime[];
   certificates: CertificateWithBindings[];
+  traffic: TrafficOverview;
 }
-

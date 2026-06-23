@@ -88,12 +88,17 @@ Open:
 - GateLite frontend: http://localhost:5173
 - GateLite API: http://localhost:3001/api/health
 - Traefik dashboard/API: http://localhost:18081
+- Traefik Prometheus metrics: http://localhost:18081/metrics
 - HTTP test route: http://whoami.localhost:18080
 - HTTPS test route: https://secure.localhost:18443
 
 The first server start creates local runtime state under `runtime/`, generates a
 self-signed development certificate, and writes Traefik dynamic configuration
 to `runtime/traefik/gatelite.yml`.
+
+The local Traefik container enables Prometheus router/service metrics so the
+GateLite overview can plot managed-domain request activity from real Traefik
+counters instead of static preview data.
 
 Run checks:
 
