@@ -107,7 +107,8 @@ export function WebServicesPage({ dashboard, onRefresh }: WebServicesPageProps) 
   const zones = useMemo(() => buildDomainZones(sortedServices, groupsById), [groupsById, sortedServices]);
   const routeCount = sortedServices.length;
   const allRoutes = zones.flatMap((zone) => zone.routes);
-  const activeRoutes = activeRoot === "__all" ? allRoutes : zones.find((zone) => zone.root === activeRoot)?.routes || allRoutes;
+  const activeRoutes = (activeRoot === "__all" ? allRoutes : zones.find((zone) => zone.root === activeRoot)?.routes || allRoutes).filter((route) => !groupsById.get(route.service.groupId)?.collapsed);
+  const selectedRoute = activeRoutes.find((route) => route.service.id === selectedId);
 
   const openCreate = (mode: "rule" | "subrule" = "rule") => {
     setEditing(null);
@@ -144,6 +145,9 @@ export function WebServicesPage({ dashboard, onRefresh }: WebServicesPageProps) 
 
   const handleGroupToggle = async (group: ServiceGroup) => {
     setError(null);
+    if (!group.collapsed && sortedServices.some((service) => service.id === selectedId && service.groupId === group.id)) {
+      setSelectedId("");
+    }
     try {
       await updateGroup(group.id, { collapsed: !group.collapsed });
       await onRefresh();
@@ -264,6 +268,8 @@ export function WebServicesPage({ dashboard, onRefresh }: WebServicesPageProps) 
         onDelete={handleDelete}
       />
 
+      {selectedRoute ? <RouteDetails route={selectedRoute} /> : null}
+
       {showForm ? (
         <ServiceForm
           service={editing}
@@ -348,6 +354,7 @@ function RouteDataTable({
                 const link = service.tls.mode === "none" ? `http://${route.primaryDomain}:${service.listenPort}` : `https://${route.primaryDomain}:${service.listenPort}`;
                 const backend = formatBackendTarget(service.targetUrl);
                 const traffic = service.traffic;
+                const isRootRule = route.labels.some((label) => label === "@");
                 return (
                   <TableRow
                     key={service.id}
@@ -369,7 +376,12 @@ function RouteDataTable({
                     <TableCell>
                       <div className="grid min-w-0 gap-0.5">
                         <span className="truncate font-medium">{service.name}</span>
-                        <span className="truncate text-xs text-muted-foreground">{route.groupName}</span>
+                        <span className="flex min-w-0 items-center gap-1 truncate text-xs text-muted-foreground">
+                          <Badge variant="outline" className="h-5 rounded-md px-1.5 text-[10px]">
+                            {isRootRule ? t("Rule", "规则") : t("Sub-rule", "子规则")}
+                          </Badge>
+                          <span className="truncate">{route.root}</span>
+                        </span>
                       </div>
                     </TableCell>
                     <TableCell>
@@ -405,7 +417,7 @@ function RouteDataTable({
                     <TableCell>
                       <div className="grid gap-0.5 text-xs">
                         <span className="font-medium">{service.tls.mode === "none" ? "HTTP" : "TLS"}</span>
-                        <span className="truncate text-muted-foreground">{service.entryPoints.join(", ")}</span>
+                        <span className="truncate text-muted-foreground">{route.groupName} · {service.entryPoints.join(", ")}</span>
                       </div>
                     </TableCell>
                     <TableCell>
@@ -427,7 +439,7 @@ function RouteDataTable({
               {routes.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={10} className="h-24 text-center text-sm text-muted-foreground">
-                    {t("No routes in this domain view.", "这个域名视图里还没有路由。")}
+                    {t("No visible routes in this domain view. Expand groups or add a rule.", "这个域名视图里没有可见路由。可以展开分组或新增规则。")}
                   </TableCell>
                 </TableRow>
               ) : null}
@@ -443,6 +455,36 @@ function RouteDataTable({
         </div>
       </CardContent>
     </Card>
+  );
+}
+
+function RouteDetails({ route }: { route: DomainRoute }) {
+  const { t } = useLanguage();
+  const service = route.service;
+  const traffic = service.traffic;
+  const backend = formatBackendTarget(service.targetUrl);
+  return (
+    <Card className="overflow-hidden bg-card/70">
+      <CardContent className="grid gap-3 p-4 text-sm md:grid-cols-4">
+        <DetailCell label={t("Selected rule", "选中规则")} value={service.name} />
+        <DetailCell label={t("Frontend", "前端")} value={service.domains.join(", ")} />
+        <DetailCell label={t("Backend", "后端")} value={`${backend.scheme}://${backend.hostPort}`} />
+        <DetailCell label={t("Runtime", "运行时")} value={`${service.runtime?.name || "unmatched"} · ${service.runtime?.status || (service.enabled ? "unknown" : "disabled")}`} />
+        <DetailCell label={t("Traefik rule", "Traefik 规则")} value={service.runtime?.rule || service.domains.map((domain) => `Host(${domain})`).join(" || ")} />
+        <DetailCell label={t("Entrypoints", "入口点")} value={service.entryPoints.join(", ")} />
+        <DetailCell label={t("Traffic source", "流量来源")} value={traffic?.source || "unavailable"} />
+        <DetailCell label={t("Requests", "请求数")} value={`${traffic?.totalRequests || 0}`} />
+      </CardContent>
+    </Card>
+  );
+}
+
+function DetailCell({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="grid gap-1">
+      <dt className="text-xs text-muted-foreground">{label}</dt>
+      <dd className="break-words font-medium">{value}</dd>
+    </div>
   );
 }
 
@@ -523,7 +565,7 @@ function ServiceForm({
           resolver: service.tls.resolver || "letsencrypt",
           notes: service.notes || ""
         }
-      : { ...emptyDraft, groupId: groups[0]?.id || "local", domainRoot: createRoot };
+      : { ...emptyDraft, groupId: groups[0]?.id || "local", domainRoot: createRoot, subdomainsText: mode === "rule" ? "@" : "" };
   });
   const domainPreview = composeDomains(draft.domainRoot, draft.subdomainsText);
   const title = service
@@ -575,7 +617,7 @@ function ServiceForm({
           <Input value={draft.domainRoot} onChange={(event) => setDraft({ ...draft, domainRoot: event.target.value })} placeholder="1804.surfacer.cc" disabled={mode === "subrule" && activeRoot !== "__all" && !service} />
         </Field>
         <Field label={t("Frontend address", "前端地址")}>
-          <Input value={draft.subdomainsText} onChange={(event) => setDraft({ ...draft, subdomainsText: event.target.value })} placeholder="qb, mp, 8081.jb, @" required />
+          <Input value={draft.subdomainsText} onChange={(event) => setDraft({ ...draft, subdomainsText: event.target.value })} placeholder={mode === "subrule" ? "qb, mp, 8081.jb" : "@"} required={mode === "subrule" && !service} />
         </Field>
         <div className="md:col-span-2 rounded-lg border bg-background/40 px-3 py-2 text-xs text-muted-foreground">
           <span>{t("Preview", "预览")} </span>
@@ -629,7 +671,7 @@ function ServiceForm({
           <Button type="button" variant="outline" onClick={onClose}>
             {t("Cancel", "取消")}
           </Button>
-          <Button type="submit" disabled={saving || domainPreview.length === 0}>
+          <Button type="submit" disabled={saving || domainPreview.length === 0 || !draft.name.trim() || !draft.targetUrl.trim() || (mode === "subrule" && !service && !draft.subdomainsText.trim())}>
             <Save className="size-4" />
             {saving ? t("Saving...", "保存中...") : t("Save", "保存")}
           </Button>
