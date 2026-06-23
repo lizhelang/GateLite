@@ -1,4 +1,5 @@
 import {
+  ArrowRight,
   ChevronDown,
   ChevronRight,
   ExternalLink,
@@ -7,12 +8,10 @@ import {
   Pencil,
   Plus,
   Power,
-  Route,
   Save,
-  Server,
   Trash2
 } from "lucide-react";
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useMemo, useState, type ReactNode } from "react";
 import type { DashboardPayload, ServiceGroup, WebServiceWithRuntime } from "../../shared/types";
 import {
   createGroup,
@@ -29,11 +28,13 @@ import { Modal } from "../components/Modal";
 import { StatusBadge } from "../components/StatusBadge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
 import { useLanguage } from "../i18n";
 
@@ -46,7 +47,8 @@ type DraftService = {
   name: string;
   enabled: boolean;
   groupId: string;
-  domainsText: string;
+  domainRoot: string;
+  subdomainsText: string;
   listenPort: number;
   entryPointsText: string;
   targetUrl: string;
@@ -57,11 +59,25 @@ type DraftService = {
   notes: string;
 };
 
+type DomainRoute = {
+  service: WebServiceWithRuntime;
+  root: string;
+  primaryDomain: string;
+  labels: string[];
+  groupName: string;
+};
+
+type DomainZone = {
+  root: string;
+  routes: DomainRoute[];
+};
+
 const emptyDraft: DraftService = {
   name: "",
   enabled: true,
   groupId: "local",
-  domainsText: "",
+  domainRoot: "localhost",
+  subdomainsText: "",
   listenPort: 18080,
   entryPointsText: "web",
   targetUrl: "http://whoami:80",
@@ -78,22 +94,19 @@ export function WebServicesPage({ dashboard, onRefresh }: WebServicesPageProps) 
   const { t } = useLanguage();
   const [editing, setEditing] = useState<WebServiceWithRuntime | null>(null);
   const [showForm, setShowForm] = useState(false);
-  const [selectedId, setSelectedId] = useState(dashboard.webServices[0]?.id || "");
+  const [selectedId, setSelectedId] = useState("");
+  const [activeRoot, setActiveRoot] = useState("__all");
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const selected = dashboard.webServices.find((service) => service.id === selectedId) || dashboard.webServices[0];
-  const sortedServices = [...dashboard.webServices].sort((a, b) => a.order - b.order);
-
-  const grouped = useMemo(() => {
-    const byGroup = new Map<string, WebServiceWithRuntime[]>();
-    for (const service of sortedServices) {
-      const key = service.groupId || "__none__";
-      byGroup.set(key, [...(byGroup.get(key) || []), service]);
-    }
-    return dashboard.groups.map((group) => ({ group, services: byGroup.get(group.id) || [] }));
-  }, [dashboard.groups, sortedServices]);
+  const sortedServices = useMemo(() => [...dashboard.webServices].sort((a, b) => a.order - b.order), [dashboard.webServices]);
+  const groupsById = useMemo(() => new Map(dashboard.groups.map((group) => [group.id, group])), [dashboard.groups]);
+  const serviceCountByGroup = useMemo(() => countServicesByGroup(sortedServices), [sortedServices]);
+  const zones = useMemo(() => buildDomainZones(sortedServices, groupsById), [groupsById, sortedServices]);
+  const routeCount = sortedServices.length;
+  const allRoutes = zones.flatMap((zone) => zone.routes);
+  const activeRoutes = activeRoot === "__all" ? allRoutes : zones.find((zone) => zone.root === activeRoot)?.routes || allRoutes;
 
   const openCreate = () => {
     setEditing(null);
@@ -193,124 +206,56 @@ export function WebServicesPage({ dashboard, onRefresh }: WebServicesPageProps) 
 
   return (
     <section className="grid gap-4">
-      <Card className="bg-card/80">
-        <CardHeader>
-          <div className="grid gap-3 md:flex md:items-center md:justify-between">
-            <div className="grid min-w-0 gap-1">
-              <CardDescription>{t("02 Web Services", "02 Web 服务")}</CardDescription>
-              <CardTitle className="text-2xl">{t("Domain-first routing control", "以域名为中心的路由管理")}</CardTitle>
-              <CardDescription>{t("Lucky-style service operations mapped to Traefik file-provider routers and live dashboard status.", "把 Lucky 风格的服务操作映射到 Traefik file provider 路由和实时运行状态。")}</CardDescription>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <Button type="button" variant="outline" onClick={handleAddGroup}>
-                <Layers className="size-4" />
-                {t("Group", "分组")}
-              </Button>
-              <Button type="button" onClick={openCreate}>
-                <Plus className="size-4" />
-                {t("New service", "新建服务")}
-              </Button>
-            </div>
-          </div>
-        </CardHeader>
-      </Card>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="inline-flex max-w-full items-center gap-1 overflow-x-auto rounded-xl border bg-muted/45 p-1">
+          <Button type="button" variant={activeRoot === "__all" ? "outline" : "ghost"} size="sm" onClick={() => setActiveRoot("__all")}>
+            {t("All domains", "所有域名")}
+            <Badge variant="secondary" className="ml-1 rounded-full px-1.5 py-0 text-[10px]">
+              {routeCount}
+            </Badge>
+          </Button>
+          {zones.map((zone) => (
+            <Button key={zone.root} type="button" variant={activeRoot === zone.root ? "outline" : "ghost"} size="sm" onClick={() => setActiveRoot(zone.root)}>
+              {zone.root}
+              <Badge variant="secondary" className="ml-1 rounded-full px-1.5 py-0 text-[10px]">
+                {zone.routes.length}
+              </Badge>
+            </Button>
+          ))}
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Button type="button" variant="outline" onClick={handleAddGroup}>
+            <Layers className="size-4" />
+            {t("Groups", "分组")}
+          </Button>
+          <Button type="button" onClick={openCreate}>
+            <Plus className="size-4" />
+            {t("New route", "新建路由")}
+          </Button>
+        </div>
+      </div>
+
+      <GroupStrip
+        groups={dashboard.groups}
+        counts={serviceCountByGroup}
+        onToggle={handleGroupToggle}
+        onRename={handleRenameGroup}
+        onDelete={handleDeleteGroup}
+      />
 
       {error ? <div className="rounded-xl border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">{error}</div> : null}
 
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
-        <div className="grid gap-4">
-          {grouped.map(({ group, services }) => (
-            <Card key={group.id} className="bg-card/75">
-              <CardHeader className="border-b">
-                <div className="flex min-w-0 items-center gap-2">
-                  <Button variant="ghost" className="min-w-0 flex-1 justify-start gap-2 px-0 text-base" onClick={() => void handleGroupToggle(group)} aria-label={t(`${group.collapsed ? "Expand" : "Collapse"} ${group.name}`, `${group.collapsed ? "展开" : "折叠"} ${group.name}`)}>
-                    {group.collapsed ? <ChevronRight className="size-4" /> : <ChevronDown className="size-4" />}
-                    <span className="truncate">{group.name}</span>
-                  </Button>
-                  <Badge variant="outline">{t(`${services.length} services`, `${services.length} 个服务`)}</Badge>
-                  <Button variant="ghost" size="icon-sm" onClick={() => void handleRenameGroup(group)} aria-label={t(`Rename group ${group.name}`, `重命名分组 ${group.name}`)}>
-                    <Pencil className="size-4" />
-                  </Button>
-                  <Button variant="destructive" size="icon-sm" onClick={() => void handleDeleteGroup(group, services.length)} disabled={services.length > 0 || dashboard.groups.length <= 1} aria-label={t(`Delete group ${group.name}`, `删除分组 ${group.name}`)}>
-                    <Trash2 className="size-4" />
-                  </Button>
-                </div>
-              </CardHeader>
-              {!group.collapsed ? (
-                <CardContent className="grid gap-3 pt-4">
-                  {services.map((service) => (
-                    <article
-                      key={service.id}
-                      className={`grid gap-3 rounded-xl border bg-background/35 p-3 transition-colors hover:bg-muted/40 md:grid-cols-[auto_minmax(0,1fr)_auto] ${draggingId === service.id ? "border-cyan-300/70" : ""}`}
-                      draggable
-                      onDragStart={() => setDraggingId(service.id)}
-                      onDragOver={(event) => event.preventDefault()}
-                      onDrop={() => void handleDrop(service.id)}
-                      onClick={() => setSelectedId(service.id)}
-                    >
-                      <Button variant="ghost" size="icon-sm" className="self-center" aria-label={t("Drag to reorder", "拖拽排序")}>
-                        <GripVertical className="size-4" />
-                      </Button>
-                      <div className="min-w-0 space-y-2">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <h3 className="font-medium">{service.name}</h3>
-                          <StatusBadge status={service.enabled ? "enabled" : "disabled"} />
-                          {service.runtime ? <StatusBadge status={service.runtime.status} /> : <StatusBadge status="unknown" label={t("Not seen", "未发现")} />}
-                        </div>
-                        <div className="flex flex-wrap gap-2">
-                          {service.domains.map((domain) => (
-                            <Button key={domain} asChild variant="outline" size="xs" onClick={(event) => event.stopPropagation()}>
-                              <a href={`http://${domain}:${service.listenPort}`} target="_blank" rel="noreferrer">
-                                {domain}
-                                <ExternalLink className="size-3" />
-                              </a>
-                            </Button>
-                          ))}
-                        </div>
-                        <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
-                          <span>{service.entryPoints.join(", ")}</span>
-                          <span>{service.targetUrl}</span>
-                          <span>{service.tls.mode === "none" ? t("No TLS", "无 TLS") : service.tls.mode}</span>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-1" onClick={(event) => event.stopPropagation()}>
-                        <Button variant="outline" size="icon-sm" onClick={() => void handleToggle(service)} aria-label={t("Toggle service", "切换服务启用状态")}>
-                          <Power className="size-4" />
-                        </Button>
-                        <Button variant="outline" size="icon-sm" onClick={() => openEdit(service)} aria-label={t("Edit service", "编辑服务")}>
-                          <Pencil className="size-4" />
-                        </Button>
-                        <Button variant="destructive" size="icon-sm" onClick={() => void handleDelete(service)} aria-label={t("Delete service", "删除服务")}>
-                          <Trash2 className="size-4" />
-                        </Button>
-                      </div>
-                    </article>
-                  ))}
-                  {services.length === 0 ? <div className="rounded-xl border border-dashed p-6 text-sm text-muted-foreground">{t("No services in this group yet.", "这个分组里还没有服务。")}</div> : null}
-                </CardContent>
-              ) : null}
-            </Card>
-          ))}
-        </div>
-
-        <Card className="h-fit bg-card/80">
-          <CardHeader>
-            <CardDescription>{t("Selected route", "选中路由")}</CardDescription>
-            <CardTitle>{selected?.name || t("No service selected.", "未选择服务。")}</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {selected ? (
-              <dl className="grid gap-4 text-sm">
-                <DetailItem icon={<Route className="size-4" />} label={t("Rule", "规则")} value={selected.domains.map((domain) => `Host(${domain})`).join(" OR ")} />
-                <DetailItem icon={<Server className="size-4" />} label={t("Backend", "后端")} value={selected.targetUrl} />
-                <DetailItem label="TLS" value={selected.tls.mode === "file-certificate" ? t(`Certificate ${selected.tls.certificateId}`, `证书 ${selected.tls.certificateId}`) : selected.tls.mode} />
-                <DetailItem label={t("Runtime", "运行时")} value={selected.runtime ? `${selected.runtime.name} · ${selected.runtime.status}` : t("Waiting for Traefik file provider", "等待 Traefik file provider 同步")} />
-                <DetailItem label={t("Notes", "备注")} value={selected.notes || t("No notes", "无备注")} />
-              </dl>
-            ) : null}
-          </CardContent>
-        </Card>
-      </div>
+      <RouteDataTable
+        routes={activeRoutes}
+        selectedId={selectedId}
+        draggingId={draggingId}
+        onDragStart={setDraggingId}
+        onDrop={handleDrop}
+        onSelect={setSelectedId}
+        onToggle={handleToggle}
+        onEdit={openEdit}
+        onDelete={handleDelete}
+      />
 
       {showForm ? (
         <ServiceForm
@@ -342,14 +287,175 @@ export function WebServicesPage({ dashboard, onRefresh }: WebServicesPageProps) 
   );
 }
 
-function DetailItem({ icon, label, value }: { icon?: React.ReactNode; label: string; value: string }) {
+function RouteDataTable({
+  routes,
+  selectedId,
+  draggingId,
+  onDragStart,
+  onDrop,
+  onSelect,
+  onToggle,
+  onEdit,
+  onDelete
+}: {
+  routes: DomainRoute[];
+  selectedId?: string;
+  draggingId: string | null;
+  onDragStart: (id: string) => void;
+  onDrop: (id: string) => void;
+  onSelect: (id: string) => void;
+  onToggle: (service: WebServiceWithRuntime) => Promise<void>;
+  onEdit: (service: WebServiceWithRuntime) => void;
+  onDelete: (service: WebServiceWithRuntime) => Promise<void>;
+}) {
+  const { t } = useLanguage();
+  const selectedCount = selectedId && routes.some((route) => route.service.id === selectedId) ? 1 : 0;
+
   return (
-    <div className="grid gap-1">
-      <dt className="flex items-center gap-2 text-muted-foreground">
-        {icon}
-        {label}
-      </dt>
-      <dd className="break-words font-medium">{value}</dd>
+    <Card className="overflow-hidden bg-card/70">
+      <CardContent className="p-0">
+        <div className="overflow-x-auto">
+          <Table className="min-w-[820px]">
+            <TableHeader className="bg-muted/45">
+              <TableRow className="hover:bg-transparent">
+                <TableHead className="w-10" />
+                <TableHead className="w-10">
+                  <Checkbox aria-label={t("Select visible routes", "选择当前路由")} checked={selectedCount > 0} onCheckedChange={(checked) => onSelect(checked ? routes[0]?.service.id || "" : "")} />
+                </TableHead>
+                <TableHead>{t("Route", "路由")}</TableHead>
+                <TableHead>{t("Subdomain", "子域名")}</TableHead>
+                <TableHead>{t("Status", "状态")}</TableHead>
+                <TableHead>{t("Target", "目标")}</TableHead>
+                <TableHead>TLS</TableHead>
+                <TableHead>{t("Group", "分组")}</TableHead>
+                <TableHead className="w-28 text-right">{t("Actions", "操作")}</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {routes.map((route) => {
+                const service = route.service;
+                const selected = service.id === selectedId;
+                const link = service.tls.mode === "none" ? `http://${route.primaryDomain}:${service.listenPort}` : `https://${route.primaryDomain}:${service.listenPort}`;
+                return (
+                  <TableRow
+                    key={service.id}
+                    className={`${selected ? "bg-muted/50" : ""} ${draggingId === service.id ? "outline outline-1 outline-cyan-300/70" : ""}`}
+                    draggable
+                    onDragStart={() => onDragStart(service.id)}
+                    onDragOver={(event) => event.preventDefault()}
+                    onDrop={() => void onDrop(service.id)}
+                    onClick={() => onSelect(service.id)}
+                  >
+                    <TableCell>
+                      <Button variant="ghost" size="icon-xs" aria-label={t("Drag to reorder", "拖拽排序")}>
+                        <GripVertical className="size-3.5" />
+                      </Button>
+                    </TableCell>
+                    <TableCell>
+                      <Checkbox checked={selected} aria-label={t(`Select ${service.name}`, `选择 ${service.name}`)} onClick={(event) => event.stopPropagation()} onCheckedChange={(checked) => onSelect(checked ? service.id : "")} />
+                    </TableCell>
+                    <TableCell>
+                      <div className="grid min-w-0 gap-0.5">
+                        <span className="truncate font-medium">{service.name}</span>
+                        <span className="truncate text-xs text-muted-foreground">{route.primaryDomain}</span>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <a className="inline-flex max-w-56 items-center gap-1 truncate rounded-md border bg-background/55 px-2 py-1 text-xs text-cyan-100 hover:bg-muted" href={link} target="_blank" rel="noreferrer" onClick={(event) => event.stopPropagation()}>
+                        <span className="truncate">{route.labels.join(", ") || "@"}</span>
+                        <ExternalLink className="size-3 shrink-0" />
+                      </a>
+                    </TableCell>
+                    <TableCell>
+                      <StatusBadge status={service.runtime?.status || (service.enabled ? "unknown" : "offline")} label={service.enabled ? undefined : t("Disabled", "停用")} />
+                    </TableCell>
+                    <TableCell>
+                      <div className="grid max-w-64 grid-cols-[1rem_minmax(0,1fr)] items-center gap-1 text-xs">
+                        <ArrowRight className="size-3.5 text-muted-foreground" />
+                        <span className="truncate font-mono text-muted-foreground">{service.targetUrl}</span>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="grid gap-0.5 text-xs">
+                        <span className="font-medium">{service.tls.mode === "none" ? "HTTP" : "TLS"}</span>
+                        <span className="truncate text-muted-foreground">{service.entryPoints.join(", ")}</span>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="outline">{route.groupName}</Badge>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center justify-end gap-1" onClick={(event) => event.stopPropagation()}>
+                        <Button variant="outline" size="icon-xs" onClick={() => void onToggle(service)} aria-label={t("Toggle service", "切换服务启用状态")}>
+                          <Power className="size-3.5" />
+                        </Button>
+                        <Button variant="outline" size="icon-xs" onClick={() => onEdit(service)} aria-label={t("Edit service", "编辑服务")}>
+                          <Pencil className="size-3.5" />
+                        </Button>
+                        <Button variant="destructive" size="icon-xs" onClick={() => void onDelete(service)} aria-label={t("Delete service", "删除服务")}>
+                          <Trash2 className="size-3.5" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+              {routes.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={9} className="h-24 text-center text-sm text-muted-foreground">
+                    {t("No routes in this domain view.", "这个域名视图里还没有路由。")}
+                  </TableCell>
+                </TableRow>
+              ) : null}
+            </TableBody>
+          </Table>
+        </div>
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t px-4 py-3 text-sm text-muted-foreground">
+          <span>{t(`${selectedCount} of ${routes.length} row(s) selected.`, `已选择 ${selectedCount} / ${routes.length} 行。`)}</span>
+          <div className="flex items-center gap-3">
+            <span>{t("Rows per page", "每页行数")} 10</span>
+            <span>{t("Page 1 of 1", "第 1 / 1 页")}</span>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function GroupStrip({
+  groups,
+  counts,
+  onToggle,
+  onRename,
+  onDelete
+}: {
+  groups: ServiceGroup[];
+  counts: Map<string, number>;
+  onToggle: (group: ServiceGroup) => Promise<void>;
+  onRename: (group: ServiceGroup) => Promise<void>;
+  onDelete: (group: ServiceGroup, serviceCount: number) => Promise<void>;
+}) {
+  const { t } = useLanguage();
+  return (
+    <div className="flex flex-wrap gap-2 rounded-xl border bg-card/45 p-2">
+      {groups.map((group) => {
+        const serviceCount = counts.get(group.id) || 0;
+        return (
+          <div key={group.id} className="flex items-center gap-1 rounded-lg border bg-background/45 px-1.5 py-1">
+            <Button type="button" variant="ghost" size="xs" className="gap-1 px-1.5" onClick={() => void onToggle(group)}>
+              {group.collapsed ? <ChevronRight className="size-3.5" /> : <ChevronDown className="size-3.5" />}
+              <span className="max-w-36 truncate">{group.name}</span>
+              <span className="text-muted-foreground">{serviceCount}</span>
+            </Button>
+            <Button type="button" variant="ghost" size="icon-xs" onClick={() => void onRename(group)} aria-label={t(`Rename group ${group.name}`, `重命名分组 ${group.name}`)}>
+              <Pencil className="size-3.5" />
+            </Button>
+            <Button type="button" variant="destructive" size="icon-xs" onClick={() => void onDelete(group, serviceCount)} disabled={serviceCount > 0 || groups.length <= 1} aria-label={t(`Delete group ${group.name}`, `删除分组 ${group.name}`)}>
+              <Trash2 className="size-3.5" />
+            </Button>
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -370,13 +476,15 @@ function ServiceForm({
   onSubmit: (input: WebServiceInput) => Promise<void>;
 }) {
   const { t } = useLanguage();
-  const [draft, setDraft] = useState<DraftService>(() =>
-    service
+  const [draft, setDraft] = useState<DraftService>(() => {
+    const domains = service ? domainsToDraft(service.domains) : { domainRoot: emptyDraft.domainRoot, subdomainsText: "" };
+    return service
       ? {
           name: service.name,
           enabled: service.enabled,
           groupId: service.groupId,
-          domainsText: service.domains.join(", "),
+          domainRoot: domains.domainRoot,
+          subdomainsText: domains.subdomainsText,
           listenPort: service.listenPort,
           entryPointsText: service.entryPoints.join(", "),
           targetUrl: service.targetUrl,
@@ -386,8 +494,9 @@ function ServiceForm({
           resolver: service.tls.resolver || "letsencrypt",
           notes: service.notes || ""
         }
-      : { ...emptyDraft, groupId: groups[0]?.id || "local" }
-  );
+      : { ...emptyDraft, groupId: groups[0]?.id || "local" };
+  });
+  const domainPreview = composeDomains(draft.domainRoot, draft.subdomainsText);
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
@@ -395,7 +504,7 @@ function ServiceForm({
       name: draft.name,
       enabled: draft.enabled,
       groupId: draft.groupId,
-      domains: splitList(draft.domainsText),
+      domains: domainPreview,
       listenPort: Number(draft.listenPort),
       entryPoints: splitList(draft.entryPointsText),
       targetUrl: draft.targetUrl,
@@ -410,9 +519,9 @@ function ServiceForm({
   };
 
   return (
-    <Modal title={service ? t("Edit Web service", "编辑 Web 服务") : t("New Web service", "新建 Web 服务")} subtitle={t("Generate Traefik routers and services without hand-writing YAML.", "无需手写 YAML 即可生成 Traefik routers 和 services。")} onClose={onClose}>
+    <Modal title={service ? t("Edit route", "编辑路由") : t("New route", "新建路由")} subtitle={t("Choose one root domain, then add one or more subdomain labels for this backend.", "选择一个根域名，再给这个后端添加一个或多个子域名标签。")} onClose={onClose}>
       <form className="grid gap-4 md:grid-cols-2" onSubmit={(event) => void submit(event)}>
-        <Field label={t("Service name", "服务名称")}>
+        <Field label={t("Route name", "路由名称")}>
           <Input value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} required />
         </Field>
         <Field label={t("Group", "分组")}>
@@ -424,17 +533,24 @@ function ServiceForm({
             ))}
           </select>
         </Field>
-        <Field className="md:col-span-2" label={t("Domains", "域名")}>
-          <Input value={draft.domainsText} onChange={(event) => setDraft({ ...draft, domainsText: event.target.value })} placeholder="app.localhost, www.example.com" required />
+        <Field label={t("Root domain", "根域名")}>
+          <Input value={draft.domainRoot} onChange={(event) => setDraft({ ...draft, domainRoot: event.target.value })} placeholder="1804.surfacer.cc" />
         </Field>
-        <Field label={t("Host port", "主机端口")}>
+        <Field label={t("Subdomains", "子域名")}>
+          <Input value={draft.subdomainsText} onChange={(event) => setDraft({ ...draft, subdomainsText: event.target.value })} placeholder="qb, mp, 8081.jb, @" required />
+        </Field>
+        <div className="md:col-span-2 rounded-lg border bg-background/40 px-3 py-2 text-xs text-muted-foreground">
+          <span>{t("Preview", "预览")} </span>
+          <span className="text-foreground">{domainPreview.length ? domainPreview.join(", ") : t("No domain yet", "还没有域名")}</span>
+        </div>
+        <Field label={t("Public port", "访问端口")}>
           <Input type="number" min="1" max="65535" value={draft.listenPort} onChange={(event) => setDraft({ ...draft, listenPort: Number(event.target.value) })} />
         </Field>
         <Field label={t("Entrypoints", "入口点")}>
           <Input value={draft.entryPointsText} onChange={(event) => setDraft({ ...draft, entryPointsText: event.target.value })} placeholder="web, websecure" required />
         </Field>
-        <Field className="md:col-span-2" label={t("Forward target", "转发目标")}>
-          <Input value={draft.targetUrl} onChange={(event) => setDraft({ ...draft, targetUrl: event.target.value })} placeholder="http://whoami:80" required />
+        <Field className="md:col-span-2" label={t("Backend target", "后端目标")}>
+          <Input value={draft.targetUrl} onChange={(event) => setDraft({ ...draft, targetUrl: event.target.value })} placeholder="http://192.168.31.26:8081" required />
         </Field>
         <Field label={t("TLS mode", "TLS 模式")}>
           <select className={selectClass} value={draft.tlsMode} onChange={(event) => setDraft({ ...draft, tlsMode: event.target.value as DraftService["tlsMode"] })}>
@@ -475,7 +591,7 @@ function ServiceForm({
           <Button type="button" variant="outline" onClick={onClose}>
             {t("Cancel", "取消")}
           </Button>
-          <Button type="submit" disabled={saving}>
+          <Button type="submit" disabled={saving || domainPreview.length === 0}>
             <Save className="size-4" />
             {saving ? t("Saving...", "保存中...") : t("Save", "保存")}
           </Button>
@@ -485,7 +601,7 @@ function ServiceForm({
   );
 }
 
-function Field({ label, children, className }: { label: string; children: React.ReactNode; className?: string }) {
+function Field({ label, children, className }: { label: string; children: ReactNode; className?: string }) {
   return (
     <Label className={`grid gap-2 text-sm ${className || ""}`}>
       <span>{label}</span>
@@ -494,9 +610,86 @@ function Field({ label, children, className }: { label: string; children: React.
   );
 }
 
+function buildDomainZones(services: WebServiceWithRuntime[], groupsById: Map<string, ServiceGroup>): DomainZone[] {
+  const zones = new Map<string, DomainRoute[]>();
+  for (const service of services) {
+    const primaryDomain = service.domains[0] || service.name.toLowerCase().replace(/\s+/g, "-");
+    const root = inferRootDomain(primaryDomain);
+    const labels = service.domains.map((domain) => domainToLabel(domain, root));
+    const route: DomainRoute = {
+      service,
+      root,
+      primaryDomain,
+      labels,
+      groupName: groupsById.get(service.groupId)?.name || "Ungrouped"
+    };
+    zones.set(root, [...(zones.get(root) || []), route]);
+  }
+  return Array.from(zones.entries()).map(([root, routes]) => ({ root, routes }));
+}
+
+function countServicesByGroup(services: WebServiceWithRuntime[]): Map<string, number> {
+  const counts = new Map<string, number>();
+  for (const service of services) {
+    counts.set(service.groupId, (counts.get(service.groupId) || 0) + 1);
+  }
+  return counts;
+}
+
+function domainsToDraft(domains: string[]) {
+  if (domains.length === 0) return { domainRoot: "localhost", subdomainsText: "" };
+  const roots = Array.from(new Set(domains.map(inferRootDomain)));
+  if (roots.length !== 1) return { domainRoot: "", subdomainsText: domains.join(", ") };
+  const root = roots[0];
+  return {
+    domainRoot: root,
+    subdomainsText: domains.map((domain) => domainToLabel(domain, root)).join(", ")
+  };
+}
+
+function composeDomains(rootInput: string, labelsInput: string): string[] {
+  const root = normalizeDomain(rootInput);
+  const labels = splitList(labelsInput);
+  if (!root) return labels.map(normalizeDomain).filter(Boolean);
+  if (labels.length === 0) return [root];
+  return Array.from(
+    new Set(
+      labels
+        .map((label) => {
+          const normalizedLabel = normalizeDomain(label);
+          if (!normalizedLabel || normalizedLabel === "@") return root;
+          if (normalizedLabel === root || normalizedLabel.endsWith(`.${root}`)) return normalizedLabel;
+          return `${normalizedLabel}.${root}`;
+        })
+        .filter(Boolean)
+    )
+  );
+}
+
 function splitList(value: string): string[] {
   return value
     .split(/[,\n]/)
     .map((item) => item.trim())
     .filter(Boolean);
+}
+
+function inferRootDomain(domainInput: string): string {
+  const domain = normalizeDomain(domainInput);
+  const labels = domain.split(".").filter(Boolean);
+  if (labels.length <= 1) return domain || "localhost";
+  if (domain.endsWith(".localhost")) return "localhost";
+  if (labels.length >= 4) return labels.slice(-3).join(".");
+  return labels.slice(-2).join(".");
+}
+
+function domainToLabel(domainInput: string, rootInput: string): string {
+  const domain = normalizeDomain(domainInput);
+  const root = normalizeDomain(rootInput);
+  if (!domain || domain === root) return "@";
+  if (domain.endsWith(`.${root}`)) return domain.slice(0, -(root.length + 1));
+  return domain;
+}
+
+function normalizeDomain(value: string): string {
+  return value.trim().toLowerCase().replace(/^https?:\/\//, "").replace(/\/.*$/, "").replace(/^\.+|\.+$/g, "");
 }
