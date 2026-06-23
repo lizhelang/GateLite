@@ -613,6 +613,7 @@ button:disabled {
 
 .group-band,
 .detail-panel,
+.config-preview-panel,
 .runtime-list,
 .raw-panel {
   border: 1px solid var(--line);
@@ -862,6 +863,75 @@ button:disabled {
   flex-wrap: wrap;
 }
 
+.config-preview-panel {
+  display: grid;
+  gap: 0.9rem;
+  padding: 1rem;
+  background:
+    linear-gradient(135deg, rgba(55, 214, 194, 0.08), rgba(243, 156, 18, 0.04)),
+    rgba(255, 255, 255, 0.075);
+}
+
+.config-preview-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.config-preview-header h3 {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0;
+}
+
+.config-stat-strip {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.7rem;
+}
+
+.config-stat {
+  min-width: 0;
+  padding: 0.8rem;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  background: rgba(8, 11, 20, 0.46);
+}
+
+.config-stat span {
+  display: block;
+  color: var(--text-muted);
+  font-size: 0.74rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.config-stat strong {
+  display: block;
+  margin-top: 0.35rem;
+  color: #fff;
+  font-size: 1.15rem;
+  overflow-wrap: anywhere;
+}
+
+.yaml-preview {
+  max-height: 460px;
+  overflow: auto;
+  margin: 0;
+  padding: 1rem;
+  border: 1px solid rgba(55, 214, 194, 0.18);
+  border-radius: 8px;
+  background:
+    linear-gradient(90deg, rgba(55, 214, 194, 0.07) 0 1px, transparent 1px 100%),
+    rgba(0, 0, 0, 0.3);
+  background-size: 56px 56px;
+  color: #dffbf7;
+  font-size: 0.82rem;
+  line-height: 1.55;
+}
+
 .raw-panel {
   padding: 1rem;
 }
@@ -1049,6 +1119,11 @@ button:disabled {
     grid-template-columns: 1fr;
   }
 
+  .config-preview-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
   .detail-panel {
     position: static;
   }
@@ -1096,6 +1171,7 @@ button:disabled {
     justify-content: flex-start;
   }
 
+  .config-stat-strip,
   .runtime-matrix,
   .form-grid {
     grid-template-columns: 1fr;

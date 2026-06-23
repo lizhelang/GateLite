@@ -34,6 +34,14 @@ export async function getRuntime(): Promise<TraefikRuntime> {
   return request<TraefikRuntime>("/api/traefik/runtime");
 }
 
+export async function getGeneratedConfig(): Promise<string> {
+  const response = await fetch("/api/generated-config");
+  if (!response.ok) {
+    throw new Error(`Generated config request failed with ${response.status}`);
+  }
+  return response.text();
+}
+
 export async function createWebService(input: WebServiceInput): Promise<WebServiceWithRuntime> {
   return request<WebServiceWithRuntime>("/api/web-services", {
     method: "POST",
@@ -117,4 +125,3 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   }
   return body as T;
 }
-
