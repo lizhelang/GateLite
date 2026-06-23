@@ -6,6 +6,8 @@
 # Local agent/runtime state
 .omx/
 .codex/
+.playwright-cli/
+output/
 
 # Node / frontend builds
 node_modules/
@@ -20,3 +22,5 @@ coverage/
 *.sqlite
 *.sqlite3
 
+# GateLite generated local runtime state
+runtime/

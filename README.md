@@ -55,9 +55,52 @@ configuration generation, rollback, and agent-friendly automation.
 
 ## Repository Status
 
-This repository currently contains the initial product brief and implementation
-roadmap. Runtime implementation is intentionally still open so the first code
-commit can choose a stack and API shape deliberately.
+This repository now contains the first local development module:
+
+- React/Vite management frontend
+- Express API companion
+- Traefik file-provider configuration generation
+- Docker Compose Traefik + whoami test environment
+- Web services and SSL/TLS certificate management pages
+
+## Local Development
+
+Install dependencies:
+
+```bash
+npm install
+```
+
+Start local Traefik and the sample backend:
+
+```bash
+npm run compose:up
+```
+
+Start GateLite:
+
+```bash
+npm run dev
+```
+
+Open:
+
+- GateLite frontend: http://localhost:5173
+- GateLite API: http://localhost:3001/api/health
+- Traefik dashboard/API: http://localhost:18081
+- HTTP test route: http://whoami.localhost:18080
+- HTTPS test route: https://secure.localhost:18443
+
+The first server start creates local runtime state under `runtime/`, generates a
+self-signed development certificate, and writes Traefik dynamic configuration
+to `runtime/traefik/gatelite.yml`.
+
+Run checks:
+
+```bash
+npm run build
+npm run test
+```
 
 ## References
 
@@ -67,4 +110,3 @@ commit can choose a stack and API shape deliberately.
   https://doc.traefik.io/traefik/reference/routing-configuration/dynamic-configuration-methods/
 - Traefik TLS documentation:
   https://doc.traefik.io/traefik/https/tls/
-
