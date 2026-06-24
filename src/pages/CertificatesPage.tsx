@@ -1,7 +1,8 @@
-import { ArrowRight, CalendarClock, ChevronDown, ChevronRight, Copy, Download, EllipsisVertical, FileKey2, GripVertical, KeyRound, Pencil, Plus, Power, RefreshCw, Trash2, Upload } from "lucide-react";
+import { ArrowRight, CalendarClock, ChevronDown, ChevronRight, Copy, Download, EllipsisVertical, FileKey2, FileText, GripVertical, KeyRound, Pencil, Plus, Power, RefreshCw, Trash2, Upload } from "lucide-react";
 import { Fragment, useMemo, useState, type ChangeEvent, type FormEvent, type ReactNode } from "react";
-import type { CertificateWithBindings, DashboardPayload } from "../../shared/types";
-import { createCertificate, deleteCertificate, receiveCertificateSync, refreshCertificate, reorderCertificates, toggleCertificate, updateCertificate, type CertificateInput, type CertificateSyncInput } from "../api";
+import type { CertificatePreview, CertificateWithBindings, DashboardPayload } from "../../shared/types";
+import { createCertificate, deleteCertificate, previewCreateCertificate, previewUpdateCertificate, receiveCertificateSync, refreshCertificate, reorderCertificates, toggleCertificate, updateCertificate, type CertificateInput, type CertificateSyncInput } from "../api";
+import { ConfigPreviewPanel } from "../components/ConfigPreviewPanel";
 import { Modal } from "../components/Modal";
 import { StatusBadge } from "../components/StatusBadge";
 import { Badge } from "@/components/ui/badge";
@@ -778,6 +779,9 @@ function CertificateForm({
       : { ...emptyDraft, source: initialSource, ...(draftPreset || {}) }
   );
   const [fileError, setFileError] = useState<string | null>(null);
+  const [preview, setPreview] = useState<CertificatePreview | null>(null);
+  const [previewing, setPreviewing] = useState(false);
+  const [previewError, setPreviewError] = useState<string | null>(null);
   const uploadPemStarted = draft.source === "upload" && (draft.certPem.trim().length > 0 || draft.keyPem.trim().length > 0);
   const uploadPemRequired = draft.source === "upload" && (!certificate || certificate.source !== "upload" || uploadPemStarted);
   const boundServiceCount = certificate?.boundServices.length || 0;
@@ -788,10 +792,9 @@ function CertificateForm({
     (draft.source === "path" && (!draft.certPath.trim() || !draft.keyPath.trim())) ||
     (draft.source === "sync" && !draft.syncTarget.trim());
 
-  const submit = async (event: FormEvent) => {
-    event.preventDefault();
+  const buildInput = (): Partial<CertificateInput> => {
     if (bindingLocked && certificate) {
-      await onSubmit({
+      return {
         name: draft.name,
         ...(draft.source === "acme"
           ? {
@@ -802,8 +805,7 @@ function CertificateForm({
               }
             }
           : {})
-      });
-      return;
+      };
     }
 
     const input: CertificateInput = {
@@ -830,7 +832,27 @@ function CertificateForm({
       input.days = draft.days;
     }
 
-    await onSubmit(input);
+    return input;
+  };
+
+  const submit = async (event: FormEvent) => {
+    event.preventDefault();
+    await onSubmit(buildInput());
+  };
+
+  const handlePreview = async () => {
+    setPreviewing(true);
+    setPreview(null);
+    setPreviewError(null);
+    try {
+      const input = buildInput();
+      const result = certificate ? await previewUpdateCertificate(certificate.id, input) : await previewCreateCertificate(input as CertificateInput);
+      setPreview(result);
+    } catch (requestError) {
+      setPreviewError(requestError instanceof Error ? requestError.message : t("Preview failed.", "预览失败。"));
+    } finally {
+      setPreviewing(false);
+    }
   };
 
   const handlePemFile = async (event: ChangeEvent<HTMLInputElement>, field: "certPem" | "keyPem") => {
@@ -949,9 +971,38 @@ function CertificateForm({
           <span className="text-sm">{t("Enabled", "启用")}</span>
         </div>
         <Separator className="md:col-span-2" />
+        {previewError ? (
+          <div className="md:col-span-2 rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+            {previewError}
+          </div>
+        ) : null}
+        {preview ? (
+          <div className="md:col-span-2">
+            <ConfigPreviewPanel
+              title={t("Configuration preview", "配置预览")}
+              description={t("Dry-run result only. Certificate preview never writes GateLite state or Traefik file-provider config.", "这里只是 dry-run 结果，证书预览不会写入 GateLite 状态或 Traefik file-provider 配置。")}
+              actionLabel={preview.action === "create" ? t("create", "新增") : t("update", "更新")}
+              targetLabel={preview.certificate.name}
+              currentYaml={preview.currentYaml}
+              nextYaml={preview.nextYaml}
+              diff={preview.diff}
+              clearLabel={t("Clear", "清除")}
+              noChangesLabel={t("No generated YAML changes.", "生成的 YAML 没有变化。")}
+              currentLabel={t("Current YAML", "当前 YAML")}
+              nextLabel={t("Next YAML", "下一版 YAML")}
+              addedLabel={t("added", "新增")}
+              removedLabel={t("removed", "删除")}
+              onClear={() => setPreview(null)}
+            />
+          </div>
+        ) : null}
         <footer className="flex justify-end gap-2 md:col-span-2">
           <Button type="button" variant="outline" onClick={onClose}>
             {t("Cancel", "取消")}
+          </Button>
+          <Button type="button" variant="outline" disabled={submitDisabled || previewing} onClick={() => void handlePreview()}>
+            <FileText className="size-4" />
+            {previewing ? t("Previewing...", "预览中...") : t("Preview config", "预览配置")}
           </Button>
           <Button type="submit" disabled={submitDisabled}>
             {draft.source === "upload" ? <Upload className="size-4" /> : <KeyRound className="size-4" />}

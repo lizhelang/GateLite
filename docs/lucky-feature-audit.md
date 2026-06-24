@@ -94,6 +94,9 @@ GateLite MVP mapping:
   file certificates, ACME/sync certificates used in file-certificate mode, and
   invalid/pending/expired file certificates before writing generated Traefik
   config.
+- Web service dry-run preview -> the rule form can call the same create/update
+  preview API before saving, showing a compact generated YAML diff without
+  writing GateLite state or the Traefik file-provider file.
 - Backend address input -> accepts Lucky-style bare `IP:port` / `host:port`
   values from both UI and agent API, normalizing them to Traefik server URLs
   before writing file-provider config.
@@ -166,6 +169,10 @@ GateLite MVP mapping:
 - Bound certificate edit UX -> the SSL/TLS edit dialog mirrors the server-side
   protection by locking source, SAN, certificate file, resolver, sync target,
   validity and enabled-state controls while still allowing safe metadata edits.
+- Certificate dry-run preview -> the SSL/TLS form can preview path, ACME, sync,
+  and metadata-only changes through the same API used by agents. PEM-generating
+  self-signed/upload changes surface the server-side apply-only warning instead
+  of pretending to be no-side-effect previews.
 
 ## Parallax Storytelling Design Mapping
 

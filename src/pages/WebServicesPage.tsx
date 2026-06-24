@@ -17,12 +17,14 @@ import {
   Upload
 } from "lucide-react";
 import { Fragment, FormEvent, useMemo, useState, type ReactNode } from "react";
-import type { DashboardPayload, ServiceGroup, WebServiceTrafficStats, WebServiceWithRuntime } from "../../shared/types";
+import type { DashboardPayload, ServiceGroup, WebServicePreview, WebServiceTrafficStats, WebServiceWithRuntime } from "../../shared/types";
 import {
   createGroup,
   createWebService,
   deleteGroup,
   deleteWebService,
+  previewCreateWebService,
+  previewUpdateWebService,
   reorderGroups,
   reorderWebServices,
   toggleWebService,
@@ -30,6 +32,7 @@ import {
   updateWebService,
   type WebServiceInput
 } from "../api";
+import { ConfigPreviewPanel } from "../components/ConfigPreviewPanel";
 import { Modal } from "../components/Modal";
 import { StatusBadge } from "../components/StatusBadge";
 import { Badge } from "@/components/ui/badge";
@@ -1072,11 +1075,15 @@ function ServiceForm({
           ...(draftPreset || {})
         };
   });
+  const [preview, setPreview] = useState<WebServicePreview | null>(null);
+  const [previewing, setPreviewing] = useState(false);
+  const [previewError, setPreviewError] = useState<string | null>(null);
   const isDefaultRule = draft.matchMode === "default";
   const isCustomRule = draft.matchMode === "custom";
   const domainPreview = isDefaultRule ? [] : composeDomains(draft.domainRoot, draft.subdomainsText);
   const hostDomainInvalid = draft.matchMode === "host" && domainPreview.length !== 1;
   const hostDomainTooMany = draft.matchMode === "host" && domainPreview.length > 1;
+  const formInvalid = hostDomainInvalid || (isCustomRule && !draft.customRule.trim()) || !draft.targetUrl.trim() || (draft.matchMode === "host" && mode === "subrule" && !service && !draft.subdomainsText.trim());
   const title = service
     ? isDefaultRule
       ? t("Edit default rule", "编辑默认规则")
@@ -1101,32 +1108,49 @@ function ServiceForm({
       ? t("Sub-rule frontend domain -> backend IP:port.", "子规则前端域名 -> 后端 IP:端口。")
       : t("Frontend domain -> backend IP:port.", "前端域名 -> 后端 IP:端口。");
 
+  const buildInput = (): WebServiceInput => ({
+    name: draft.name,
+    enabled: draft.enabled,
+    matchMode: draft.matchMode,
+    groupId: draft.groupId,
+    domains: domainPreview,
+    customRule: draft.matchMode === "custom" ? draft.customRule : undefined,
+    listenPort: Number(draft.listenPort),
+    entryPoints: splitList(draft.entryPointsText),
+    targetUrl: normalizeBackendTargetInput(draft.targetUrl),
+    passHostHeader: draft.passHostHeader,
+    middlewares: splitList(draft.middlewaresText),
+    tls: {
+      mode: draft.tlsMode,
+      certificateId: draft.tlsMode === "file-certificate" ? draft.certificateId : undefined,
+      resolver: draft.tlsMode === "resolver" ? draft.resolver : undefined
+    },
+    observability: {
+      accessLogs: draft.accessLogs,
+      metrics: draft.metrics,
+      tracing: draft.tracing
+    },
+    notes: draft.notes
+  });
+
   const submit = async (event: FormEvent) => {
     event.preventDefault();
-    await onSubmit({
-      name: draft.name,
-      enabled: draft.enabled,
-      matchMode: draft.matchMode,
-      groupId: draft.groupId,
-      domains: domainPreview,
-      customRule: draft.matchMode === "custom" ? draft.customRule : undefined,
-      listenPort: Number(draft.listenPort),
-      entryPoints: splitList(draft.entryPointsText),
-      targetUrl: normalizeBackendTargetInput(draft.targetUrl),
-      passHostHeader: draft.passHostHeader,
-      middlewares: splitList(draft.middlewaresText),
-      tls: {
-        mode: draft.tlsMode,
-        certificateId: draft.tlsMode === "file-certificate" ? draft.certificateId : undefined,
-        resolver: draft.tlsMode === "resolver" ? draft.resolver : undefined
-      },
-      observability: {
-        accessLogs: draft.accessLogs,
-        metrics: draft.metrics,
-        tracing: draft.tracing
-      },
-      notes: draft.notes
-    });
+    await onSubmit(buildInput());
+  };
+
+  const handlePreview = async () => {
+    setPreviewing(true);
+    setPreview(null);
+    setPreviewError(null);
+    try {
+      const input = buildInput();
+      const result = service ? await previewUpdateWebService(service.id, input) : await previewCreateWebService(input);
+      setPreview(result);
+    } catch (requestError) {
+      setPreviewError(requestError instanceof Error ? requestError.message : t("Preview failed.", "预览失败。"));
+    } finally {
+      setPreviewing(false);
+    }
   };
 
   return (
@@ -1257,12 +1281,41 @@ function ServiceForm({
           </div>
         </details>
 
+        {previewError ? (
+          <div className="rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+            {previewError}
+          </div>
+        ) : null}
+
+        {preview ? (
+          <ConfigPreviewPanel
+            title={t("Configuration preview", "配置预览")}
+            description={t("Dry-run result only. Nothing has been written to GateLite state or Traefik file-provider config.", "这里只是 dry-run 结果，不会写入 GateLite 状态或 Traefik file-provider 配置。")}
+            actionLabel={preview.action === "create" ? t("create", "新增") : t("update", "更新")}
+            targetLabel={preview.service.domains[0] || preview.service.name || preview.service.id}
+            currentYaml={preview.currentYaml}
+            nextYaml={preview.nextYaml}
+            diff={preview.diff}
+            clearLabel={t("Clear", "清除")}
+            noChangesLabel={t("No generated YAML changes.", "生成的 YAML 没有变化。")}
+            currentLabel={t("Current YAML", "当前 YAML")}
+            nextLabel={t("Next YAML", "下一版 YAML")}
+            addedLabel={t("added", "新增")}
+            removedLabel={t("removed", "删除")}
+            onClear={() => setPreview(null)}
+          />
+        ) : null}
+
         <Separator />
         <footer className="flex justify-end gap-2">
           <Button type="button" variant="outline" onClick={onClose}>
             {t("Cancel", "取消")}
           </Button>
-          <Button type="submit" disabled={saving || hostDomainInvalid || (isCustomRule && !draft.customRule.trim()) || !draft.targetUrl.trim() || (draft.matchMode === "host" && mode === "subrule" && !service && !draft.subdomainsText.trim())}>
+          <Button type="button" variant="outline" disabled={saving || previewing || formInvalid} onClick={() => void handlePreview()}>
+            <FileText className="size-4" />
+            {previewing ? t("Previewing...", "预览中...") : t("Preview config", "预览配置")}
+          </Button>
+          <Button type="submit" disabled={saving || formInvalid}>
             <Save className="size-4" />
             {saving ? t("Saving...", "保存中...") : t("Save rule", "保存规则")}
           </Button>

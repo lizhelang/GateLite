@@ -38,11 +38,13 @@ async function verifyLanguage(browser, language) {
     await assertBody(page, /whoami\.localhost/, `${language} Web service frontend domain row`);
     await assertBody(page, /whoami:80/, `${language} Web service backend host-port row`);
     await assertVisibleButton(page, language === "zh" ? /拖拽分组/ : /Drag group/, `${language} Web service group drag handle`);
+    await verifyWebServicePreview(page, language);
 
     await openView(page, language === "zh" ? /SSL\/TLS 证书/ : /SSL\/TLS/);
     await assertBody(page, language === "zh" ? /添加证书/ : /Add certificate/, `${language} certificate create action`);
     await assertBody(page, language === "zh" ? /域名 \/ SAN/ : /Domains \/ SANs/, `${language} certificate SAN column`);
     await assertBody(page, language === "zh" ? /绑定/ : /Bindings/, `${language} certificate binding column`);
+    await verifyCertificatePreview(page, language);
     await assertCertificateBindingExpansion(page, language);
 
     await openView(page, language === "zh" ? /Traefik 运行时/ : /Traefik Runtime/);
@@ -54,6 +56,47 @@ async function verifyLanguage(browser, language) {
   } finally {
     await page.close();
   }
+}
+
+async function verifyWebServicePreview(page, language) {
+  const domain = `ui-preview-${language}-${Date.now()}.localhost`;
+  await page.getByRole("button", { name: language === "zh" ? /^新建规则$/ : /^New rule$/ }).click();
+  await page.getByLabel(language === "zh" ? /^前端域名$/ : /^Frontend domain$/).fill(domain);
+  await page.getByLabel(language === "zh" ? /^后端 IP:端口$/ : /^Backend IP:port$/).fill("whoami:80");
+  await page.getByRole("button", { name: language === "zh" ? /预览配置/ : /Preview config/ }).click();
+  await page.getByText(language === "zh" ? "配置预览" : "Configuration preview").waitFor({ timeout: 5000 });
+  await assertBody(page, language === "zh" ? /配置预览/ : /Configuration preview/, `${language} Web service config preview panel`);
+  await assertBody(page, new RegExp(escapeRegex(domain)), `${language} Web service config preview domain`);
+  await page.getByRole("button", { name: language === "zh" ? /^取消$/ : /^Cancel$/ }).click();
+}
+
+async function verifyCertificatePreview(page, language) {
+  const certificatePaths = await readReadableCertificatePaths(page);
+  if (!certificatePaths) {
+    throw new Error(`${language} certificate preview needs a readable local certificate path.`);
+  }
+
+  const name = `UI preview ${language} ${Date.now()}`;
+  await page.getByRole("button", { name: language === "zh" ? /添加证书/ : /Add certificate/ }).click();
+  await page.getByRole("menuitem", { name: language === "zh" ? /已有路径/ : /Existing path/ }).click();
+  await page.getByLabel(language === "zh" ? /^证书名称$/ : /^Certificate name$/).fill(name);
+  await page.getByLabel(language === "zh" ? /^证书路径$/ : /^Certificate path$/).fill(certificatePaths.certPath);
+  await page.getByLabel(language === "zh" ? /^私钥路径$/ : /^Private key path$/).fill(certificatePaths.keyPath);
+  await page.getByRole("button", { name: language === "zh" ? /预览配置/ : /Preview config/ }).click();
+  await page.getByText(language === "zh" ? "配置预览" : "Configuration preview").waitFor({ timeout: 5000 });
+  await assertBody(page, language === "zh" ? /配置预览/ : /Configuration preview/, `${language} certificate config preview panel`);
+  await assertBody(page, new RegExp(escapeRegex(name)), `${language} certificate config preview name`);
+  await page.getByRole("button", { name: language === "zh" ? /^取消$/ : /^Cancel$/ }).click();
+}
+
+async function readReadableCertificatePaths(page) {
+  return page.evaluate(async () => {
+    const response = await fetch("/api/dashboard");
+    if (!response.ok) return null;
+    const dashboard = await response.json();
+    const certificate = dashboard.certificates?.find((item) => item.certPath && item.keyPath);
+    return certificate ? { certPath: certificate.certPath, keyPath: certificate.keyPath } : null;
+  });
 }
 
 async function openView(page, namePattern) {
@@ -88,4 +131,8 @@ async function assertVisibleButton(page, namePattern, label) {
   if (count < 1) {
     throw new Error(`Missing ${label}.`);
   }
+}
+
+function escapeRegex(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
