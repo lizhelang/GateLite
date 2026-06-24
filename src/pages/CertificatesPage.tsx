@@ -1,4 +1,4 @@
-import { ArrowRight, CalendarClock, Copy, Download, FileKey2, GripVertical, KeyRound, Pencil, Plus, Power, RefreshCw, Trash2, Upload } from "lucide-react";
+import { ArrowRight, CalendarClock, Copy, Download, EllipsisVertical, FileKey2, GripVertical, KeyRound, Pencil, Plus, Power, RefreshCw, Trash2, Upload } from "lucide-react";
 import { FormEvent, useMemo, useState, type ReactNode } from "react";
 import type { CertificateWithBindings, DashboardPayload } from "../../shared/types";
 import { createCertificate, deleteCertificate, refreshCertificate, reorderCertificates, toggleCertificate, updateCertificate, type CertificateInput } from "../api";
@@ -7,6 +7,14 @@ import { StatusBadge } from "../components/StatusBadge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
@@ -208,34 +216,62 @@ export function CertificatesPage({ dashboard, onRefresh }: CertificatesPageProps
 
   return (
     <section className="grid gap-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="inline-flex max-w-full items-center gap-1 overflow-x-auto rounded-xl border bg-muted/45 p-1">
-          {([
-            ["all", t("All certificates", "全部证书"), counts.all],
-            ["file", t("File", "文件"), counts.file],
-            ["path", t("Path", "路径"), counts.path],
-            ["acme", "ACME", counts.acme],
-            ["sync", t("Sync", "同步"), counts.sync],
-            ["bound", t("Bound", "已绑定"), counts.bound]
-          ] as Array<[CertificateFilter, string, number]>).map(([key, label, count]) => (
-            <Button key={key} type="button" variant={filter === key ? "outline" : "ghost"} size="sm" onClick={() => setFilter(key)}>
-              {label}
-              <Badge variant="secondary" className="ml-1 rounded-full px-1.5 py-0 text-[10px]">
-                {count}
-              </Badge>
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-card/60 p-3">
+        <div className="min-w-0">
+          <div className="text-xs text-muted-foreground">{t("SSL/TLS certificate list", "SSL/TLS 证书列表")}</div>
+          <div className="mt-1 text-lg font-semibold">{t("Certificates", "证书管理")}</div>
+        </div>
+        <div className="flex min-w-0 flex-1 justify-start md:justify-center">
+          <div className="inline-flex max-w-full items-center gap-1 overflow-x-auto rounded-lg border bg-muted/45 p-1">
+            {([
+              ["all", t("All", "全部"), counts.all],
+              ["file", t("File", "文件"), counts.file],
+              ["path", t("Path", "路径"), counts.path],
+              ["acme", "ACME", counts.acme],
+              ["sync", t("Sync", "同步"), counts.sync],
+              ["bound", t("Bound", "已绑定"), counts.bound]
+            ] as Array<[CertificateFilter, string, number]>).map(([key, label, count]) => (
+              <Button key={key} type="button" variant={filter === key ? "outline" : "ghost"} size="sm" onClick={() => setFilter(key)}>
+                {label}
+                <Badge variant="secondary" className="ml-1 rounded-full px-1.5 py-0 text-[10px]">
+                  {count}
+                </Badge>
+              </Button>
+            ))}
+          </div>
+        </div>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button type="button">
+              <Plus className="size-4" />
+              {t("Add certificate", "添加证书")}
             </Button>
-          ))}
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <Button type="button" variant="outline" onClick={() => openCreate("upload")}>
-            <Upload className="size-4" />
-            {t("Upload PEM", "上传 PEM")}
-          </Button>
-          <Button type="button" onClick={() => openCreate("self-signed")}>
-            <Plus className="size-4" />
-            {t("New certificate", "新建证书")}
-          </Button>
-        </div>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-56">
+            <DropdownMenuLabel>{t("Certificate source", "证书来源")}</DropdownMenuLabel>
+            <DropdownMenuItem onSelect={() => openCreate("self-signed")}>
+              <KeyRound className="size-4" />
+              {t("Local self-signed", "本地自签")}
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => openCreate("upload")}>
+              <Upload className="size-4" />
+              {t("Upload PEM", "上传 PEM")}
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => openCreate("path")}>
+              <FileKey2 className="size-4" />
+              {t("Existing path", "已有路径")}
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onSelect={() => openCreate("acme")}>
+              <RefreshCw className="size-4" />
+              {t("ACME resolver", "ACME 解析器")}
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => openCreate("sync")}>
+              <Download className="size-4" />
+              {t("Sync target", "同步目标")}
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
 
       {error ? <div className="rounded-xl border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">{error}</div> : null}
@@ -336,23 +372,23 @@ function CertificateDataTable({
   const allVisibleSelected = certificates.length > 0 && selectedCount === certificates.length;
 
   return (
-    <div className="overflow-hidden rounded-xl border bg-card/70">
+    <div className="overflow-hidden rounded-xl border bg-card/80">
       <div className="overflow-x-auto">
-        <Table className="min-w-[1240px]">
-          <TableHeader className="bg-muted/50">
+        <Table className="min-w-[1000px]">
+          <TableHeader className="bg-muted/65">
             <TableRow className="hover:bg-transparent">
               <TableHead className="w-8" />
               <TableHead className="w-9">
                 <Checkbox aria-label={t("Select visible certificates", "选择当前证书")} checked={allVisibleSelected} onCheckedChange={(checked) => onSelectAll(Boolean(checked))} />
               </TableHead>
-              <TableHead className="w-[16rem]">{t("Certificate", "证书")}</TableHead>
-              <TableHead className="w-[13rem]">{t("Source", "来源")}</TableHead>
-              <TableHead className="w-[18rem]">{t("Domains / SANs", "域名 / SAN")}</TableHead>
-              <TableHead className="w-[16rem]">{t("CA / issuer", "CA / 签发者")}</TableHead>
-              <TableHead className="w-[11rem]">{t("Validity", "有效期")}</TableHead>
-              <TableHead className="w-[11rem]">{t("Bindings", "绑定")}</TableHead>
-              <TableHead className="w-[11rem]">{t("Status", "状态")}</TableHead>
-              <TableHead className="w-48 text-right">{t("Actions", "操作")}</TableHead>
+              <TableHead className="w-44">{t("Certificate", "证书")}</TableHead>
+              <TableHead className="w-32">{t("Source", "来源")}</TableHead>
+              <TableHead className="w-48">{t("Domains / SANs", "域名 / SAN")}</TableHead>
+              <TableHead className="w-40">{t("CA / DNS", "CA / DNS")}</TableHead>
+              <TableHead className="w-32">{t("Expires", "过期时间")}</TableHead>
+              <TableHead className="w-28">{t("Bindings", "绑定")}</TableHead>
+              <TableHead className="w-28">{t("Status", "状态")}</TableHead>
+              <TableHead className="w-12 text-right" />
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -362,7 +398,7 @@ function CertificateDataTable({
                 <TableRow
                   key={certificate.id}
                   data-state={rowSelected ? "selected" : undefined}
-                  className={`${draggingId === certificate.id ? "outline outline-1 outline-cyan-300/70" : ""} h-14`}
+                  className={`${draggingId === certificate.id ? "outline outline-1 outline-cyan-300/70" : ""} h-12`}
                   draggable
                   onDragStart={() => onDragStart(certificate.id)}
                   onDragOver={(event) => event.preventDefault()}
@@ -393,7 +429,10 @@ function CertificateDataTable({
                     <DomainList domains={certificate.domains} />
                   </TableCell>
                   <TableCell>
-                    <span className="block max-w-[15rem] truncate text-sm">{certificate.issuer || t("Unknown", "未知")}</span>
+                    <div className="grid min-w-0 gap-0.5 text-xs leading-tight">
+                      <span className="truncate text-sm text-foreground">{certificate.issuer || t("Unknown", "未知")}</span>
+                      {certificate.acme?.dnsProvider ? <span className="truncate text-muted-foreground">{certificate.acme.dnsProvider}</span> : null}
+                    </div>
                   </TableCell>
                   <TableCell>
                     <div className="grid gap-0.5 text-xs leading-tight">
@@ -415,27 +454,45 @@ function CertificateDataTable({
                   </TableCell>
                   <TableCell>
                     <div className="flex items-center justify-end gap-1" onClick={(event) => event.stopPropagation()}>
-                      <Button variant="outline" size="icon-xs" onClick={() => onDetails(certificate)} aria-label={t("View certificate details", "查看证书详情")}>
-                        <FileKey2 className="size-3.5" />
-                      </Button>
-                      <Button variant="outline" size="icon-xs" onClick={() => void onToggle(certificate)} aria-label={t("Toggle certificate", "切换证书启用状态")}>
-                        <Power className="size-3.5" />
-                      </Button>
-                      <Button variant="outline" size="icon-xs" onClick={() => onDuplicate(certificate)} aria-label={t("Copy as new certificate", "复制为新证书")}>
-                        <Copy className="size-3.5" />
-                      </Button>
-                      <Button variant="outline" size="icon-xs" onClick={() => onDownload(certificate)} disabled={!certificate.certPath} aria-label={t("Download PEM", "下载 PEM")}>
-                        <Download className="size-3.5" />
-                      </Button>
-                      <Button variant="outline" size="icon-xs" onClick={() => void onRefreshStatus(certificate)} aria-label={t("Refresh certificate status", "刷新证书状态")}>
-                        <RefreshCw className="size-3.5" />
-                      </Button>
-                      <Button variant="outline" size="icon-xs" onClick={() => onEdit(certificate)} aria-label={t("Edit certificate", "编辑证书")}>
-                        <Pencil className="size-3.5" />
-                      </Button>
-                      <Button variant="destructive" size="icon-xs" onClick={() => void onDelete(certificate)} disabled={certificate.boundServices.length > 0} aria-label={t("Delete certificate", "删除证书")}>
-                        <Trash2 className="size-3.5" />
-                      </Button>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon-xs" aria-label={t("Certificate actions", "证书操作")}>
+                            <EllipsisVertical className="size-3.5" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-48">
+                          <DropdownMenuLabel>{t("Certificate actions", "证书操作")}</DropdownMenuLabel>
+                          <DropdownMenuItem onSelect={() => onDetails(certificate)}>
+                            <FileKey2 className="size-4" />
+                            {t("Details", "详情")}
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onSelect={() => void onToggle(certificate)}>
+                            <Power className="size-4" />
+                            {certificate.enabled ? t("Disable", "停用") : t("Enable", "启用")}
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onSelect={() => onDuplicate(certificate)}>
+                            <Copy className="size-4" />
+                            {t("Copy", "复制")}
+                          </DropdownMenuItem>
+                          <DropdownMenuItem disabled={!certificate.certPath} onSelect={() => onDownload(certificate)}>
+                            <Download className="size-4" />
+                            {t("Download PEM", "下载 PEM")}
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onSelect={() => void onRefreshStatus(certificate)}>
+                            <RefreshCw className="size-4" />
+                            {t("Refresh status", "刷新状态")}
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onSelect={() => onEdit(certificate)}>
+                            <Pencil className="size-4" />
+                            {t("Edit", "编辑")}
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem variant="destructive" disabled={certificate.boundServices.length > 0} onSelect={() => void onDelete(certificate)}>
+                            <Trash2 className="size-4" />
+                            {t("Delete", "删除")}
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </div>
                   </TableCell>
                 </TableRow>
