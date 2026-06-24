@@ -277,6 +277,10 @@ export interface TrafficOverview {
   source: "prometheus" | "unavailable";
   updatedAt: string;
   series: DomainTrafficSeries[];
+  entrypointConnections?: Array<{
+    entryPoint: string;
+    openConnections: number;
+  }>;
   error?: string;
 }
 

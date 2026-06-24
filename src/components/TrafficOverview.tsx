@@ -34,6 +34,11 @@ export function TrafficOverview({ dashboard, loading }: TrafficOverviewProps) {
   const tlsCoverage = getTlsCoverage(services, dashboard?.runtimeTlsBindings || [], domains.length);
   const certSummary = getCertificateSummary(certificates);
   const entryPoints = Array.from(new Set([...services.flatMap((service) => service.entryPoints), ...discoveredRoutes.flatMap((route) => route.entryPoints)])).filter(Boolean);
+  const entrypointConnections = dashboard?.traffic.entrypointConnections || [];
+  const totalEntrypointConnections = entrypointConnections.reduce((total, item) => total + item.openConnections, 0);
+  const entrypointConnectionCaption = entrypointConnections.length
+    ? entrypointConnections.map((item) => `${item.entryPoint} ${item.openConnections}`).join(" / ")
+    : t("Prometheus metrics required", "需要 Prometheus 指标");
   const hasPrometheusTraffic = series.some((item) => item.source === "prometheus");
   const chartConfig = Object.fromEntries(
     series.map((item) => [
@@ -94,8 +99,11 @@ export function TrafficOverview({ dashboard, loading }: TrafficOverviewProps) {
           <CardHeader className="flex-row items-center gap-3 p-3">
             <Clock3 className="size-4 text-muted-foreground" />
             <div className="min-w-0">
-              <CardDescription>{t("Entrypoint presets", "入口点预设")}</CardDescription>
-              <CardTitle className="truncate text-sm">{entryPoints.length ? entryPoints.join(" / ") : "web / websecure"}</CardTitle>
+              <CardDescription>{t("Entrypoint connections", "入口连接数")}</CardDescription>
+              <CardTitle className="truncate text-sm tabular-nums">
+                {entrypointConnections.length ? totalEntrypointConnections : t("N/A", "N/A")}
+              </CardTitle>
+              <CardDescription className="truncate">{entrypointConnectionCaption || (entryPoints.length ? entryPoints.join(" / ") : "web / websecure")}</CardDescription>
             </div>
           </CardHeader>
         </Card>

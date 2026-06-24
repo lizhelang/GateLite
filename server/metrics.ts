@@ -54,7 +54,10 @@ export async function getTrafficSnapshot(services: WebService[]): Promise<Traffi
         connected: true,
         source: "prometheus",
         updatedAt,
-        series
+        series,
+        entrypointConnections: Array.from(openConnectionsByEntrypoint.entries())
+          .map(([entryPoint, openConnections]) => ({ entryPoint, openConnections }))
+          .sort((a, b) => a.entryPoint.localeCompare(b.entryPoint))
       },
       statsByServiceId: buildServiceTrafficStats(services, routerStats, serviceOpenConnections, openConnectionsByEntrypoint, updatedAt, "prometheus")
     };
@@ -65,6 +68,7 @@ export async function getTrafficSnapshot(services: WebService[]): Promise<Traffi
         source: "unavailable",
         updatedAt,
         series: [],
+        entrypointConnections: [],
         error: error instanceof Error ? error.message : "Unable to load Traefik metrics."
       },
       statsByServiceId: buildServiceTrafficStats(services, new Map(), new Map(), new Map(), updatedAt, "unavailable")

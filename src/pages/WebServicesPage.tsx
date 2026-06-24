@@ -3,18 +3,17 @@ import {
   ChevronDown,
   ChevronRight,
   Copy,
-  Download,
   EllipsisVertical,
   ExternalLink,
   FileText,
   GripVertical,
+  Info,
   Layers,
   Pencil,
   Plus,
   Power,
   Save,
-  Trash2,
-  Upload
+  Trash2
 } from "lucide-react";
 import { Fragment, FormEvent, useMemo, useState, type ReactNode } from "react";
 import type { DashboardPayload, DiscoveredRoute, ImportRoutePreview, ServiceGroup, WebServicePreview, WebServiceTrafficStats, WebServiceWithRuntime } from "../../shared/types";
@@ -55,6 +54,7 @@ import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useLanguage } from "../i18n";
 
 interface WebServicesPageProps {
@@ -678,13 +678,13 @@ function DiscoveredRouteTable({
               <TableHead className="w-28">{t("Status", "状态")}</TableHead>
               <TableHead className="w-24 text-right">
                 <span className="inline-flex items-center gap-1">
-                  <Download className="size-3.5" />
+                  <MetricInfoTooltip />
                   {t("Down", "下行")}
                 </span>
               </TableHead>
               <TableHead className="w-24 text-right">
                 <span className="inline-flex items-center gap-1">
-                  <Upload className="size-3.5" />
+                  <MetricInfoTooltip />
                   {t("Up", "上行")}
                 </span>
               </TableHead>
@@ -725,13 +725,13 @@ function DiscoveredRouteTable({
                     </div>
                   </TableCell>
                   <TableCell className="text-right">
-                    <TrafficValue value={route.traffic?.responseBytes || 0} rate={route.traffic?.responseBytesPerSecond || 0} source={route.traffic?.source} tone="down" />
+                    <TrafficValue traffic={route.traffic} direction="down" />
                   </TableCell>
                   <TableCell className="text-right">
-                    <TrafficValue value={route.traffic?.requestBytes || 0} rate={route.traffic?.requestBytesPerSecond || 0} source={route.traffic?.source} tone="up" />
+                    <TrafficValue traffic={route.traffic} direction="up" />
                   </TableCell>
                   <TableCell className="text-right">
-                    <ConnectionValue traffic={route.traffic} />
+                    <ConnectionValue traffic={route.traffic} readOnlyExternal={route.provider !== "internal" && route.managedMode !== "generated"} />
                   </TableCell>
                   <TableCell className="text-right">
                     {route.managedMode !== "unmanaged" ? (
@@ -821,13 +821,13 @@ function RouteDataTable({
               <TableHead className="w-28">{t("Status", "状态")}</TableHead>
               <TableHead className="w-24 text-right">
                 <span className="inline-flex items-center gap-1">
-                  <Download className="size-3.5" />
+                  <MetricInfoTooltip />
                   {t("Down", "下行")}
                 </span>
               </TableHead>
               <TableHead className="w-24 text-right">
                 <span className="inline-flex items-center gap-1">
-                  <Upload className="size-3.5" />
+                  <MetricInfoTooltip />
                   {t("Up", "上行")}
                 </span>
               </TableHead>
@@ -1006,13 +1006,13 @@ function RouteTableRow({
         </div>
       </TableCell>
       <TableCell className="text-right">
-        <TrafficValue value={traffic?.responseBytes || 0} rate={traffic?.responseBytesPerSecond || 0} source={traffic?.source} tone="down" />
+        <TrafficValue traffic={traffic} direction="down" />
       </TableCell>
       <TableCell className="text-right">
-        <TrafficValue value={traffic?.requestBytes || 0} rate={traffic?.requestBytesPerSecond || 0} source={traffic?.source} tone="up" />
+        <TrafficValue traffic={traffic} direction="up" />
       </TableCell>
       <TableCell className="text-right">
-        <ConnectionValue traffic={traffic} />
+        <ConnectionValue traffic={traffic} readOnlyExternal={isExternalReadOnly} />
       </TableCell>
       <TableCell className="px-1">
         <div className="flex items-center justify-end gap-1" onClick={(event) => event.stopPropagation()}>
@@ -1072,11 +1072,42 @@ function domainTemplateService(routes: DomainRoute[]): WebServiceWithRuntime | u
   return routes.find((route) => route.labels.includes("@") && !route.isDefault)?.service;
 }
 
-function TrafficValue({ value, rate, source, tone }: { value: number; rate: number; source?: WebServiceTrafficStats["source"]; tone: "down" | "up" }) {
-  if (source === "unavailable") {
-    return <span className="font-mono text-sm text-muted-foreground">N/A</span>;
+function MetricInfoTooltip() {
+  const { t } = useLanguage();
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button
+          type="button"
+          className="inline-flex size-5 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          aria-label={t("Traffic metric requirements", "流量指标说明")}
+          onClick={(event) => event.stopPropagation()}
+        >
+          <Info className="size-3.5" />
+        </button>
+      </TooltipTrigger>
+      <TooltipContent side="top" className="block max-w-sm text-left leading-relaxed">
+        {t(
+          "Imported read-only routes show up/down traffic only after Traefik Prometheus metrics are enabled and GateLite can read TRAEFIK_API_URL/metrics. Enable Prometheus metrics and router/service labels in Traefik, then refresh GateLite. Per-domain live connections are not exposed by Traefik; use the dashboard entrypoint connection count instead.",
+          "导入的只读路由只有在 Traefik 已启用 Prometheus metrics，且 GateLite 能读取 TRAEFIK_API_URL/metrics 后，才会显示上下行。请在 Traefik 的 traffic/metrics 中启用 Prometheus 指标，并打开 router/service 标签后刷新 GateLite。实时连接数没有域名/路由维度，只能看仪表盘里的入口连接数。"
+        )}
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
+function TrafficValue({ traffic, direction }: { traffic?: WebServiceTrafficStats; direction: "down" | "up" }) {
+  const { t } = useLanguage();
+
+  if (!traffic || traffic.source === "unavailable") {
+    return <UnavailableMetric caption={t("metrics not connected", "未接入指标")} />;
   }
-  const toneClass = tone === "down" ? "text-cyan-100" : "text-amber-100";
+
+  const value = direction === "down" ? traffic.responseBytes : traffic.requestBytes;
+  const rate = direction === "down" ? traffic.responseBytesPerSecond : traffic.requestBytesPerSecond;
+  const toneClass = direction === "down" ? "text-cyan-100" : "text-amber-100";
+
   return (
     <span className="grid justify-items-end gap-0 leading-tight">
       <span className={`font-mono text-[13px] ${toneClass}`}>{formatBytes(value)}</span>
@@ -1085,12 +1116,31 @@ function TrafficValue({ value, rate, source, tone }: { value: number; rate: numb
   );
 }
 
-function ConnectionValue({ traffic }: { traffic?: WebServiceTrafficStats }) {
+function ConnectionValue({ traffic, readOnlyExternal = false }: { traffic?: WebServiceTrafficStats; readOnlyExternal?: boolean }) {
+  const { t } = useLanguage();
+
+  if (readOnlyExternal) {
+    return <UnavailableMetric caption={t("entrypoint only", "入口级")} />;
+  }
+
   if (!traffic || traffic.source === "unavailable" || traffic.openConnectionsScope === "unavailable") {
-    return <span className="font-mono text-sm text-muted-foreground">N/A</span>;
+    return <UnavailableMetric caption={t("metrics not connected", "未接入指标")} />;
+  }
+
+  if (traffic.openConnectionsScope !== "service") {
+    return <UnavailableMetric caption={t("dashboard", "看仪表盘")} />;
   }
 
   return <span className="font-mono text-sm text-foreground">{traffic.openConnections}</span>;
+}
+
+function UnavailableMetric({ caption }: { caption: string }) {
+  return (
+    <span className="grid justify-items-end gap-0 leading-tight">
+      <span className="font-mono text-[13px] text-muted-foreground">N/A</span>
+      <span className="text-[10px] text-muted-foreground">{caption}</span>
+    </span>
+  );
 }
 
 function RouteDetails({ route }: { route: DomainRoute }) {
@@ -1100,6 +1150,7 @@ function RouteDetails({ route }: { route: DomainRoute }) {
   const frontend = formatFrontendEndpoint(route, service, t);
   const backend = formatBackendTarget(service.targetUrl);
   const isRootRule = route.labels.some((label) => label === "@");
+  const isExternalReadOnly = service.managementMode === "mapped";
   return (
     <div className="grid gap-4">
       <div className="grid gap-3 rounded-xl border bg-background/35 p-4 text-sm md:grid-cols-3">
@@ -1121,10 +1172,10 @@ function RouteDetails({ route }: { route: DomainRoute }) {
       </div>
 
       <div className="grid gap-3 rounded-xl border bg-background/35 p-4 text-sm md:grid-cols-4">
-        <DetailCell label={t("Requests", "请求数")} value={`${traffic?.totalRequests || 0}`} mono />
-        <DetailCell label={t("Downstream", "下行")} value={`${formatBytesPerSecond(traffic?.responseBytesPerSecond || 0)} / ${formatBytes(traffic?.responseBytes || 0)}`} mono />
-        <DetailCell label={t("Upstream", "上行")} value={`${formatBytesPerSecond(traffic?.requestBytesPerSecond || 0)} / ${formatBytes(traffic?.requestBytes || 0)}`} mono />
-        <DetailCell label={t("Live connections", "实时连接")} value={connectionDetailText(traffic, t)} mono />
+        <DetailCell label={t("Requests", "请求数")} value={requestDetailText(traffic, t)} mono />
+        <DetailCell label={t("Downstream", "下行")} value={trafficDetailText(traffic, "down", t)} mono />
+        <DetailCell label={t("Upstream", "上行")} value={trafficDetailText(traffic, "up", t)} mono />
+        <DetailCell label={t("Live connections", "实时连接")} value={connectionDetailText(traffic, t, isExternalReadOnly)} mono />
       </div>
 
       {service.notes ? (
@@ -1137,8 +1188,22 @@ function RouteDetails({ route }: { route: DomainRoute }) {
   );
 }
 
-function connectionDetailText(traffic: WebServiceTrafficStats | undefined, t: (english: string, chinese: string) => string): string {
-  if (!traffic || traffic.source === "unavailable" || traffic.openConnectionsScope === "unavailable") return "N/A";
+function requestDetailText(traffic: WebServiceTrafficStats | undefined, t: (english: string, chinese: string) => string): string {
+  if (!traffic || traffic.source === "unavailable") return t("N/A (metrics not connected)", "N/A（未接入指标）");
+  return String(traffic.totalRequests);
+}
+
+function trafficDetailText(traffic: WebServiceTrafficStats | undefined, direction: "down" | "up", t: (english: string, chinese: string) => string): string {
+  if (!traffic || traffic.source === "unavailable") return t("N/A (metrics not connected)", "N/A（未接入指标）");
+  const rate = direction === "down" ? traffic.responseBytesPerSecond : traffic.requestBytesPerSecond;
+  const total = direction === "down" ? traffic.responseBytes : traffic.requestBytes;
+  return `${formatBytesPerSecond(rate)} / ${formatBytes(total)}`;
+}
+
+function connectionDetailText(traffic: WebServiceTrafficStats | undefined, t: (english: string, chinese: string) => string, readOnlyExternal = false): string {
+  if (readOnlyExternal) return t("N/A (entrypoint only in dashboard)", "N/A（只能看仪表盘入口连接数）");
+  if (!traffic || traffic.source === "unavailable" || traffic.openConnectionsScope === "unavailable") return t("N/A (metrics not connected)", "N/A（未接入指标）");
+  if (traffic.openConnectionsScope !== "service") return t("N/A (entrypoint only in dashboard)", "N/A（只能看仪表盘入口连接数）");
   return `${traffic.openConnections} (${connectionScopeLabel(traffic.openConnectionsScope, t)})`;
 }
 
