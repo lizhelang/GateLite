@@ -35,6 +35,7 @@ describe("generateTraefikDynamicConfig", () => {
           passHostHeader: false,
           middlewares: [],
           tls: { mode: "none" },
+          observability: { accessLogs: false, metrics: true, tracing: false },
           order: 1,
           createdAt: "2026-06-23T00:00:00.000Z",
           updatedAt: "2026-06-23T00:00:00.000Z"
@@ -63,6 +64,10 @@ describe("generateTraefikDynamicConfig", () => {
     expect(generated.yaml).toContain("Host(`plain.localhost`)");
     expect(generated.yaml).toContain("Host(`secure.localhost`)");
     expect(generated.yaml).toContain("passHostHeader: false");
+    expect(generated.yaml).toContain("observability:");
+    expect(generated.yaml).toContain("accessLogs: false");
+    expect(generated.yaml).toContain("metrics: true");
+    expect(generated.yaml).toContain("tracing: false");
     expect(generated.yaml).toContain("websecure");
     expect(generated.yaml).toContain("compress@file");
     expect(generated.yaml).toContain("/certs/cert-dev.crt");

@@ -21,6 +21,13 @@ export const webServiceInputSchema = z
         resolver: z.string().optional()
       })
       .default({ mode: "none" }),
+    observability: z
+      .object({
+        accessLogs: z.boolean().optional(),
+        metrics: z.boolean().optional(),
+        tracing: z.boolean().optional()
+      })
+      .optional(),
     notes: z.string().optional()
   })
   .superRefine((service, context) => {

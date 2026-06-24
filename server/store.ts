@@ -25,7 +25,8 @@ export function saveState(state: GateLiteState, action = "state.save", summary =
         matchMode,
         domains: matchMode === "default" ? [] : normalizeStringList(service.domains),
         entryPoints: normalizeStringList(service.entryPoints),
-        middlewares: normalizeStringList(service.middlewares)
+        middlewares: normalizeStringList(service.middlewares),
+        observability: normalizeObservability(service.observability)
       };
     }),
     certificates: normalizeCertificateOrders(state.certificates).map(refreshCertificateMetadata),
@@ -79,6 +80,7 @@ export function ensureState(): void {
       targetUrl: "http://whoami:80",
       middlewares: [],
       tls: { mode: "none" },
+      observability: { accessLogs: true, metrics: true, tracing: false },
       order: 1,
       notes: "Seed route to the Docker Compose whoami service.",
       createdAt: now,
@@ -95,6 +97,7 @@ export function ensureState(): void {
       targetUrl: "http://whoami:80",
       middlewares: [],
       tls: { mode: "file-certificate", certificateId: certificate.id },
+      observability: { accessLogs: true, metrics: true, tracing: false },
       order: 2,
       notes: "Seed TLS route backed by a generated local self-signed certificate.",
       createdAt: now,
@@ -144,4 +147,13 @@ function normalizeCertificateOrders(certificates: CertificateItem[]): Certificat
 
 function normalizeStringList(values: string[]): string[] {
   return Array.from(new Set(values.map((value) => value.trim()).filter(Boolean)));
+}
+
+function normalizeObservability(observability: WebService["observability"]): WebService["observability"] {
+  if (!observability) return undefined;
+  const next: WebService["observability"] = {};
+  if (typeof observability.accessLogs === "boolean") next.accessLogs = observability.accessLogs;
+  if (typeof observability.metrics === "boolean") next.metrics = observability.metrics;
+  if (typeof observability.tracing === "boolean") next.tracing = observability.tracing;
+  return Object.keys(next).length ? next : undefined;
 }

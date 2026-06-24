@@ -11,6 +11,7 @@ services:
       - --metrics.prometheus.addentrypointslabels=true
       - --metrics.prometheus.addrouterslabels=true
       - --metrics.prometheus.addserviceslabels=true
+      - --accesslog=true
       - --entrypoints.web.address=:80
       - --entrypoints.websecure.address=:443
       - --providers.file.directory=/dynamic

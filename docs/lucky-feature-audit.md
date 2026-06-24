@@ -61,6 +61,8 @@ GateLite MVP mapping:
 - Web service detail view -> explicit row action opens a compact rule detail
   dialog with frontend/backend mapping, generated Traefik rule, runtime status,
   TLS, Host header behavior, traffic, and notes.
+- Access log / service log entry points -> per-rule Traefik router
+  observability switches for access logs, Prometheus metrics, and tracing.
 
 ## SSL/TLS Core Behaviors
 

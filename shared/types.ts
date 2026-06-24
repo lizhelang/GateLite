@@ -17,6 +17,12 @@ export interface WebServiceTls {
   resolver?: string;
 }
 
+export interface WebServiceObservability {
+  accessLogs?: boolean;
+  metrics?: boolean;
+  tracing?: boolean;
+}
+
 export interface WebService {
   id: string;
   name: string;
@@ -32,6 +38,7 @@ export interface WebService {
   middlewares: string[];
   priority?: number;
   tls: WebServiceTls;
+  observability?: WebServiceObservability;
   order: number;
   notes?: string;
   createdAt: string;

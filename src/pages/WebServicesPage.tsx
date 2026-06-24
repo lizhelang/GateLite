@@ -63,6 +63,9 @@ type DraftService = {
   tlsMode: "none" | "file-certificate" | "resolver";
   certificateId: string;
   resolver: string;
+  accessLogs: boolean;
+  metrics: boolean;
+  tracing: boolean;
   notes: string;
 };
 
@@ -97,6 +100,9 @@ const emptyDraft: DraftService = {
   tlsMode: "none",
   certificateId: "",
   resolver: "letsencrypt",
+  accessLogs: true,
+  metrics: true,
+  tracing: false,
   notes: ""
 };
 
@@ -171,6 +177,9 @@ export function WebServicesPage({ dashboard, onRefresh }: WebServicesPageProps) 
       tlsMode: route.service.tls.mode,
       certificateId: route.service.tls.certificateId || "",
       resolver: route.service.tls.resolver || "letsencrypt",
+      accessLogs: route.service.observability?.accessLogs ?? true,
+      metrics: route.service.observability?.metrics ?? true,
+      tracing: route.service.observability?.tracing ?? false,
       notes: route.service.notes || ""
     });
     setShowForm(true);
@@ -627,6 +636,7 @@ function RouteDetails({ route }: { route: DomainRoute }) {
         <DetailCell label={t("Entrypoints", "入口点")} value={service.entryPoints.join(", ")} />
         <DetailCell label={t("Middlewares", "中间件")} value={service.middlewares.length ? service.middlewares.join(", ") : t("None", "无")} />
         <DetailCell label="TLS" value={tlsDetailText(service, t)} />
+        <DetailCell label={t("Observability", "观测")} value={observabilityText(service, t)} />
       </div>
 
       <div className="grid gap-3 rounded-xl border bg-background/35 p-4 text-sm md:grid-cols-4">
@@ -759,6 +769,9 @@ function ServiceForm({
           tlsMode: service.tls.mode,
           certificateId: service.tls.certificateId || "",
           resolver: service.tls.resolver || "letsencrypt",
+          accessLogs: service.observability?.accessLogs ?? true,
+          metrics: service.observability?.metrics ?? true,
+          tracing: service.observability?.tracing ?? false,
           notes: service.notes || ""
         }
       : {
@@ -815,6 +828,11 @@ function ServiceForm({
         mode: draft.tlsMode,
         certificateId: draft.tlsMode === "file-certificate" ? draft.certificateId : undefined,
         resolver: draft.tlsMode === "resolver" ? draft.resolver : undefined
+      },
+      observability: {
+        accessLogs: draft.accessLogs,
+        metrics: draft.metrics,
+        tracing: draft.tracing
       },
       notes: draft.notes
     });
@@ -902,6 +920,26 @@ function ServiceForm({
         <Field className="md:col-span-2" label={t("Middlewares", "中间件")}>
           <Input value={draft.middlewaresText} onChange={(event) => setDraft({ ...draft, middlewaresText: event.target.value })} placeholder="auth@file, compress@file" />
         </Field>
+        <div className="grid gap-2 rounded-lg border bg-background/35 p-3 md:col-span-2">
+          <div className="text-sm font-medium">{t("Logs and metrics", "日志与指标")}</div>
+          <div className="grid gap-2 sm:grid-cols-3">
+            <InlineSwitch
+              label={t("Access log", "访问日志")}
+              checked={draft.accessLogs}
+              onCheckedChange={(checked) => setDraft({ ...draft, accessLogs: checked })}
+            />
+            <InlineSwitch
+              label={t("Prometheus metrics", "Prometheus 指标")}
+              checked={draft.metrics}
+              onCheckedChange={(checked) => setDraft({ ...draft, metrics: checked })}
+            />
+            <InlineSwitch
+              label={t("Tracing", "链路追踪")}
+              checked={draft.tracing}
+              onCheckedChange={(checked) => setDraft({ ...draft, tracing: checked })}
+            />
+          </div>
+        </div>
         <Field className="md:col-span-2" label={t("Notes", "备注")}>
           <Textarea value={draft.notes} onChange={(event) => setDraft({ ...draft, notes: event.target.value })} rows={3} />
         </Field>
@@ -930,6 +968,15 @@ function Field({ label, children, className }: { label: string; children: ReactN
       <span>{label}</span>
       {children}
     </Label>
+  );
+}
+
+function InlineSwitch({ label, checked, onCheckedChange }: { label: string; checked: boolean; onCheckedChange: (checked: boolean) => void }) {
+  return (
+    <label className="flex items-center justify-between gap-3 rounded-md border bg-background/45 px-3 py-2 text-sm">
+      <span>{label}</span>
+      <Switch checked={checked} onCheckedChange={onCheckedChange} />
+    </label>
   );
 }
 
@@ -1037,6 +1084,15 @@ function tlsDetailText(service: WebServiceWithRuntime, t: (english: string, chin
   if (service.tls.mode === "none") return "HTTP";
   if (service.tls.mode === "resolver") return `${t("Resolver", "解析器")}: ${service.tls.resolver || "letsencrypt"}`;
   return `${t("File certificate", "文件证书")}: ${service.tls.certificateId || t("Not selected", "未选择")}`;
+}
+
+function observabilityText(service: WebServiceWithRuntime, t: (english: string, chinese: string) => string): string {
+  const observability = service.observability;
+  const enabled: string[] = [];
+  if (observability?.accessLogs ?? true) enabled.push(t("access log", "访问日志"));
+  if (observability?.metrics ?? true) enabled.push(t("metrics", "指标"));
+  if (observability?.tracing ?? false) enabled.push(t("tracing", "追踪"));
+  return enabled.length ? enabled.join(", ") : t("All disabled", "全部停用");
 }
 
 function isOpenableDomain(value: string): boolean {

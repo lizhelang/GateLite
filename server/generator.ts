@@ -26,6 +26,7 @@ export function generateTraefikDynamicConfig(state: GateLiteState): GeneratedCon
       entryPoints: service.entryPoints,
       ...(service.middlewares.length ? { middlewares: service.middlewares } : {}),
       ...(service.priority !== undefined ? { priority: service.priority } : service.matchMode === "default" ? { priority: 1 } : {}),
+      ...routerObservabilityConfig(service),
       ...routerTlsConfig(service)
     };
 
@@ -86,6 +87,15 @@ function routerTlsConfig(service: WebService): Record<string, unknown> {
     };
   }
   return { tls: {} };
+}
+
+function routerObservabilityConfig(service: WebService): Record<string, unknown> {
+  if (!service.observability) return {};
+  const observability: Record<string, boolean> = {};
+  if (typeof service.observability.accessLogs === "boolean") observability.accessLogs = service.observability.accessLogs;
+  if (typeof service.observability.metrics === "boolean") observability.metrics = service.observability.metrics;
+  if (typeof service.observability.tracing === "boolean") observability.tracing = service.observability.tracing;
+  return Object.keys(observability).length ? { observability } : {};
 }
 
 function certificateToTraefik(certificate: CertificateItem): { certFile: string; keyFile: string } | undefined {

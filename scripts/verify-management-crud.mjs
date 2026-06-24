@@ -266,6 +266,7 @@ async function createAndVerifyCustomHttpService(groupId) {
       passHostHeader: false,
       middlewares: [],
       tls: { mode: "none" },
+      observability: { accessLogs: false, metrics: true, tracing: false },
       notes: "Temporary custom Traefik rule created by verify:crud."
     },
     expectedStatus: 201
@@ -276,6 +277,9 @@ async function createAndVerifyCustomHttpService(groupId) {
   await waitForCustomHttpRoute(customHttpHost, customRule);
   await verifyGeneratedConfigIncludes(`gatelite-service-${service.id}:`, "custom Web service generated backend");
   await verifyGeneratedConfigIncludes("passHostHeader: false", "custom Web service passHostHeader=false");
+  await verifyGeneratedConfigIncludes("accessLogs: false", "custom Web service router access log override");
+  await verifyGeneratedConfigIncludes("metrics: true", "custom Web service router metrics override");
+  await verifyGeneratedConfigIncludes("tracing: false", "custom Web service router tracing override");
   const body = await routeText(httpRouteUrl, customHttpHost, { path: "/agent/check" });
   assertIncludes(body, `Host: ${customHttpHost}`, customHttpHost);
   assertIncludes(body, "GET /agent/check HTTP/1.1", customHttpHost);

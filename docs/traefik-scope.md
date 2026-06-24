@@ -25,6 +25,7 @@ humans:
 - entrypoints
 - middleware chain
 - TLS mode and certificate/resolver
+- router-level observability: access logs, metrics, and tracing
 - status and last validation result
 
 ## Configuration Surfaces
@@ -40,5 +41,5 @@ References:
 
 - https://doc.traefik.io/traefik/operations/dashboard/
 - https://doc.traefik.io/traefik/reference/routing-configuration/dynamic-configuration-methods/
+- https://doc.traefik.io/traefik/reference/routing-configuration/http/routing/observability/
 - https://doc.traefik.io/traefik/reference/install-configuration/tls/certificate-resolvers/overview/
-
