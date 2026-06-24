@@ -6,6 +6,21 @@ import { generateTraefikDynamicConfig } from "../server/generator";
 const mountedCertDir = path.resolve("runtime/certs");
 
 describe("generateTraefikDynamicConfig", () => {
+  it("renders an empty object when GateLite has no active dynamic config", () => {
+    const state: GateLiteState = {
+      version: 1,
+      groups: [{ id: "default", name: "Default", order: 1 }],
+      webServices: [],
+      certificates: [],
+      history: []
+    };
+
+    const generated = generateTraefikDynamicConfig(state);
+
+    expect(generated.object).toEqual({});
+    expect(generated.yaml.trim()).toBe("{}");
+  });
+
   it("renders enabled HTTP and HTTPS services into Traefik dynamic config", () => {
     const state: GateLiteState = {
       version: 1,
@@ -102,7 +117,11 @@ describe("generateTraefikDynamicConfig", () => {
       history: []
     };
 
-    expect(generateTraefikDynamicConfig(state).yaml).not.toContain("disabled.localhost");
+    const generated = generateTraefikDynamicConfig(state);
+
+    expect(generated.yaml).not.toContain("disabled.localhost");
+    expect(generated.object).toEqual({});
+    expect(generated.yaml.trim()).toBe("{}");
   });
 
   it("renders default fallback services as low-priority catch-all routers", () => {
@@ -198,6 +217,7 @@ describe("generateTraefikDynamicConfig", () => {
 
     expect(generated).not.toContain("/certs/disabled.crt");
     expect(generated).not.toContain("/certs/disabled.key");
+    expect(generated.trim()).toBe("{}");
   });
 
   it("omits certificate paths that are outside the Docker-mounted certificate directory", () => {

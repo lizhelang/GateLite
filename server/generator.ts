@@ -44,15 +44,18 @@ export function generateTraefikDynamicConfig(state: GateLiteState): GeneratedCon
     .map((certificate) => certificateToTraefik(certificate))
     .filter(Boolean);
 
-  const object = {
-    http: {
-      routers,
-      services
-    },
-    tls: {
+  const object: Record<string, unknown> = {};
+  if (Object.keys(routers).length || Object.keys(services).length) {
+    object.http = {
+      ...(Object.keys(routers).length ? { routers } : {}),
+      ...(Object.keys(services).length ? { services } : {})
+    };
+  }
+  if (tlsCertificates.length) {
+    object.tls = {
       certificates: tlsCertificates
-    }
-  };
+    };
+  }
 
   return {
     object,
