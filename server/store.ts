@@ -26,6 +26,7 @@ export function saveState(state: GateLiteState, action = "state.save", summary =
         ...service,
         matchMode,
         domains: matchMode === "default" ? [] : normalizeStringList(service.domains),
+        domainRoot: matchMode === "default" ? undefined : normalizeDomainRoot(service.domainRoot),
         entryPoints: normalizeStringList(service.entryPoints),
         middlewares: normalizeStringList(service.middlewares),
         observability: normalizeObservability(service.observability)
@@ -113,6 +114,7 @@ export function ensureState(): void {
       enabled: true,
       groupId: "local",
       domains: ["whoami.localhost"],
+      domainRoot: "localhost",
       listenPort: 18080,
       entryPoints: ["web"],
       targetUrl: "http://whoami:80",
@@ -130,6 +132,7 @@ export function ensureState(): void {
       enabled: true,
       groupId: "secure",
       domains: ["secure.localhost"],
+      domainRoot: "localhost",
       listenPort: 18443,
       entryPoints: ["websecure"],
       targetUrl: "http://whoami:80",
@@ -187,6 +190,11 @@ function normalizeStringList(values: string[]): string[] {
   return Array.from(new Set(values.map((value) => value.trim()).filter(Boolean)));
 }
 
+function normalizeDomainRoot(value: string | undefined): string | undefined {
+  const normalized = value?.trim().toLowerCase().replace(/^https?:\/\//, "").replace(/\/.*$/, "").replace(/^\.+|\.+$/g, "");
+  return normalized || undefined;
+}
+
 function normalizeObservability(observability: WebService["observability"]): WebService["observability"] {
   if (!observability) return undefined;
   const next: WebService["observability"] = {};
@@ -227,6 +235,7 @@ function saveRestoredState(state: GateLiteState): GateLiteState {
         ...service,
         matchMode,
         domains: matchMode === "default" ? [] : normalizeStringList(service.domains),
+        domainRoot: matchMode === "default" ? undefined : normalizeDomainRoot(service.domainRoot),
         entryPoints: normalizeStringList(service.entryPoints),
         middlewares: normalizeStringList(service.middlewares),
         observability: normalizeObservability(service.observability)

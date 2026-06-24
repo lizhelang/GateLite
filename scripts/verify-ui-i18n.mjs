@@ -29,7 +29,6 @@ async function verifyLanguage(browser, language) {
     await openView(page, language === "zh" ? /Web 服务/ : /Web Services/);
     await assertBody(page, language === "zh" ? /新建规则/ : /New rule/, `${language} Web service create action`);
     await assertBody(page, language === "zh" ? /新建子规则/ : /New sub-rule/, `${language} Web service sub-rule action`);
-    await assertBody(page, language === "zh" ? /规则名称/ : /Rule name/, `${language} Web service rule-name column`);
     await assertBody(page, language === "zh" ? /前端域名/ : /Frontend domain/, `${language} Web service frontend column`);
     await assertBody(page, language === "zh" ? /后端 IP:端口/ : /Backend IP:port/, `${language} Web service backend column`);
     await assertBody(page, language === "zh" ? /下行/ : /\bDown\b/, `${language} Web service downstream column`);
@@ -39,6 +38,7 @@ async function verifyLanguage(browser, language) {
     await assertBody(page, /whoami:80/, `${language} Web service backend host-port row`);
     await assertVisibleButton(page, language === "zh" ? /拖拽分组/ : /Drag group/, `${language} Web service group drag handle`);
     await verifyWebServicePreview(page, language);
+    await verifyWebServiceSubrulePreview(page, language);
 
     await openView(page, language === "zh" ? /SSL\/TLS 证书/ : /SSL\/TLS/);
     await assertBody(page, language === "zh" ? /添加证书/ : /Add certificate/, `${language} certificate create action`);
@@ -67,6 +67,25 @@ async function verifyWebServicePreview(page, language) {
   await page.getByText(language === "zh" ? "配置预览" : "Configuration preview").waitFor({ timeout: 5000 });
   await assertBody(page, language === "zh" ? /配置预览/ : /Configuration preview/, `${language} Web service config preview panel`);
   await assertBody(page, new RegExp(escapeRegex(domain)), `${language} Web service config preview domain`);
+  await page.getByRole("button", { name: language === "zh" ? /^取消$/ : /^Cancel$/ }).click();
+}
+
+async function verifyWebServiceSubrulePreview(page, language) {
+  const label = `ui-sub-${language}-${Date.now()}`;
+  const domain = `${label}.localhost`;
+  await page.getByRole("button", { name: /^localhost\b/ }).click();
+  await page.getByRole("button", { name: language === "zh" ? /^新建子规则$/ : /^New sub-rule$/ }).first().click();
+  const parent = page.getByLabel(language === "zh" ? /^所属主域$/ : /^Parent domain$/);
+  const parentValue = await parent.inputValue();
+  if (parentValue !== "localhost") {
+    throw new Error(`${language} sub-rule form did not keep localhost as the parent domain, got ${parentValue}.`);
+  }
+  await page.getByLabel(language === "zh" ? /^子域名前缀$/ : /^Subdomain label$/).fill(label);
+  await page.getByLabel(language === "zh" ? /^后端 IP:端口$/ : /^Backend IP:port$/).fill("whoami:80");
+  await page.getByRole("button", { name: language === "zh" ? /预览配置/ : /Preview config/ }).click();
+  await page.getByText(language === "zh" ? "配置预览" : "Configuration preview").waitFor({ timeout: 5000 });
+  await assertBody(page, new RegExp(escapeRegex(domain)), `${language} Web service sub-rule preview domain`);
+  await assertBody(page, /whoami:80/, `${language} Web service sub-rule backend target`);
   await page.getByRole("button", { name: language === "zh" ? /^取消$/ : /^Cancel$/ }).click();
 }
 

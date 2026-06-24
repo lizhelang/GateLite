@@ -197,7 +197,7 @@ export function WebServicesPage({ dashboard, onRefresh }: WebServicesPageProps) 
   };
 
   const openEdit = (service: WebServiceWithRuntime) => {
-    const domains = domainsToDraft(service.domains);
+    const domains = domainsToDraft(service);
     const labels = splitList(domains.subdomainsText);
     const isRootHostRule = service.matchMode !== "custom" && labels.length > 0 && labels.every((label) => normalizeDomain(label) === "@");
     setEditing(service);
@@ -208,8 +208,8 @@ export function WebServicesPage({ dashboard, onRefresh }: WebServicesPageProps) 
 
   const openDuplicate = (route: DomainRoute) => {
     if (route.isDefault) return;
-    const domains = domainsToDraft([route.primaryDomain]);
-    const label = domainToLabel(route.primaryDomain, domains.domainRoot);
+    const domains = { domainRoot: route.root, subdomainsText: domainToLabel(route.primaryDomain, route.root) };
+    const label = domains.subdomainsText;
     const copiedLabel = copyDomainLabel(label);
     const copiedDomain = composeDomains(domains.domainRoot, copiedLabel)[0] || "";
     const customRule = route.service.matchMode === "custom" ? copyCustomRule(route.service.customRule || "", route.primaryDomain, copiedDomain) : "";
@@ -557,9 +557,9 @@ function RouteDataTable({
               <TableHead className="w-7 px-1">
                 <Checkbox aria-label={t("Select visible rules", "选择当前规则")} checked={allVisibleSelected} onCheckedChange={(checked) => onSelectAll(Boolean(checked))} />
               </TableHead>
-              <TableHead className="min-w-[150px]">{t("Rule name", "规则名称")}</TableHead>
               <TableHead className="min-w-[250px]">{t("Frontend domain", "前端域名")}</TableHead>
               <TableHead className="min-w-[210px]">{t("Backend IP:port", "后端 IP:端口")}</TableHead>
+              <TableHead className="min-w-[150px]">{t("Rule", "规则")}</TableHead>
               <TableHead className="w-28">{t("Status", "状态")}</TableHead>
               <TableHead className="w-24 text-right">
                 <span className="inline-flex items-center gap-1">
@@ -702,14 +702,6 @@ function RouteTableRow({
         <Checkbox checked={selected} aria-label={t(`Select ${displayName}`, `选择 ${displayName}`)} onClick={(event) => event.stopPropagation()} onCheckedChange={(checked) => onSelect(route.routeId, Boolean(checked))} />
       </TableCell>
       <TableCell className="py-1.5">
-        <div className="flex min-w-0 items-center gap-1.5">
-          <span className="max-w-36 truncate text-sm font-medium">{displayName}</span>
-          <Badge variant="outline" className="h-5 shrink-0 rounded-md px-1.5 text-[10px]">
-            {routeKindLabel(route, isRootRule, t)}
-          </Badge>
-        </div>
-      </TableCell>
-      <TableCell className="py-1.5">
         {frontend.href ? (
           <a className="grid min-w-0 max-w-full gap-0 font-mono text-xs font-medium leading-tight text-cyan-100 hover:text-cyan-200" href={frontend.href} target="_blank" rel="noreferrer" onClick={(event) => event.stopPropagation()}>
             <span className="inline-flex min-w-0 items-center gap-1">
@@ -732,6 +724,17 @@ function RouteTableRow({
             <span className="min-w-0 truncate text-xs text-foreground">{backend.hostPort || service.targetUrl}</span>
             <span className="text-[10px] text-muted-foreground">{backend.scheme}</span>
           </div>
+        </div>
+      </TableCell>
+      <TableCell className="py-1.5">
+        <div className="grid min-w-0 gap-0.5 leading-tight">
+          <div className="flex min-w-0 items-center gap-1.5">
+            <span className="max-w-36 truncate text-sm font-medium">{displayName}</span>
+            <Badge variant="outline" className="h-5 shrink-0 rounded-md px-1.5 text-[10px]">
+              {routeKindLabel(route, isRootRule, t)}
+            </Badge>
+          </div>
+          <span className="truncate text-[10px] text-muted-foreground">{route.groupName}</span>
         </div>
       </TableCell>
       <TableCell className="py-1.5">
@@ -1042,7 +1045,7 @@ function ServiceForm({
   const { t } = useLanguage();
   const [draft, setDraft] = useState<DraftService>(() => {
     const createRoot = mode === "subrule" && activeRoot !== "__all" && activeRoot !== "__default" ? activeRoot : emptyDraft.domainRoot;
-    const domains = service ? domainsToDraft(service.domains) : { domainRoot: createRoot, subdomainsText: "" };
+    const domains = service ? domainsToDraft(service) : { domainRoot: createRoot, subdomainsText: "" };
     const matchMode = service?.matchMode || (mode === "default" ? "default" : "host");
     return service
       ? {
@@ -1114,6 +1117,7 @@ function ServiceForm({
     matchMode: draft.matchMode,
     groupId: draft.groupId,
     domains: domainPreview,
+    domainRoot: isDefaultRule ? undefined : normalizeDomain(draft.domainRoot),
     customRule: draft.matchMode === "custom" ? draft.customRule : undefined,
     listenPort: Number(draft.listenPort),
     entryPoints: splitList(draft.entryPointsText),
@@ -1404,7 +1408,7 @@ function buildDomainZones(services: WebServiceWithRuntime[], groupsById: Map<str
     }
     for (const [index, domain] of domains.entries()) {
       const primaryDomain = domain;
-      const root = inferRootDomain(primaryDomain);
+      const root = normalizeDomain(service.domainRoot || "") || inferRootDomain(primaryDomain);
       const route: DomainRoute = {
         routeId: `${service.id}:${index}:${primaryDomain}`,
         service,
@@ -1501,8 +1505,16 @@ function countServicesByGroup(services: WebServiceWithRuntime[]): Map<string, nu
   return counts;
 }
 
-function domainsToDraft(domains: string[]) {
+function domainsToDraft(service: Pick<WebServiceWithRuntime, "domains" | "domainRoot">) {
+  const domains = service.domains;
   if (domains.length === 0) return { domainRoot: "localhost", subdomainsText: "" };
+  const savedRoot = normalizeDomain(service.domainRoot || "");
+  if (savedRoot) {
+    return {
+      domainRoot: savedRoot,
+      subdomainsText: domains.map((domain) => domainToLabel(domain, savedRoot)).join(", ")
+    };
+  }
   const roots = Array.from(new Set(domains.map(inferRootDomain)));
   if (roots.length !== 1) return { domainRoot: "", subdomainsText: domains.join(", ") };
   const root = roots[0];

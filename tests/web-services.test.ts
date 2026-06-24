@@ -182,6 +182,24 @@ describe("webServiceInputSchema", () => {
     expect(parsed.targetUrl).toBe("https://192.168.31.2:8006");
   });
 
+  it("preserves Lucky-style main domain metadata for sub-rules", () => {
+    const parsed = webServiceInputSchema.parse({
+      name: "Lucky sub-rule",
+      enabled: true,
+      groupId: "local",
+      domains: ["jb.1804.surfacer.cc"],
+      domainRoot: " 1804.surfacer.cc ",
+      listenPort: 18080,
+      entryPoints: ["web"],
+      targetUrl: "whoami:80",
+      middlewares: [],
+      tls: { mode: "none" }
+    });
+
+    expect(parsed.domainRoot).toBe("1804.surfacer.cc");
+    expect(parsed.targetUrl).toBe("http://whoami:80");
+  });
+
   it("rejects multi-domain Host rules", () => {
     expect(() =>
       webServiceInputSchema.parse({

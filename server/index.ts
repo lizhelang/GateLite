@@ -75,6 +75,7 @@ app.put("/api/web-services/:id", (request, response) => {
     ...state.webServices[index],
     ...parsed,
     domains: normalizeDomains(parsed.domains),
+    domainRoot: normalizeDomainRoot(parsed.domainRoot),
     middlewares: parsed.middlewares.filter(Boolean),
     updatedAt: new Date().toISOString()
   };
@@ -93,6 +94,7 @@ app.post("/api/web-services/:id/preview", (request, response) => {
     ...state.webServices[index],
     ...parsed,
     domains: normalizeDomains(parsed.domains),
+    domainRoot: normalizeDomainRoot(parsed.domainRoot),
     middlewares: parsed.middlewares.filter(Boolean),
     updatedAt: new Date().toISOString()
   };
@@ -407,11 +409,17 @@ function normalizeDomains(domains: string[]): string[] {
   return Array.from(new Set(domains.map((domain) => domain.trim().toLowerCase()).filter(Boolean)));
 }
 
+function normalizeDomainRoot(domainRoot: string | undefined): string | undefined {
+  const normalized = domainRoot?.trim().toLowerCase().replace(/^https?:\/\//, "").replace(/\/.*$/, "").replace(/^\.+|\.+$/g, "");
+  return normalized || undefined;
+}
+
 function webServiceFromInput(id: string, input: z.infer<typeof webServiceInputSchema>, order: number, now: string): WebService {
   return {
     id,
     ...input,
     domains: normalizeDomains(input.domains),
+    domainRoot: normalizeDomainRoot(input.domainRoot),
     middlewares: input.middlewares.filter(Boolean),
     order,
     createdAt: now,

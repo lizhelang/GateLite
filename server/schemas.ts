@@ -31,6 +31,7 @@ export const webServiceInputSchema = z
     matchMode: z.enum(["host", "custom", "default"]).default("host"),
     groupId: z.string().trim().default("local"),
     domains: z.array(z.string().trim()).default([]),
+    domainRoot: z.string().trim().optional(),
     customRule: z.string().trim().optional(),
     listenPort: z.coerce.number().int().min(1).max(65535).default(18080),
     entryPoints: z.array(z.string().trim().min(1)).min(1).default(["web"]),

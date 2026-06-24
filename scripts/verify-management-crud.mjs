@@ -10,8 +10,9 @@ const traefikApiUrl = process.env.TRAEFIK_API_URL || "http://localhost:18081";
 const httpRouteUrl = process.env.GATELITE_VERIFY_HTTP_URL || "http://127.0.0.1:18080";
 const httpsRouteUrl = process.env.GATELITE_VERIFY_HTTPS_URL || "https://127.0.0.1:18443";
 const suffix = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
-const originalHttpHost = `crud-${suffix}.localhost`;
-const editedHttpHost = `crud-edit-${suffix}.localhost`;
+const httpDomainRoot = `crud-${suffix}.surfacer.cc`;
+const originalHttpHost = `app.${httpDomainRoot}`;
+const editedHttpHost = `admin.${httpDomainRoot}`;
 const rollbackHttpHost = `crud-rollback-${suffix}.localhost`;
 const customHttpHost = `crud-custom-${suffix}.localhost`;
 const defaultFallbackHost = `unmatched-${suffix}.localhost`;
@@ -494,6 +495,7 @@ async function createAndVerifyHttpService(groupId) {
     enabled: true,
     groupId,
     domains: [originalHttpHost],
+    domainRoot: httpDomainRoot,
     listenPort: 18080,
     entryPoints: ["web"],
     targetUrl: "http://whoami:80",
@@ -507,6 +509,9 @@ async function createAndVerifyHttpService(groupId) {
   });
   if (preview.action !== "create" || preview.service.id.includes("svc-") || !preview.nextYaml.includes(originalHttpHost)) {
     throw new Error("Web service create preview did not return the expected dry-run service and YAML.");
+  }
+  if (preview.service.domainRoot !== httpDomainRoot) {
+    throw new Error("Web service create preview did not preserve the Lucky-style main domain root.");
   }
   assertDiffIncludes(preview.diff, "added", originalHttpHost, "create preview frontend domain");
   assertDiffIncludes(preview.diff, "added", "http://whoami:80", "create preview backend target");
@@ -525,6 +530,9 @@ async function createAndVerifyHttpService(groupId) {
   }
   if (service.targetUrl !== "http://whoami:80") {
     throw new Error(`Bare backend host:port was not normalized for Traefik, got ${service.targetUrl}.`);
+  }
+  if (service.domainRoot !== httpDomainRoot) {
+    throw new Error("Web service create did not preserve the Lucky-style main domain root.");
   }
   await waitForHttpRoute(originalHttpHost, "http");
   const body = await routeText(httpRouteUrl, originalHttpHost);
@@ -630,6 +638,7 @@ async function updateAndVerifyHttpService(service, groupId) {
     enabled: true,
     groupId,
     domains: [editedHttpHost],
+    domainRoot: httpDomainRoot,
     listenPort: 18080,
     entryPoints: ["web"],
     targetUrl: "http://whoami:80",
@@ -644,6 +653,9 @@ async function updateAndVerifyHttpService(service, groupId) {
   if (preview.action !== "update" || preview.service.id !== service.id || !preview.nextYaml.includes(editedHttpHost)) {
     throw new Error("Web service update preview did not preserve the target service id or next YAML.");
   }
+  if (preview.service.domainRoot !== httpDomainRoot) {
+    throw new Error("Web service update preview did not preserve the Lucky-style main domain root.");
+  }
   assertDiffIncludes(preview.diff, "removed", originalHttpHost, "update preview previous frontend domain");
   assertDiffIncludes(preview.diff, "added", editedHttpHost, "update preview next frontend domain");
 
@@ -653,6 +665,9 @@ async function updateAndVerifyHttpService(service, groupId) {
   });
   if (updated.name !== `CRUD HTTP edited ${suffix}` || updated.domains[0] !== editedHttpHost) {
     throw new Error("Web service edit was not persisted.");
+  }
+  if (updated.domainRoot !== httpDomainRoot) {
+    throw new Error("Web service edit did not preserve the Lucky-style main domain root.");
   }
   await waitForHttpRoute(editedHttpHost, "http");
   await waitForRouteUnavailable(originalHttpHost, "http");

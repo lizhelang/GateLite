@@ -31,6 +31,7 @@ export interface WebService {
   matchMode?: WebServiceMatchMode;
   groupId: string;
   domains: string[];
+  domainRoot?: string;
   customRule?: string;
   listenPort: number;
   entryPoints: string[];

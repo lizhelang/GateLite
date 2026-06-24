@@ -65,6 +65,11 @@ GateLite MVP mapping:
   the user selects a concrete main domain, and also in that domain's table
   header. This keeps sub-rules scoped to an existing domain the way Lucky
   presents them.
+- Main-domain metadata -> GateLite stores the user-selected main domain as
+  management metadata (`domainRoot`) so `jb.1804.surfacer.cc` stays grouped
+  under `1804.surfacer.cc` during edit, duplicate, and sub-rule creation
+  instead of being guessed back to `surfacer.cc`. Traefik generation still uses
+  the concrete frontend Host domain.
 - Rule row density -> each reverse-proxy rule is a single shadcn-style data
   table row with rule name, frontend domain, backend IP:port, downstream
   traffic, upstream traffic, live connection count, and status. The frontend
