@@ -143,6 +143,7 @@ export function WebServicesPage({ dashboard, onRefresh }: WebServicesPageProps) 
   const [importPreview, setImportPreview] = useState<ImportRoutePreview | null>(null);
   const [importingRouterName, setImportingRouterName] = useState<string | null>(null);
   const [bulkImporting, setBulkImporting] = useState(false);
+  const [runtimeRoutesOpen, setRuntimeRoutesOpen] = useState(false);
   const [importSaving, setImportSaving] = useState(false);
   const [saving, setSaving] = useState(false);
   const [groupSaving, setGroupSaving] = useState(false);
@@ -447,14 +448,6 @@ export function WebServicesPage({ dashboard, onRefresh }: WebServicesPageProps) 
       {error ? <div className="rounded-xl border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">{error}</div> : null}
       {notice ? <div className="rounded-xl border border-cyan-300/35 bg-cyan-300/10 p-3 text-sm text-cyan-100">{notice}</div> : null}
 
-      <DiscoveredRouteTable
-        routes={dashboard.discoveredRoutes}
-        importingRouterName={importingRouterName}
-        bulkImporting={bulkImporting}
-        onPreviewImport={handlePreviewImport}
-        onBulkImport={handleBulkImport}
-      />
-
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex min-w-0 flex-wrap items-center gap-2">
           <div className="min-w-0">
@@ -523,6 +516,16 @@ export function WebServicesPage({ dashboard, onRefresh }: WebServicesPageProps) 
         onDetails={setDetailsRoute}
         onEdit={openEdit}
         onDelete={handleDelete}
+      />
+
+      <DiscoveredRouteTable
+        routes={dashboard.discoveredRoutes}
+        importingRouterName={importingRouterName}
+        bulkImporting={bulkImporting}
+        open={runtimeRoutesOpen}
+        onOpenChange={setRuntimeRoutesOpen}
+        onPreviewImport={handlePreviewImport}
+        onBulkImport={handleBulkImport}
       />
 
       {showForm ? (
@@ -623,12 +626,16 @@ function DiscoveredRouteTable({
   routes,
   importingRouterName,
   bulkImporting,
+  open,
+  onOpenChange,
   onPreviewImport,
   onBulkImport
 }: {
   routes: DiscoveredRoute[];
   importingRouterName: string | null;
   bulkImporting: boolean;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
   onPreviewImport: (route: DiscoveredRoute) => Promise<void>;
   onBulkImport: () => Promise<void>;
 }) {
@@ -638,10 +645,13 @@ function DiscoveredRouteTable({
   return (
     <div className="overflow-hidden rounded-xl border bg-card/80">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3">
-        <div className="min-w-0">
-          <div className="text-xs text-muted-foreground">{t("Discovered from Traefik runtime", "从 Traefik 运行时发现")}</div>
-          <h2 className="truncate text-base font-semibold">{t("Reverse proxy domains", "反代域名")}</h2>
-        </div>
+        <button type="button" className="flex min-w-0 items-center gap-2 text-left" onClick={() => onOpenChange(!open)} aria-expanded={open}>
+          {open ? <ChevronDown className="size-4 shrink-0 text-muted-foreground" /> : <ChevronRight className="size-4 shrink-0 text-muted-foreground" />}
+          <span className="min-w-0">
+            <span className="block text-xs text-muted-foreground">{t("Read-only reference from Traefik runtime", "来自 Traefik 运行时的只读参考")}</span>
+            <span className="block truncate text-base font-semibold">{t("Discovered reverse proxy domains", "发现的反代域名")}</span>
+          </span>
+        </button>
         <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
           <Badge variant="secondary" className="rounded-md">
             {t(`${routes.length} routers`, `${routes.length} 个路由`)}
@@ -658,7 +668,7 @@ function DiscoveredRouteTable({
           </Button>
         </div>
       </div>
-      <div className="overflow-x-auto">
+      {open ? <div className="overflow-x-auto">
         <Table className="min-w-[1040px]">
           <TableHeader className="bg-muted/65">
             <TableRow className="hover:bg-transparent">
@@ -752,7 +762,7 @@ function DiscoveredRouteTable({
             ) : null}
           </TableBody>
         </Table>
-      </div>
+      </div> : null}
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import { Activity, Globe2, Languages, LayoutDashboard, RefreshCw, ShieldCheck, TerminalSquare, type LucideIcon } from "lucide-react";
+import { Globe2, Languages, LayoutDashboard, RefreshCw, ShieldCheck, TerminalSquare, type LucideIcon } from "lucide-react";
 import { useEffect, useState, type CSSProperties } from "react";
 import type { DashboardPayload } from "../shared/types";
 import { getDashboard } from "./api";
@@ -19,10 +19,9 @@ import {
 import { useLanguage } from "./i18n";
 import { CertificatesPage } from "./pages/CertificatesPage";
 import { DashboardPage } from "./pages/DashboardPage";
-import { RuntimePage } from "./pages/RuntimePage";
 import { WebServicesPage } from "./pages/WebServicesPage";
 
-type ViewKey = "dashboard" | "web" | "certificates" | "runtime";
+type ViewKey = "dashboard" | "web" | "certificates";
 
 const views: Array<{ key: ViewKey; label: { en: string; zh: string }; description: { en: string; zh: string }; icon: LucideIcon }> = [
   {
@@ -42,12 +41,6 @@ const views: Array<{ key: ViewKey; label: { en: string; zh: string }; descriptio
     label: { en: "SSL/TLS", zh: "SSL/TLS 证书" },
     description: { en: "Certificates and bindings", zh: "证书与绑定关系" },
     icon: ShieldCheck
-  },
-  {
-    key: "runtime",
-    label: { en: "Traefik Runtime", zh: "Traefik 运行时" },
-    description: { en: "Routers, services, providers", zh: "路由、服务、Provider" },
-    icon: Activity
   }
 ];
 
@@ -110,10 +103,9 @@ export function App() {
           {error ? <div className="rounded-xl border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">{error}</div> : null}
           {loading && !dashboard ? <div className="rounded-xl border bg-card/70 p-4 text-sm text-muted-foreground">{t("Loading GateLite state and Traefik runtime...", "正在加载 GateLite 状态和 Traefik 运行时...")}</div> : null}
 
-          {activeView === "dashboard" ? <DashboardPage dashboard={dashboard} loading={loading} /> : null}
+          {activeView === "dashboard" ? <DashboardPage dashboard={dashboard} loading={loading} onRefresh={load} /> : null}
           {dashboard && activeView === "web" ? <WebServicesPage dashboard={dashboard} onRefresh={load} /> : null}
           {dashboard && activeView === "certificates" ? <CertificatesPage dashboard={dashboard} onRefresh={load} /> : null}
-          {dashboard && activeView === "runtime" ? <RuntimePage dashboard={dashboard} onRefresh={load} /> : null}
         </main>
       </SidebarInset>
     </SidebarProvider>

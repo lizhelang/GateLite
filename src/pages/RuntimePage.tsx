@@ -12,9 +12,10 @@ import { useLanguage } from "../i18n";
 interface RuntimePageProps {
   dashboard: DashboardPayload;
   onRefresh: () => Promise<void>;
+  embedded?: boolean;
 }
 
-export function RuntimePage({ dashboard, onRefresh }: RuntimePageProps) {
+export function RuntimePage({ dashboard, onRefresh, embedded = false }: RuntimePageProps) {
   const { t } = useLanguage();
   const runtime = dashboard.runtime;
   const [generatedConfig, setGeneratedConfig] = useState("");
@@ -85,18 +86,28 @@ export function RuntimePage({ dashboard, onRefresh }: RuntimePageProps) {
 
   return (
     <section className="grid gap-4">
-      <Card className="bg-card/80">
-        <CardHeader>
-          <div className="grid gap-3 md:flex md:items-center md:justify-between">
-            <div className="grid min-w-0 gap-1">
-              <CardDescription>{t("04 Traefik Runtime", "04 Traefik 运行时")}</CardDescription>
-              <CardTitle className="text-2xl">{t("Dashboard parity surface", "Dashboard 对等运行面板")}</CardTitle>
-              <CardDescription>{t("Routers, services, middlewares, entrypoints, providers, raw config and status from the local Traefik API.", "展示来自本地 Traefik API 的 routers、services、middlewares、entrypoints、providers、原始配置和状态。")}</CardDescription>
-            </div>
-            <StatusBadge status={runtime.connected ? "online" : "offline"} label={runtime.connected ? t("Connected", "已连接") : t("Offline", "离线")} />
+      {embedded ? (
+        <div className="flex flex-wrap items-end justify-between gap-3 pt-2">
+          <div className="min-w-0">
+            <p className="text-xs text-muted-foreground">{t("Merged from Traefik Runtime", "已合并 Traefik 运行时")}</p>
+            <h2 className="truncate text-lg font-semibold">{t("Runtime details", "运行时详情")}</h2>
           </div>
-        </CardHeader>
-      </Card>
+          <StatusBadge status={runtime.connected ? "online" : "offline"} label={runtime.connected ? t("Connected", "已连接") : t("Offline", "离线")} />
+        </div>
+      ) : (
+        <Card className="bg-card/80">
+          <CardHeader>
+            <div className="grid gap-3 md:flex md:items-center md:justify-between">
+              <div className="grid min-w-0 gap-1">
+                <CardDescription>{t("Traefik Runtime", "Traefik 运行时")}</CardDescription>
+                <CardTitle className="text-2xl">{t("Dashboard parity surface", "Dashboard 对等运行面板")}</CardTitle>
+                <CardDescription>{t("Routers, services, middlewares, entrypoints, providers, raw config and status from the local Traefik API.", "展示来自本地 Traefik API 的 routers、services、middlewares、entrypoints、providers、原始配置和状态。")}</CardDescription>
+              </div>
+              <StatusBadge status={runtime.connected ? "online" : "offline"} label={runtime.connected ? t("Connected", "已连接") : t("Offline", "离线")} />
+            </div>
+          </CardHeader>
+        </Card>
+      )}
 
       {runtime.error ? <div className="rounded-xl border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">{runtime.error}</div> : null}
 

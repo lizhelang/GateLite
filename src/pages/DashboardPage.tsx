@@ -2,13 +2,15 @@ import type { DashboardPayload } from "../../shared/types";
 import { TrafficOverview } from "../components/TrafficOverview";
 import { Badge } from "@/components/ui/badge";
 import { useLanguage } from "../i18n";
+import { RuntimePage } from "./RuntimePage";
 
 interface DashboardPageProps {
   dashboard: DashboardPayload | null;
   loading: boolean;
+  onRefresh: () => Promise<void>;
 }
 
-export function DashboardPage({ dashboard, loading }: DashboardPageProps) {
+export function DashboardPage({ dashboard, loading, onRefresh }: DashboardPageProps) {
   const { t } = useLanguage();
   const serviceCount = dashboard?.webServices.length || 0;
   const certificateCount = dashboard?.certificates.length || 0;
@@ -31,6 +33,8 @@ export function DashboardPage({ dashboard, loading }: DashboardPageProps) {
       </div>
 
       <TrafficOverview dashboard={dashboard} loading={loading} />
+
+      {dashboard ? <RuntimePage dashboard={dashboard} onRefresh={onRefresh} embedded /> : null}
     </section>
   );
 }

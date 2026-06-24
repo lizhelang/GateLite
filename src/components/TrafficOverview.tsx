@@ -26,12 +26,14 @@ export function TrafficOverview({ dashboard, loading }: TrafficOverviewProps) {
   const { t } = useLanguage();
   const services = dashboard?.webServices || [];
   const certificates = dashboard?.certificates || [];
-  const domains = uniqueDomains(services);
-  const series = buildTrafficSeries(services, dashboard?.traffic);
+  const discoveredRoutes = dashboard?.discoveredRoutes || [];
+  const discoveredDomains = discoveredRoutes.flatMap((route) => route.domains);
+  const domains = uniqueDomains(services, discoveredDomains);
+  const series = buildTrafficSeries(services, dashboard?.traffic, discoveredDomains);
   const routeTotals = getRouteTotals(dashboard);
-  const tlsCoverage = getTlsCoverage(services, domains.length);
+  const tlsCoverage = getTlsCoverage(services, dashboard?.runtimeTlsBindings || [], domains.length);
   const certSummary = getCertificateSummary(certificates);
-  const entryPoints = Array.from(new Set(services.flatMap((service) => service.entryPoints))).filter(Boolean);
+  const entryPoints = Array.from(new Set([...services.flatMap((service) => service.entryPoints), ...discoveredRoutes.flatMap((route) => route.entryPoints)])).filter(Boolean);
   const hasPrometheusTraffic = series.some((item) => item.source === "prometheus");
   const chartConfig = Object.fromEntries(
     series.map((item) => [
@@ -48,7 +50,7 @@ export function TrafficOverview({ dashboard, loading }: TrafficOverviewProps) {
   }));
 
   return (
-    <div className="grid gap-4 lg:grid-cols-[minmax(0,1.45fr)_minmax(280px,0.55fr)]">
+    <div className="grid gap-3">
       <Card className="bg-card/80 shadow-xs">
         <CardHeader className="border-b">
           <CardDescription>{t("Local Traefik companion", "本地 Traefik 伴侣面板")}</CardDescription>
@@ -61,7 +63,7 @@ export function TrafficOverview({ dashboard, loading }: TrafficOverviewProps) {
           </CardAction>
         </CardHeader>
         <CardContent className="pt-4">
-          <ChartContainer config={chartConfig} className="h-[260px] w-full">
+          <ChartContainer config={chartConfig} className="h-[190px] w-full">
             <LineChart accessibilityLayer data={chartData} margin={{ left: 8, right: 18, top: 12, bottom: 8 }}>
               <CartesianGrid vertical={false} strokeDasharray="3 3" />
               <XAxis dataKey="interval" tickLine={false} axisLine={false} tickMargin={8} />
@@ -83,17 +85,17 @@ export function TrafficOverview({ dashboard, loading }: TrafficOverviewProps) {
         </CardContent>
       </Card>
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-1">
-        <MetricCard icon={Globe2} label={t("Domains", "域名")} value={String(domains.length)} caption={t(`${services.length} managed services`, `${services.length} 个托管服务`)} />
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+        <MetricCard icon={Globe2} label={t("Domains", "域名")} value={String(domains.length)} caption={t(`${services.length} managed · ${discoveredRoutes.length} discovered`, `${services.length} 个托管 · ${discoveredRoutes.length} 个发现`)} />
         <MetricCard icon={Route} label={t("Routers", "路由")} value={`${routeTotals.online}/${routeTotals.total}`} caption={t("online in Traefik", "在 Traefik 中在线")} />
         <MetricCard icon={ShieldCheck} label={t("TLS coverage", "TLS 覆盖")} value={`${tlsCoverage.secured}/${tlsCoverage.total}`} caption={t("domains with TLS mode", "个域名启用 TLS 模式")} />
         <MetricCard icon={ChartSpline} label={t("Certificate runway", "证书有效期")} value={String(certSummary.valid)} caption={t(`${certSummary.expiring + certSummary.expired + certSummary.pending} need attention`, `${certSummary.expiring + certSummary.expired + certSummary.pending} 个需要关注`)} />
-        <Card className="bg-card/70 sm:col-span-2 lg:col-span-1">
-          <CardHeader className="flex-row items-center gap-3">
+        <Card className="bg-card/70">
+          <CardHeader className="flex-row items-center gap-3 p-3">
             <Clock3 className="size-4 text-muted-foreground" />
-            <div>
+            <div className="min-w-0">
               <CardDescription>{t("Entrypoint presets", "入口点预设")}</CardDescription>
-              <CardTitle className="text-base">{entryPoints.length ? entryPoints.join(" / ") : "web / websecure"}</CardTitle>
+              <CardTitle className="truncate text-sm">{entryPoints.length ? entryPoints.join(" / ") : "web / websecure"}</CardTitle>
             </div>
           </CardHeader>
         </Card>
@@ -115,23 +117,23 @@ function MetricCard({
 }) {
   return (
     <Card className="bg-card/70">
-      <CardHeader>
+      <CardHeader className="p-3">
         <CardDescription className="flex items-center gap-2">
           <Icon className="size-4" />
           {label}
         </CardDescription>
-        <CardTitle className="text-3xl tabular-nums">{value}</CardTitle>
-        <CardDescription>{caption}</CardDescription>
+        <CardTitle className="text-xl tabular-nums">{value}</CardTitle>
+        <CardDescription className="truncate">{caption}</CardDescription>
       </CardHeader>
     </Card>
   );
 }
 
-function uniqueDomains(services: WebServiceWithRuntime[]) {
-  return Array.from(new Set(services.flatMap((service) => service.domains))).filter(Boolean);
+function uniqueDomains(services: WebServiceWithRuntime[], extraDomains: string[] = []) {
+  return Array.from(new Set([...services.flatMap((service) => service.domains), ...extraDomains])).filter(Boolean);
 }
 
-function buildTrafficSeries(services: WebServiceWithRuntime[], traffic: TrafficOverviewData | undefined): Series[] {
+function buildTrafficSeries(services: WebServiceWithRuntime[], traffic: TrafficOverviewData | undefined, extraDomains: string[] = []): Series[] {
   if (traffic?.connected && traffic.series.length) {
     return traffic.series.slice(0, 5).map((item, index) => ({
       key: `series${index + 1}`,
@@ -143,7 +145,7 @@ function buildTrafficSeries(services: WebServiceWithRuntime[], traffic: TrafficO
     }));
   }
 
-  const domains = uniqueDomains(services).slice(0, 5);
+  const domains = uniqueDomains(services, extraDomains).slice(0, 5);
   const visibleDomains = domains.length ? domains : ["whoami.localhost", "secure.localhost"];
 
   return visibleDomains.map((domain, domainIndex) => {
@@ -187,8 +189,11 @@ function getRouteTotals(dashboard: DashboardPayload | null) {
   return { total, online };
 }
 
-function getTlsCoverage(services: WebServiceWithRuntime[], domainCount: number) {
-  const secured = uniqueDomains(services.filter((service) => service.tls.mode !== "none")).length;
+function getTlsCoverage(services: WebServiceWithRuntime[], runtimeTlsBindings: DashboardPayload["runtimeTlsBindings"], domainCount: number) {
+  const secured = uniqueDomains(
+    services.filter((service) => service.tls.mode !== "none"),
+    runtimeTlsBindings.flatMap((binding) => binding.domains)
+  ).length;
   return { secured, total: domainCount };
 }
 

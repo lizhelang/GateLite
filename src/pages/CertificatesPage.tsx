@@ -88,6 +88,7 @@ export function CertificatesPage({ dashboard, onRefresh }: CertificatesPageProps
   const [draftPreset, setDraftPreset] = useState<Partial<DraftCertificate> | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [expandedBindingIds, setExpandedBindingIds] = useState<string[]>([]);
+  const [runtimeTlsOpen, setRuntimeTlsOpen] = useState(false);
   const [filter, setFilter] = useState<CertificateFilter>("all");
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -297,8 +298,6 @@ export function CertificatesPage({ dashboard, onRefresh }: CertificatesPageProps
 
       {error ? <div className="rounded-xl border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">{error}</div> : null}
 
-      <RuntimeTlsBindingTable bindings={dashboard.runtimeTlsBindings} />
-
       <CertificateDataTable
         certificates={filteredCertificates}
         selectedIds={selectedIds}
@@ -319,6 +318,8 @@ export function CertificatesPage({ dashboard, onRefresh }: CertificatesPageProps
         onEdit={openEdit}
         onDelete={handleDelete}
       />
+
+      <RuntimeTlsBindingTable bindings={dashboard.runtimeTlsBindings} open={runtimeTlsOpen} onOpenChange={setRuntimeTlsOpen} />
 
       {showForm ? (
         <CertificateForm
@@ -381,20 +382,23 @@ export function CertificatesPage({ dashboard, onRefresh }: CertificatesPageProps
   );
 }
 
-function RuntimeTlsBindingTable({ bindings }: { bindings: RuntimeTlsBinding[] }) {
+function RuntimeTlsBindingTable({ bindings, open, onOpenChange }: { bindings: RuntimeTlsBinding[]; open: boolean; onOpenChange: (open: boolean) => void }) {
   const { t } = useLanguage();
   return (
     <div className="overflow-hidden rounded-xl border bg-card/80">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3">
-        <div className="min-w-0">
-          <div className="text-xs text-muted-foreground">{t("Discovered from Traefik TLS routers", "从 Traefik TLS 路由发现")}</div>
-          <h2 className="truncate text-base font-semibold">{t("Runtime TLS coverage", "运行时 TLS 覆盖")}</h2>
-        </div>
+        <button type="button" className="flex min-w-0 items-center gap-2 text-left" onClick={() => onOpenChange(!open)} aria-expanded={open}>
+          {open ? <ChevronDown className="size-4 shrink-0 text-muted-foreground" /> : <ChevronRight className="size-4 shrink-0 text-muted-foreground" />}
+          <span className="min-w-0">
+            <span className="block text-xs text-muted-foreground">{t("Read-only TLS reference from Traefik", "来自 Traefik 的只读 TLS 参考")}</span>
+            <span className="block truncate text-base font-semibold">{t("Runtime TLS coverage", "运行时 TLS 覆盖")}</span>
+          </span>
+        </button>
         <Badge variant="secondary" className="rounded-md">
           {t(`${bindings.length} TLS routers`, `${bindings.length} 个 TLS 路由`)}
         </Badge>
       </div>
-      <div className="overflow-x-auto">
+      {open ? <div className="overflow-x-auto">
         <Table className="min-w-[900px]">
           <TableHeader className="bg-muted/65">
             <TableRow className="hover:bg-transparent">
@@ -457,7 +461,7 @@ function RuntimeTlsBindingTable({ bindings }: { bindings: RuntimeTlsBinding[] })
             ) : null}
           </TableBody>
         </Table>
-      </div>
+      </div> : null}
     </div>
   );
 }
