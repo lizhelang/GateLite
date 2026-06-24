@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { counterRatePerSecond, parsePrometheusMetrics, readEntrypointOpenConnections, readRouterRequestTotals, readRouterTrafficStats, readServiceOpenConnections } from "../server/metrics";
+import { counterRatePerSecond, parsePrometheusMetrics, readEntrypointOpenConnections, readRouterRequestTotals, readRouterTrafficStats, readServiceOpenConnections, readServiceTrafficStats } from "../server/metrics";
 
 describe("Traefik Prometheus metrics parsing", () => {
   it("sums router request counters across labels", () => {
@@ -57,6 +57,23 @@ traefik_open_connections{entrypoint="websecure",protocol="TCP"} 1
 
     const serviceConnections = readServiceOpenConnections(text);
     expect(serviceConnections.get("gatelite-service-svc-one@file")).toBe(5);
+  });
+
+  it("sums service request and byte counters for Docker-provider fallback", () => {
+    const text = `
+traefik_service_requests_total{code="200",method="GET",protocol="http",service="gatelite@docker"} 122
+traefik_service_requests_total{code="304",method="GET",protocol="http",service="gatelite@docker"} 23
+traefik_service_requests_bytes_total{code="200",method="GET",protocol="http",service="gatelite@docker"} 128
+traefik_service_responses_bytes_total{code="200",method="GET",protocol="http",service="gatelite@docker"} 4096
+traefik_entrypoint_requests_total{code="200",entrypoint="websecure",method="GET",protocol="http"} 999
+`;
+
+    const stats = readServiceTrafficStats(text);
+    expect(stats.get("gatelite@docker")).toEqual({
+      totalRequests: 145,
+      requestBytes: 128,
+      responseBytes: 4096
+    });
   });
 
   it("calculates counter rates while tolerating resets and first samples", () => {

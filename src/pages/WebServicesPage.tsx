@@ -669,13 +669,14 @@ function DiscoveredRouteTable({
         </div>
       </div>
       {open ? <div className="overflow-x-auto">
-        <Table className="min-w-[1040px]">
+        <Table className="min-w-[1120px]">
           <TableHeader className="bg-muted/65">
             <TableRow className="hover:bg-transparent">
               <TableHead className="min-w-[250px]">{t("Frontend domain", "前端域名")}</TableHead>
               <TableHead className="min-w-[230px]">{t("Backend IP:port", "后端 IP:端口")}</TableHead>
               <TableHead className="w-40">{t("Source", "来源")}</TableHead>
               <TableHead className="w-28">{t("Status", "状态")}</TableHead>
+              <TableHead className="w-20 text-right">QPS</TableHead>
               <TableHead className="w-24 text-right">
                 <span className="inline-flex items-center gap-1">
                   <MetricInfoTooltip />
@@ -725,6 +726,9 @@ function DiscoveredRouteTable({
                     </div>
                   </TableCell>
                   <TableCell className="text-right">
+                    <QpsValue traffic={route.traffic} />
+                  </TableCell>
+                  <TableCell className="text-right">
                     <TrafficValue traffic={route.traffic} direction="down" />
                   </TableCell>
                   <TableCell className="text-right">
@@ -755,7 +759,7 @@ function DiscoveredRouteTable({
             })}
             {routes.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={8} className="h-24 text-center text-sm text-muted-foreground">
+                <TableCell colSpan={9} className="h-24 text-center text-sm text-muted-foreground">
                   {t("No Traefik HTTP routers were discovered.", "没有发现 Traefik HTTP 路由。")}
                 </TableCell>
               </TableRow>
@@ -808,7 +812,7 @@ function RouteDataTable({
   return (
     <div className="overflow-hidden rounded-xl border bg-card/80">
       <div className="overflow-x-auto">
-        <Table className="min-w-[940px]">
+        <Table className="min-w-[1020px]">
           <TableHeader className="bg-muted/65">
             <TableRow className="hover:bg-transparent">
               <TableHead className="w-6 px-1" />
@@ -819,6 +823,7 @@ function RouteDataTable({
               <TableHead className="min-w-[210px]">{t("Backend IP:port", "后端 IP:端口")}</TableHead>
               <TableHead className="min-w-[150px]">{t("Rule", "规则")}</TableHead>
               <TableHead className="w-28">{t("Status", "状态")}</TableHead>
+              <TableHead className="w-20 text-right">QPS</TableHead>
               <TableHead className="w-24 text-right">
                 <span className="inline-flex items-center gap-1">
                   <MetricInfoTooltip />
@@ -844,7 +849,7 @@ function RouteDataTable({
               <Fragment key={section.root}>
                 {section.showHeader ? (
                   <TableRow key={`${section.root}:heading`} className="bg-muted/25 hover:bg-muted/25">
-                    <TableCell colSpan={10} className="h-9 px-3 py-1.5">
+                    <TableCell colSpan={11} className="h-9 px-3 py-1.5">
                       <div className="flex min-w-0 items-center justify-between gap-3">
                         <div className="flex min-w-0 items-center gap-2">
                           <span className="text-xs text-muted-foreground">{t("Main domain", "主域名")}</span>
@@ -883,7 +888,7 @@ function RouteDataTable({
             ))}
             {routes.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={10} className="h-24 text-center text-sm text-muted-foreground">
+                <TableCell colSpan={11} className="h-24 text-center text-sm text-muted-foreground">
                   {t("No visible rules in this domain view. Expand groups or add a rule.", "这个域名视图里没有可见规则。可以展开分组或新增规则。")}
                 </TableCell>
               </TableRow>
@@ -1006,6 +1011,9 @@ function RouteTableRow({
         </div>
       </TableCell>
       <TableCell className="text-right">
+        <QpsValue traffic={traffic} />
+      </TableCell>
+      <TableCell className="text-right">
         <TrafficValue traffic={traffic} direction="down" />
       </TableCell>
       <TableCell className="text-right">
@@ -1089,11 +1097,26 @@ function MetricInfoTooltip() {
       </TooltipTrigger>
       <TooltipContent side="top" className="block max-w-sm text-left leading-relaxed">
         {t(
-          "Imported read-only routes show up/down traffic only after Traefik Prometheus metrics are enabled and GateLite can read TRAEFIK_API_URL/metrics. Enable Prometheus metrics and router/service labels in Traefik, then refresh GateLite. Per-domain live connections are not exposed by Traefik; use the dashboard entrypoint connection count instead.",
-          "导入的只读路由只有在 Traefik 已启用 Prometheus metrics，且 GateLite 能读取 TRAEFIK_API_URL/metrics 后，才会显示上下行。请在 Traefik 的 traffic/metrics 中启用 Prometheus 指标，并打开 router/service 标签后刷新 GateLite。实时连接数没有域名/路由维度，只能看仪表盘里的入口连接数。"
+          "Imported read-only routes show QPS and up/down traffic when Traefik Prometheus metrics expose router or service counters and GateLite can read TRAEFIK_API_URL/metrics. Enable Prometheus metrics with router/service labels for the most detailed view, then refresh GateLite. Per-domain live connections are not exposed by Traefik; use the dashboard entrypoint connection count instead.",
+          "导入的只读路由只有在 Traefik Prometheus metrics 暴露 router 或 service 计数器，且 GateLite 能读取 TRAEFIK_API_URL/metrics 后，才会显示 QPS 和上下行。想看最细的信息，请在 Traefik 的 traffic/metrics 中启用 Prometheus 指标和 router/service 标签后刷新 GateLite。实时连接数没有域名/路由维度，只能看仪表盘里的入口连接数。"
         )}
       </TooltipContent>
     </Tooltip>
+  );
+}
+
+function QpsValue({ traffic }: { traffic?: WebServiceTrafficStats }) {
+  const { t } = useLanguage();
+
+  if (!traffic || traffic.source === "unavailable") {
+    return <UnavailableMetric caption={t("metrics not connected", "未接入指标")} />;
+  }
+
+  return (
+    <span className="grid justify-items-end gap-0 leading-tight">
+      <span className="font-mono text-[13px] text-emerald-100">{formatNumber(traffic.requestsPerSecond, 2)}</span>
+      <span className="font-mono text-[10px] text-muted-foreground">{t(`${formatNumber(traffic.totalRequests, 0)} req`, `${formatNumber(traffic.totalRequests, 0)} 次`)}</span>
+    </span>
   );
 }
 
@@ -1171,8 +1194,9 @@ function RouteDetails({ route }: { route: DomainRoute }) {
         <DetailCell label={t("Observability", "观测")} value={observabilityText(service, t)} />
       </div>
 
-      <div className="grid gap-3 rounded-xl border bg-background/35 p-4 text-sm md:grid-cols-4">
+      <div className="grid gap-3 rounded-xl border bg-background/35 p-4 text-sm md:grid-cols-5">
         <DetailCell label={t("Requests", "请求数")} value={requestDetailText(traffic, t)} mono />
+        <DetailCell label="QPS" value={qpsDetailText(traffic, t)} mono />
         <DetailCell label={t("Downstream", "下行")} value={trafficDetailText(traffic, "down", t)} mono />
         <DetailCell label={t("Upstream", "上行")} value={trafficDetailText(traffic, "up", t)} mono />
         <DetailCell label={t("Live connections", "实时连接")} value={connectionDetailText(traffic, t, isExternalReadOnly)} mono />
@@ -1191,6 +1215,11 @@ function RouteDetails({ route }: { route: DomainRoute }) {
 function requestDetailText(traffic: WebServiceTrafficStats | undefined, t: (english: string, chinese: string) => string): string {
   if (!traffic || traffic.source === "unavailable") return t("N/A (metrics not connected)", "N/A（未接入指标）");
   return String(traffic.totalRequests);
+}
+
+function qpsDetailText(traffic: WebServiceTrafficStats | undefined, t: (english: string, chinese: string) => string): string {
+  if (!traffic || traffic.source === "unavailable") return t("N/A (metrics not connected)", "N/A（未接入指标）");
+  return formatNumber(traffic.requestsPerSecond, 2);
 }
 
 function trafficDetailText(traffic: WebServiceTrafficStats | undefined, direction: "down" | "up", t: (english: string, chinese: string) => string): string {
@@ -1972,6 +2001,14 @@ function formatBackendTarget(value: string): { hostPort: string; scheme: string 
       scheme: normalized.startsWith("https://") ? "https" : normalized.startsWith("http://") ? "http" : "custom"
     };
   }
+}
+
+function formatNumber(value: number, maximumFractionDigits: number): string {
+  if (!Number.isFinite(value)) return "0";
+  return new Intl.NumberFormat(undefined, {
+    maximumFractionDigits,
+    minimumFractionDigits: value > 0 && value < 1 ? Math.min(2, maximumFractionDigits) : 0
+  }).format(value);
 }
 
 function formatBytes(value: number): string {

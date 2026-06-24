@@ -288,6 +288,7 @@ export interface WebServiceTrafficStats {
   source: "prometheus" | "unavailable";
   updatedAt: string;
   totalRequests: number;
+  requestsPerSecond: number;
   requestBytes: number;
   responseBytes: number;
   requestBytesPerSecond: number;

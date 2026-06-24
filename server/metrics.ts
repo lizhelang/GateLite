@@ -7,8 +7,9 @@ type TrafficSample = {
   total: number;
 };
 
-type RouterByteSample = {
+type MetricTrafficSample = {
   atMs: number;
+  totalRequests: number;
   requestBytes: number;
   responseBytes: number;
 };
@@ -21,9 +22,9 @@ type ParsedMetric = {
 
 const maxSamples = 12;
 const samplesByDomain = new Map<string, TrafficSample[]>();
-const byteSamplesByRouter = new Map<string, RouterByteSample>();
+const trafficSamplesByMetricKey = new Map<string, MetricTrafficSample>();
 
-type RouterTrafficStats = {
+type TraefikTrafficStats = {
   totalRequests: number;
   requestBytes: number;
   responseBytes: number;
@@ -44,10 +45,10 @@ export async function getTrafficSnapshot(services: WebService[]): Promise<Traffi
   try {
     const text = await fetchTraefikMetrics();
     const routerStats = readRouterTrafficStats(text);
-    const routerTotals = new Map(Array.from(routerStats.entries()).map(([router, stats]) => [router, stats.totalRequests]));
+    const serviceStats = readServiceTrafficStats(text);
     const serviceOpenConnections = readServiceOpenConnections(text);
     const openConnectionsByEntrypoint = readEntrypointOpenConnections(text);
-    const series = buildDomainSeries(services, routerTotals, updatedAt);
+    const series = buildDomainSeries(services, routerStats, serviceStats, updatedAt);
 
     return {
       overview: {
@@ -59,7 +60,7 @@ export async function getTrafficSnapshot(services: WebService[]): Promise<Traffi
           .map(([entryPoint, openConnections]) => ({ entryPoint, openConnections }))
           .sort((a, b) => a.entryPoint.localeCompare(b.entryPoint))
       },
-      statsByServiceId: buildServiceTrafficStats(services, routerStats, serviceOpenConnections, openConnectionsByEntrypoint, updatedAt, "prometheus")
+      statsByServiceId: buildServiceTrafficStats(services, routerStats, serviceStats, serviceOpenConnections, openConnectionsByEntrypoint, updatedAt, "prometheus")
     };
   } catch (error) {
     return {
@@ -71,7 +72,7 @@ export async function getTrafficSnapshot(services: WebService[]): Promise<Traffi
         entrypointConnections: [],
         error: error instanceof Error ? error.message : "Unable to load Traefik metrics."
       },
-      statsByServiceId: buildServiceTrafficStats(services, new Map(), new Map(), new Map(), updatedAt, "unavailable")
+      statsByServiceId: buildServiceTrafficStats(services, new Map(), new Map(), new Map(), new Map(), updatedAt, "unavailable")
     };
   }
 }
@@ -89,24 +90,38 @@ export function readRouterRequestTotals(text: string): Map<string, number> {
   return totals;
 }
 
-export function readRouterTrafficStats(text: string): Map<string, RouterTrafficStats> {
-  const stats = new Map<string, RouterTrafficStats>();
+export function readRouterTrafficStats(text: string): Map<string, TraefikTrafficStats> {
+  return readTrafficStats(text, "router");
+}
+
+export function readServiceTrafficStats(text: string): Map<string, TraefikTrafficStats> {
+  return readTrafficStats(text, "service");
+}
+
+function readTrafficStats(text: string, scope: "router" | "service"): Map<string, TraefikTrafficStats> {
+  const stats = new Map<string, TraefikTrafficStats>();
+  const labelName = scope;
+  const metricNames = new Set([
+    `traefik_${scope}_requests_total`,
+    `traefik_${scope}_requests_bytes_total`,
+    `traefik_${scope}_responses_bytes_total`
+  ]);
 
   for (const metric of parsePrometheusMetrics(text)) {
-    const router = metric.labels.router;
-    if (!router || !Number.isFinite(metric.value)) continue;
-    if (!["traefik_router_requests_total", "traefik_router_requests_bytes_total", "traefik_router_responses_bytes_total"].includes(metric.name)) continue;
+    const metricKey = metric.labels[labelName];
+    if (!metricKey || !Number.isFinite(metric.value)) continue;
+    if (!metricNames.has(metric.name)) continue;
 
-    const current = stats.get(router) || {
+    const current = stats.get(metricKey) || {
       totalRequests: 0,
       requestBytes: 0,
       responseBytes: 0
     };
 
-    if (metric.name === "traefik_router_requests_total") current.totalRequests += metric.value;
-    if (metric.name === "traefik_router_requests_bytes_total") current.requestBytes += metric.value;
-    if (metric.name === "traefik_router_responses_bytes_total") current.responseBytes += metric.value;
-    stats.set(router, current);
+    if (metric.name === `traefik_${scope}_requests_total`) current.totalRequests += metric.value;
+    if (metric.name === `traefik_${scope}_requests_bytes_total`) current.requestBytes += metric.value;
+    if (metric.name === `traefik_${scope}_responses_bytes_total`) current.responseBytes += metric.value;
+    stats.set(metricKey, current);
   }
 
   return stats;
@@ -165,7 +180,8 @@ export function parsePrometheusMetrics(text: string): ParsedMetric[] {
 
 function buildServiceTrafficStats(
   services: WebService[],
-  routerStats: Map<string, RouterTrafficStats>,
+  routerStats: Map<string, TraefikTrafficStats>,
+  serviceStats: Map<string, TraefikTrafficStats>,
   serviceOpenConnections: Map<string, number>,
   openConnectionsByEntrypoint: Map<string, number>,
   updatedAt: string,
@@ -177,9 +193,15 @@ function buildServiceTrafficStats(
     const routerName = runtimeRouterNameForService(service);
     const routerKey = findMetricKey(routerStats, [routerName, `${routerName}@file`, routerName.replace(/@file$/, "")]);
     const traefikServiceName = runtimeServiceNameForService(service);
+    const serviceStatsKey = findMetricKey(serviceStats, [traefikServiceName, `${traefikServiceName}@file`, traefikServiceName.replace(/@file$/, "")]);
     const traefikServiceKey = findMetricKey(serviceOpenConnections, [traefikServiceName, `${traefikServiceName}@file`, traefikServiceName.replace(/@file$/, "")]);
-    const rowSource: WebServiceTrafficStats["source"] = source === "prometheus" && routerKey ? "prometheus" : "unavailable";
+    const metricKey = routerKey || serviceStatsKey;
+    const rowSource: WebServiceTrafficStats["source"] = source === "prometheus" && metricKey ? "prometheus" : "unavailable";
     const stats = routerKey ? routerStats.get(routerKey) || {
+      totalRequests: 0,
+      requestBytes: 0,
+      responseBytes: 0
+    } : serviceStatsKey ? serviceStats.get(serviceStatsKey) || {
       totalRequests: 0,
       requestBytes: 0,
       responseBytes: 0
@@ -188,8 +210,9 @@ function buildServiceTrafficStats(
       requestBytes: 0,
       responseBytes: 0
     };
-    const previous = routerKey ? byteSamplesByRouter.get(routerKey) : undefined;
+    const previous = metricKey ? trafficSamplesByMetricKey.get(metricKey) : undefined;
     const currentAtMs = new Date(updatedAt).getTime();
+    const requestsPerSecond = rowSource === "prometheus" && previous ? counterRatePerSecond(previous.totalRequests, stats.totalRequests, currentAtMs - previous.atMs) : 0;
     const requestBytesPerSecond = rowSource === "prometheus" && previous ? counterRatePerSecond(previous.requestBytes, stats.requestBytes, currentAtMs - previous.atMs) : 0;
     const responseBytesPerSecond = rowSource === "prometheus" && previous ? counterRatePerSecond(previous.responseBytes, stats.responseBytes, currentAtMs - previous.atMs) : 0;
     const hasServiceOpenConnections = rowSource === "prometheus" && traefikServiceKey ? serviceOpenConnections.has(traefikServiceKey) : false;
@@ -200,6 +223,7 @@ function buildServiceTrafficStats(
       source: rowSource,
       updatedAt,
       totalRequests: stats.totalRequests,
+      requestsPerSecond,
       requestBytes: stats.requestBytes,
       responseBytes: stats.responseBytes,
       requestBytesPerSecond,
@@ -208,9 +232,10 @@ function buildServiceTrafficStats(
       openConnectionsScope: rowSource === "unavailable" ? "unavailable" : hasServiceOpenConnections ? "service" : "entrypoint"
     });
 
-    if (rowSource === "prometheus" && routerKey) {
-      byteSamplesByRouter.set(routerKey, {
+    if (rowSource === "prometheus" && metricKey) {
+      trafficSamplesByMetricKey.set(metricKey, {
         atMs: currentAtMs,
+        totalRequests: stats.totalRequests,
         requestBytes: stats.requestBytes,
         responseBytes: stats.responseBytes
       });
@@ -224,21 +249,25 @@ function findMetricKey<T>(metrics: Map<string, T>, candidates: string[]): string
   return candidates.find((candidate) => candidate && metrics.has(candidate));
 }
 
-function buildDomainSeries(services: WebService[], routerTotals: Map<string, number>, at: string): DomainTrafficSeries[] {
+function buildDomainSeries(services: WebService[], routerStats: Map<string, TraefikTrafficStats>, serviceStats: Map<string, TraefikTrafficStats>, at: string): DomainTrafficSeries[] {
   const series: DomainTrafficSeries[] = [];
 
   for (const service of services.filter((item) => item.enabled)) {
-    const router = runtimeRouterNameForService(service);
-    const total = routerTotals.get(router) ?? routerTotals.get(`${router}@file`) ?? routerTotals.get(router.replace(/@file$/, "")) ?? 0;
+    const routerName = runtimeRouterNameForService(service);
+    const routerKey = findMetricKey(routerStats, [routerName, `${routerName}@file`, routerName.replace(/@file$/, "")]);
+    const serviceName = runtimeServiceNameForService(service);
+    const serviceKey = findMetricKey(serviceStats, [serviceName, `${serviceName}@file`, serviceName.replace(/@file$/, "")]);
+    const metricKey = routerKey || serviceKey;
+    const total = (routerKey ? routerStats.get(routerKey)?.totalRequests : serviceKey ? serviceStats.get(serviceKey)?.totalRequests : undefined) ?? 0;
     for (const domain of service.domains) {
       const samples = recordSample(domain, total, at);
       series.push({
         domain,
-        router,
-        provider: service.sourceProvider || (router.endsWith("@file") ? "file" : undefined),
+        router: routerName,
+        provider: service.sourceProvider || (routerName.endsWith("@file") ? "file" : undefined),
         source: "prometheus",
         totalRequests: total,
-        points: samplesToDeltas(samples)
+        points: metricKey ? samplesToDeltas(samples) : Array.from({ length: Math.max(samples.length, 1) }, () => ({ at, value: 0 }))
       });
     }
   }
