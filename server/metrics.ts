@@ -175,28 +175,29 @@ function buildServiceTrafficStats(
 
   for (const service of services) {
     const routerName = runtimeRouterNameForService(service);
-    const routerKey = routerStats.has(routerName) ? routerName : routerStats.has(`${routerName}@file`) ? `${routerName}@file` : routerName.replace(/@file$/, "");
+    const routerKey = findMetricKey(routerStats, [routerName, `${routerName}@file`, routerName.replace(/@file$/, "")]);
     const traefikServiceName = runtimeServiceNameForService(service);
-    const traefikServiceKey = serviceOpenConnections.has(traefikServiceName)
-      ? traefikServiceName
-      : serviceOpenConnections.has(`${traefikServiceName}@file`)
-        ? `${traefikServiceName}@file`
-        : traefikServiceName.replace(/@file$/, "");
-    const stats = routerStats.get(routerKey) || {
+    const traefikServiceKey = findMetricKey(serviceOpenConnections, [traefikServiceName, `${traefikServiceName}@file`, traefikServiceName.replace(/@file$/, "")]);
+    const rowSource: WebServiceTrafficStats["source"] = source === "prometheus" && routerKey ? "prometheus" : "unavailable";
+    const stats = routerKey ? routerStats.get(routerKey) || {
+      totalRequests: 0,
+      requestBytes: 0,
+      responseBytes: 0
+    } : {
       totalRequests: 0,
       requestBytes: 0,
       responseBytes: 0
     };
-    const previous = byteSamplesByRouter.get(routerKey);
+    const previous = routerKey ? byteSamplesByRouter.get(routerKey) : undefined;
     const currentAtMs = new Date(updatedAt).getTime();
-    const requestBytesPerSecond = source === "prometheus" && previous ? counterRatePerSecond(previous.requestBytes, stats.requestBytes, currentAtMs - previous.atMs) : 0;
-    const responseBytesPerSecond = source === "prometheus" && previous ? counterRatePerSecond(previous.responseBytes, stats.responseBytes, currentAtMs - previous.atMs) : 0;
-    const hasServiceOpenConnections = source === "prometheus" && serviceOpenConnections.has(traefikServiceKey);
+    const requestBytesPerSecond = rowSource === "prometheus" && previous ? counterRatePerSecond(previous.requestBytes, stats.requestBytes, currentAtMs - previous.atMs) : 0;
+    const responseBytesPerSecond = rowSource === "prometheus" && previous ? counterRatePerSecond(previous.responseBytes, stats.responseBytes, currentAtMs - previous.atMs) : 0;
+    const hasServiceOpenConnections = rowSource === "prometheus" && traefikServiceKey ? serviceOpenConnections.has(traefikServiceKey) : false;
     const entrypointOpenConnections = service.entryPoints.reduce((total, entrypoint) => total + (openConnectionsByEntrypoint.get(entrypoint) || 0), 0);
-    const openConnections = hasServiceOpenConnections ? serviceOpenConnections.get(traefikServiceKey) || 0 : entrypointOpenConnections;
+    const openConnections = hasServiceOpenConnections && traefikServiceKey ? serviceOpenConnections.get(traefikServiceKey) || 0 : entrypointOpenConnections;
 
     statsByServiceId.set(service.id, {
-      source,
+      source: rowSource,
       updatedAt,
       totalRequests: stats.totalRequests,
       requestBytes: stats.requestBytes,
@@ -204,10 +205,10 @@ function buildServiceTrafficStats(
       requestBytesPerSecond,
       responseBytesPerSecond,
       openConnections,
-      openConnectionsScope: source === "unavailable" ? "unavailable" : hasServiceOpenConnections ? "service" : "entrypoint"
+      openConnectionsScope: rowSource === "unavailable" ? "unavailable" : hasServiceOpenConnections ? "service" : "entrypoint"
     });
 
-    if (source === "prometheus") {
+    if (rowSource === "prometheus" && routerKey) {
       byteSamplesByRouter.set(routerKey, {
         atMs: currentAtMs,
         requestBytes: stats.requestBytes,
@@ -217,6 +218,10 @@ function buildServiceTrafficStats(
   }
 
   return statsByServiceId;
+}
+
+function findMetricKey<T>(metrics: Map<string, T>, candidates: string[]): string | undefined {
+  return candidates.find((candidate) => candidate && metrics.has(candidate));
 }
 
 function buildDomainSeries(services: WebService[], routerTotals: Map<string, number>, at: string): DomainTrafficSeries[] {
