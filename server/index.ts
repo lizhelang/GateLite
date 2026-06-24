@@ -494,7 +494,7 @@ async function dashboardPayload(): Promise<DashboardPayload> {
 
 function serveCompressedStaticAsset(request: express.Request, response: express.Response, next: express.NextFunction) {
   if (request.method !== "GET" && request.method !== "HEAD") return next();
-  if (!request.acceptsEncodings("gzip")) return next();
+  if (!allowsGzipAsset(request)) return next();
   if (!/^\/assets\/.+\.(?:js|css)$/i.test(request.path)) return next();
 
   const filePath = safeDistPath(request.path);
@@ -520,6 +520,13 @@ function serveCompressedStaticAsset(request: express.Request, response: express.
   } catch {
     return next();
   }
+}
+
+function allowsGzipAsset(request: express.Request): boolean {
+  const header = request.headers["accept-encoding"];
+  const value = Array.isArray(header) ? header.join(",") : header;
+  if (value === undefined || value.trim() === "") return true;
+  return Boolean(request.acceptsEncodings("gzip"));
 }
 
 function safeDistPath(requestPath: string): string | undefined {
