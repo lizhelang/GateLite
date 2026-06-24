@@ -133,8 +133,8 @@ export function createCertificateFromInput(input: CertificateInput): Certificate
     domains: parsed?.domains.length ? parsed.domains : domains,
     certPath,
     keyPath,
-    status: parsed?.status ?? (input.source === "acme" ? "pending" : "invalid"),
-    statusMessage: parsed?.statusMessage ?? (input.source === "acme" ? "Resolver configuration pending local validation." : "Certificate file is not readable."),
+    status: parsed?.status ?? pendingStatusForSource(input.source),
+    statusMessage: parsed?.statusMessage ?? statusMessageForUnreadableSource(input.source),
     notBefore: parsed?.notBefore,
     notAfter: parsed?.notAfter,
     issuer: parsed?.issuer,
@@ -201,8 +201,8 @@ export function updateCertificateFromInput(current: CertificateItem, input: Part
     domains: parsed?.domains.length ? parsed.domains : domains,
     certPath: readableCertPath,
     keyPath: readableKeyPath,
-    status: parsed?.status ?? (source === "acme" ? "pending" : "invalid"),
-    statusMessage: parsed?.statusMessage ?? (source === "acme" ? "Resolver configuration pending local validation." : "Certificate file is not readable."),
+    status: parsed?.status ?? pendingStatusForSource(source),
+    statusMessage: parsed?.statusMessage ?? statusMessageForUnreadableSource(source),
     notBefore: parsed?.notBefore,
     notAfter: parsed?.notAfter,
     issuer: parsed?.issuer,
@@ -216,8 +216,8 @@ export function refreshCertificateMetadata(certificate: CertificateItem): Certif
   if (!certificate.certPath || !fs.existsSync(certificate.certPath)) {
     return {
       ...certificate,
-      status: certificate.source === "acme" ? "pending" : "invalid",
-      statusMessage: certificate.source === "acme" ? "ACME resolver certificates are issued by Traefik at runtime." : "Certificate file is missing."
+      status: pendingStatusForSource(certificate.source),
+      statusMessage: statusMessageForUnreadableSource(certificate.source)
     };
   }
 
@@ -262,6 +262,29 @@ export function parseCertificate(certPath: string, fallbackDomains: string[] = [
       statusMessage: error instanceof Error ? error.message : "Unable to parse certificate."
     };
   }
+}
+
+export function refreshCertificateFromAction(certificate: CertificateItem): CertificateItem {
+  const now = new Date().toISOString();
+  const next = refreshCertificateMetadata({
+    ...certificate,
+    updatedAt: now,
+    sync: certificate.source === "sync" ? { ...(certificate.sync || {}), lastSyncTime: now } : certificate.sync
+  });
+  return {
+    ...next,
+    updatedAt: now
+  };
+}
+
+function pendingStatusForSource(source: CertificateInput["source"]): CertificateStatus {
+  return source === "acme" || source === "sync" ? "pending" : "invalid";
+}
+
+function statusMessageForUnreadableSource(source: CertificateInput["source"]): string {
+  if (source === "acme") return "ACME resolver certificates are issued by Traefik at runtime.";
+  if (source === "sync") return "Certificate sync target is registered; no local certificate bundle has been received yet.";
+  return "Certificate file is missing.";
 }
 
 function readLineValue(output: string, prefix: string): string | undefined {

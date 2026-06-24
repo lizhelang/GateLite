@@ -6,7 +6,7 @@ import { afterAll, describe, expect, it } from "vitest";
 const certDir = fs.mkdtempSync(path.join(os.tmpdir(), "gatelite-certs-"));
 process.env.GATELITE_CERT_DIR = certDir;
 
-const { createCertificateFromInput } = await import("../server/certificates");
+const { createCertificateFromInput, refreshCertificateFromAction } = await import("../server/certificates");
 
 afterAll(() => {
   fs.rmSync(certDir, { recursive: true, force: true });
@@ -25,5 +25,23 @@ describe("createCertificateFromInput", () => {
     expect(certificate.enabled).toBe(false);
     expect(certificate.source).toBe("self-signed");
     expect(certificate.domains).toContain("disabled.localhost");
+  });
+
+  it("treats sync certificates as pending and records refresh time", () => {
+    const certificate = createCertificateFromInput({
+      name: "Sync target",
+      enabled: true,
+      source: "sync",
+      domains: ["sync.localhost"],
+      sync: { target: "https://peer.example.com/api/ssl/sync" }
+    });
+
+    expect(certificate.status).toBe("pending");
+    expect(certificate.statusMessage).toContain("sync target");
+
+    const refreshed = refreshCertificateFromAction(certificate);
+
+    expect(refreshed.status).toBe("pending");
+    expect(refreshed.sync?.lastSyncTime).toBeTruthy();
   });
 });

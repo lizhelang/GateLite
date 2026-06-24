@@ -35,6 +35,7 @@ try {
   created.certificateId = certificate.id;
   await downloadAndVerifyCertificate(certificate.id);
   await reorderAndVerifyCertificates(certificate.id);
+  await createRefreshAndDeleteSyncCertificate();
 
   const httpService = await createAndVerifyHttpService(group.id);
   created.httpServiceId = httpService.id;
@@ -174,6 +175,33 @@ async function reorderAndVerifyCertificates(certificateId) {
     throw new Error("Certificate reorder was not persisted.");
   }
   console.log("[ok] Certificate reorder persists list order.");
+}
+
+async function createRefreshAndDeleteSyncCertificate() {
+  const certificate = await apiJson("/api/certificates", {
+    method: "POST",
+    body: {
+      name: `CRUD sync ${suffix}`,
+      enabled: true,
+      source: "sync",
+      domains: [`sync-${suffix}.localhost`],
+      sync: { target: `https://peer.example.com/sync/${suffix}` }
+    },
+    expectedStatus: 201
+  });
+  if (certificate.status !== "pending" || certificate.sync?.target !== `https://peer.example.com/sync/${suffix}`) {
+    throw new Error("Sync certificate was not registered as a pending sync target.");
+  }
+
+  const refreshed = await apiJson(`/api/certificates/${certificate.id}/refresh`, {
+    method: "PATCH"
+  });
+  if (refreshed.status !== "pending" || !refreshed.sync?.lastSyncTime) {
+    throw new Error("Sync certificate refresh did not preserve pending status and record lastSyncTime.");
+  }
+
+  await apiNoContent(`/api/certificates/${certificate.id}`, "DELETE");
+  console.log("[ok] Sync certificate target registration and refresh status action work.");
 }
 
 async function createAndVerifyHttpService(groupId) {

@@ -86,6 +86,8 @@ GateLite MVP mapping:
 - ACME resolver reference for Traefik-managed issuance.
 - Certificate status from `openssl x509` metadata where files are available.
 - Expiry status: valid, expiring, expired, pending, invalid.
+- Refresh/sync status action -> row-level certificate status refresh that
+  re-reads local PEM metadata and records `lastSyncTime` for sync targets.
 - Binding view from Web services using a certificate ID.
 - ACME resolver binding view from Web services using the same resolver name.
 - PEM bundle download for locally readable certificate/key pairs.

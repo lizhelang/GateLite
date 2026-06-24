@@ -1,7 +1,7 @@
-import { ArrowRight, CalendarClock, Copy, Download, FileKey2, GripVertical, KeyRound, Pencil, Plus, Power, Trash2, Upload } from "lucide-react";
+import { ArrowRight, CalendarClock, Copy, Download, FileKey2, GripVertical, KeyRound, Pencil, Plus, Power, RefreshCw, Trash2, Upload } from "lucide-react";
 import { FormEvent, useMemo, useState, type ReactNode } from "react";
 import type { CertificateWithBindings, DashboardPayload } from "../../shared/types";
-import { createCertificate, deleteCertificate, reorderCertificates, toggleCertificate, updateCertificate, type CertificateInput } from "../api";
+import { createCertificate, deleteCertificate, refreshCertificate, reorderCertificates, toggleCertificate, updateCertificate, type CertificateInput } from "../api";
 import { Modal } from "../components/Modal";
 import { StatusBadge } from "../components/StatusBadge";
 import { Badge } from "@/components/ui/badge";
@@ -169,6 +169,16 @@ export function CertificatesPage({ dashboard, onRefresh }: CertificatesPageProps
     window.location.href = `/api/certificates/${certificate.id}/download`;
   };
 
+  const handleRefresh = async (certificate: CertificateWithBindings) => {
+    setError(null);
+    try {
+      await refreshCertificate(certificate.id);
+      await onRefresh();
+    } catch (refreshError) {
+      setError(refreshError instanceof Error ? refreshError.message : t("Refresh failed.", "刷新失败。"));
+    }
+  };
+
   const handleSelectCertificate = (id: string, checked: boolean) => {
     setSelectedIds((ids) => {
       if (checked) return ids.includes(id) ? ids : [...ids, id];
@@ -242,6 +252,7 @@ export function CertificatesPage({ dashboard, onRefresh }: CertificatesPageProps
         onBulkToggle={handleBulkToggle}
         onDuplicate={openDuplicate}
         onDownload={handleDownload}
+        onRefreshStatus={handleRefresh}
         onDetails={setDetails}
         onEdit={openEdit}
         onDelete={handleDelete}
@@ -299,6 +310,7 @@ function CertificateDataTable({
   onBulkToggle,
   onDuplicate,
   onDownload,
+  onRefreshStatus,
   onDetails,
   onEdit,
   onDelete
@@ -314,6 +326,7 @@ function CertificateDataTable({
   onBulkToggle: (enabled: boolean) => Promise<void>;
   onDuplicate: (certificate: CertificateWithBindings) => void;
   onDownload: (certificate: CertificateWithBindings) => void;
+  onRefreshStatus: (certificate: CertificateWithBindings) => Promise<void>;
   onDetails: (certificate: CertificateWithBindings) => void;
   onEdit: (certificate: CertificateWithBindings) => void;
   onDelete: (certificate: CertificateWithBindings) => Promise<void>;
@@ -325,7 +338,7 @@ function CertificateDataTable({
   return (
     <div className="overflow-hidden rounded-xl border bg-card/70">
       <div className="overflow-x-auto">
-        <Table className="min-w-[1160px]">
+        <Table className="min-w-[1240px]">
           <TableHeader className="bg-muted/50">
             <TableRow className="hover:bg-transparent">
               <TableHead className="w-8" />
@@ -339,7 +352,7 @@ function CertificateDataTable({
               <TableHead className="w-[11rem]">{t("Validity", "有效期")}</TableHead>
               <TableHead className="w-[11rem]">{t("Bindings", "绑定")}</TableHead>
               <TableHead className="w-[11rem]">{t("Status", "状态")}</TableHead>
-              <TableHead className="w-40 text-right">{t("Actions", "操作")}</TableHead>
+              <TableHead className="w-48 text-right">{t("Actions", "操作")}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -414,6 +427,9 @@ function CertificateDataTable({
                       <Button variant="outline" size="icon-xs" onClick={() => onDownload(certificate)} disabled={!certificate.certPath} aria-label={t("Download PEM", "下载 PEM")}>
                         <Download className="size-3.5" />
                       </Button>
+                      <Button variant="outline" size="icon-xs" onClick={() => void onRefreshStatus(certificate)} aria-label={t("Refresh certificate status", "刷新证书状态")}>
+                        <RefreshCw className="size-3.5" />
+                      </Button>
                       <Button variant="outline" size="icon-xs" onClick={() => onEdit(certificate)} aria-label={t("Edit certificate", "编辑证书")}>
                         <Pencil className="size-3.5" />
                       </Button>
@@ -462,6 +478,7 @@ function CertificateDetails({ certificate }: { certificate: CertificateWithBindi
         <DetailCell icon={<CalendarClock className="size-4" />} label={t("Validity", "有效期")} value={`${certificate.notBefore ? formatDate(certificate.notBefore) : t("Unknown", "未知")} ${t("to", "至")} ${certificate.notAfter ? formatDate(certificate.notAfter) : t("Unknown", "未知")}`} />
         <DetailCell label={t("Bound rules", "绑定规则")} value={bindingSummary(certificate, t)} />
         <DetailCell label={t("Status detail", "状态详情")} value={certificate.statusMessage || certificate.status} />
+        <DetailCell label={t("Source detail", "来源详情")} value={sourceDetail(certificate, t)} />
       </div>
       <div>
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
@@ -808,6 +825,15 @@ function storagePrimary(certificate: CertificateWithBindings, t: (english: strin
   return t("Not readable", "不可读");
 }
 
+function sourceDetail(certificate: CertificateWithBindings, t: (english: string, chinese: string) => string): string {
+  if (certificate.source === "sync") {
+    const lastSync = certificate.sync?.lastSyncTime ? formatDateTime(certificate.sync.lastSyncTime) : t("Never refreshed", "尚未刷新");
+    return `${certificate.sync?.target || t("Sync target", "同步目标")} · ${lastSync}`;
+  }
+  if (certificate.source === "acme") return `${certificate.acme?.resolver || "letsencrypt"} · ${certificate.acme?.dnsProvider || t("DNS provider not set", "未设置 DNS 提供商")}`;
+  return storagePrimary(certificate, t);
+}
+
 function tailPath(value: string): string {
   return value.split(/[\\/]/).filter(Boolean).slice(-2).join("/");
 }
@@ -824,6 +850,16 @@ function formatDate(value: string): string {
     year: "numeric",
     month: "short",
     day: "2-digit"
+  }).format(new Date(value));
+}
+
+function formatDateTime(value: string): string {
+  return new Intl.DateTimeFormat(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit"
   }).format(new Date(value));
 }
 

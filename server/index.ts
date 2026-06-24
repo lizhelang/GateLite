@@ -5,7 +5,7 @@ import { z } from "zod";
 import type { CertificateWithBindings, DashboardPayload, WebService, WebServiceWithRuntime } from "../shared/types";
 import { webServicesBoundToCertificate } from "./bindings";
 import { config } from "./config";
-import { createCertificateFromInput, updateCertificateFromInput } from "./certificates";
+import { createCertificateFromInput, refreshCertificateFromAction, updateCertificateFromInput } from "./certificates";
 import { createId, traefikName } from "./ids";
 import { getTrafficSnapshot } from "./metrics";
 import { certificateInputSchema, groupInputSchema, reorderSchema, webServiceInputSchema } from "./schemas";
@@ -183,6 +183,15 @@ app.patch("/api/certificates/:id/toggle", (request, response) => {
   certificate.updatedAt = new Date().toISOString();
   const next = saveState(state, "certificate.toggle", `${enabled ? "Enabled" : "Disabled"} certificate ${certificate.name}.`);
   response.json(next.certificates.find((item) => item.id === certificate.id));
+});
+
+app.patch("/api/certificates/:id/refresh", (request, response) => {
+  const state = loadState();
+  const index = state.certificates.findIndex((item) => item.id === request.params.id);
+  if (index === -1) return response.status(404).json({ error: "Certificate not found." });
+  state.certificates[index] = refreshCertificateFromAction(state.certificates[index]);
+  const next = saveState(state, "certificate.refresh", `Refreshed certificate ${state.certificates[index].name}.`);
+  response.json(next.certificates.find((item) => item.id === request.params.id));
 });
 
 app.post("/api/certificates/reorder", (request, response) => {

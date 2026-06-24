@@ -117,6 +117,12 @@ export async function toggleCertificate(id: string, enabled: boolean): Promise<C
   });
 }
 
+export async function refreshCertificate(id: string): Promise<CertificateWithBindings> {
+  return request<CertificateWithBindings>(`/api/certificates/${id}/refresh`, {
+    method: "PATCH"
+  });
+}
+
 export async function reorderCertificates(orderedIds: string[]): Promise<CertificateWithBindings[]> {
   return request<CertificateWithBindings[]>("/api/certificates/reorder", {
     method: "POST",
