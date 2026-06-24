@@ -102,6 +102,9 @@ GateLite MVP mapping:
   temporary PEM bundle written into the Docker-mounted certificate directory,
   then registered by path, bound to HTTPS, reached through Traefik, and
   cleaned up.
+- Existing path certificate creation is constrained to the configured
+  `GATELITE_CERT_DIR` so the Docker Traefik container can actually read those
+  files through the `/certs` mount instead of generating unusable YAML.
 - ACME resolver reference for Traefik-managed issuance.
 - Certificate status from `openssl x509` metadata where files are available.
 - Expiry status: valid, expiring, expired, pending, invalid.

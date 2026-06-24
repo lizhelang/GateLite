@@ -772,10 +772,10 @@ function CertificateForm({
         {draft.source === "path" ? (
           <>
             <Field label={t("Certificate path", "证书路径")}>
-              <Input value={draft.certPath} onChange={(event) => setDraft({ ...draft, certPath: event.target.value })} placeholder="/absolute/path/fullchain.pem" />
+              <Input value={draft.certPath} onChange={(event) => setDraft({ ...draft, certPath: event.target.value })} placeholder="runtime/certs/fullchain.pem" />
             </Field>
             <Field label={t("Private key path", "私钥路径")}>
-              <Input value={draft.keyPath} onChange={(event) => setDraft({ ...draft, keyPath: event.target.value })} placeholder="/absolute/path/privkey.pem" />
+              <Input value={draft.keyPath} onChange={(event) => setDraft({ ...draft, keyPath: event.target.value })} placeholder="runtime/certs/privkey.pem" />
             </Field>
           </>
         ) : null}

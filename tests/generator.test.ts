@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
+import path from "node:path";
 import type { GateLiteState } from "../shared/types";
 import { generateTraefikDynamicConfig } from "../server/generator";
+
+const mountedCertDir = path.resolve("runtime/certs");
 
 describe("generateTraefikDynamicConfig", () => {
   it("renders enabled HTTP and HTTPS services into Traefik dynamic config", () => {
@@ -14,8 +17,8 @@ describe("generateTraefikDynamicConfig", () => {
           enabled: true,
           source: "upload",
           domains: ["secure.localhost"],
-          certPath: "/tmp/cert-dev.crt",
-          keyPath: "/tmp/cert-dev.key",
+          certPath: path.join(mountedCertDir, "cert-dev.crt"),
+          keyPath: path.join(mountedCertDir, "cert-dev.key"),
           status: "valid",
           order: 1,
           createdAt: "2026-06-23T00:00:00.000Z",
@@ -180,8 +183,8 @@ describe("generateTraefikDynamicConfig", () => {
           enabled: false,
           source: "upload",
           domains: ["disabled.localhost"],
-          certPath: "/tmp/disabled.crt",
-          keyPath: "/tmp/disabled.key",
+          certPath: path.join(mountedCertDir, "disabled.crt"),
+          keyPath: path.join(mountedCertDir, "disabled.key"),
           status: "valid",
           order: 1,
           createdAt: "2026-06-23T00:00:00.000Z",
@@ -195,5 +198,34 @@ describe("generateTraefikDynamicConfig", () => {
 
     expect(generated).not.toContain("/certs/disabled.crt");
     expect(generated).not.toContain("/certs/disabled.key");
+  });
+
+  it("omits certificate paths that are outside the Docker-mounted certificate directory", () => {
+    const state: GateLiteState = {
+      version: 1,
+      groups: [],
+      webServices: [],
+      certificates: [
+        {
+          id: "cert-outside",
+          name: "Outside cert",
+          enabled: true,
+          source: "path",
+          domains: ["outside.localhost"],
+          certPath: "/tmp/outside.crt",
+          keyPath: "/tmp/outside.key",
+          status: "valid",
+          order: 1,
+          createdAt: "2026-06-23T00:00:00.000Z",
+          updatedAt: "2026-06-23T00:00:00.000Z"
+        }
+      ],
+      history: []
+    };
+
+    const generated = generateTraefikDynamicConfig(state).yaml;
+
+    expect(generated).not.toContain("/certs/outside.crt");
+    expect(generated).not.toContain("/certs/outside.key");
   });
 });

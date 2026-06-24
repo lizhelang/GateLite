@@ -123,6 +123,12 @@ export function createCertificateFromInput(input: CertificateInput): Certificate
     fs.writeFileSync(keyPath, input.keyPem.trim() + "\n", { encoding: "utf8", mode: 0o600 });
   }
 
+  if (input.source === "path") {
+    const readablePaths = resolveReadablePathCertificate(certPath, keyPath);
+    certPath = readablePaths.certPath;
+    keyPath = readablePaths.keyPath;
+  }
+
   const parsed = certPath && fs.existsSync(certPath) ? parseCertificate(certPath, domains) : undefined;
 
   return {
@@ -190,6 +196,12 @@ export function updateCertificateFromInput(current: CertificateItem, input: Part
       fs.writeFileSync(certPath, input.certPem.trim() + "\n", "utf8");
       fs.writeFileSync(keyPath, input.keyPem.trim() + "\n", { encoding: "utf8", mode: 0o600 });
     }
+  }
+
+  if (source === "path") {
+    const readablePaths = resolveReadablePathCertificate(certPath, keyPath);
+    certPath = readablePaths.certPath;
+    keyPath = readablePaths.keyPath;
   }
 
   const readableCertPath = source === "acme" || source === "sync" ? undefined : certPath;
@@ -285,6 +297,37 @@ function statusMessageForUnreadableSource(source: CertificateInput["source"]): s
   if (source === "acme") return "ACME resolver certificates are issued by Traefik at runtime.";
   if (source === "sync") return "Certificate sync target is registered; no local certificate bundle has been received yet.";
   return "Certificate file is missing.";
+}
+
+function resolveReadablePathCertificate(certPath: string | undefined, keyPath: string | undefined): { certPath: string; keyPath: string } {
+  if (!certPath || !keyPath) {
+    throw new Error("Certificate and private key paths are required for existing path mode.");
+  }
+
+  const resolvedCertPath = path.resolve(certPath);
+  const resolvedKeyPath = path.resolve(keyPath);
+  assertPathIsMountedCertificateFile(resolvedCertPath, "Certificate path");
+  assertPathIsMountedCertificateFile(resolvedKeyPath, "Private key path");
+
+  return {
+    certPath: resolvedCertPath,
+    keyPath: resolvedKeyPath
+  };
+}
+
+function assertPathIsMountedCertificateFile(filePath: string, label: string): void {
+  const certDir = path.resolve(config.certDir);
+  const relative = path.relative(certDir, filePath);
+  if (relative.startsWith("..") || path.isAbsolute(relative)) {
+    throw new Error(`${label} must be inside ${certDir} so the Docker Traefik container can read it as ${config.certMountPath}.`);
+  }
+  if (!fs.existsSync(filePath)) {
+    throw new Error(`${label} does not exist: ${filePath}`);
+  }
+  if (!fs.statSync(filePath).isFile()) {
+    throw new Error(`${label} is not a file: ${filePath}`);
+  }
+  fs.accessSync(filePath, fs.constants.R_OK);
 }
 
 function readLineValue(output: string, prefix: string): string | undefined {

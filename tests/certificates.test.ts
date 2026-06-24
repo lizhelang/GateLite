@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { execFileSync } from "node:child_process";
 import { afterAll, describe, expect, it } from "vitest";
 
 const certDir = fs.mkdtempSync(path.join(os.tmpdir(), "gatelite-certs-"));
@@ -43,5 +44,66 @@ describe("createCertificateFromInput", () => {
 
     expect(refreshed.status).toBe("pending");
     expect(refreshed.sync?.lastSyncTime).toBeTruthy();
+  });
+
+  it("accepts existing path certificates only from the mounted certificate directory", () => {
+    const certPath = path.join(certDir, "path-valid.crt");
+    const keyPath = path.join(certDir, "path-valid.key");
+    execFileSync(
+      "openssl",
+      [
+        "req",
+        "-x509",
+        "-newkey",
+        "rsa:2048",
+        "-sha256",
+        "-nodes",
+        "-days",
+        "90",
+        "-subj",
+        "/CN=path.localhost",
+        "-addext",
+        "subjectAltName=DNS:path.localhost",
+        "-keyout",
+        keyPath,
+        "-out",
+        certPath
+      ],
+      { stdio: "ignore" }
+    );
+
+    const certificate = createCertificateFromInput({
+      name: "Path cert",
+      enabled: true,
+      source: "path",
+      domains: ["path.localhost"],
+      certPath,
+      keyPath
+    });
+
+    expect(certificate.status).toBe("valid");
+    expect(certificate.certPath).toBe(certPath);
+    expect(certificate.keyPath).toBe(keyPath);
+    expect(certificate.domains).toContain("path.localhost");
+  });
+
+  it("rejects existing path certificates outside the mounted certificate directory", () => {
+    const outsidePath = path.join(os.tmpdir(), `outside-${Date.now()}.crt`);
+    fs.writeFileSync(outsidePath, "");
+
+    try {
+      expect(() =>
+        createCertificateFromInput({
+          name: "Outside path",
+          enabled: true,
+          source: "path",
+          domains: ["outside.localhost"],
+          certPath: outsidePath,
+          keyPath: outsidePath
+        })
+      ).toThrow(/must be inside/);
+    } finally {
+      fs.rmSync(outsidePath, { force: true });
+    }
   });
 });

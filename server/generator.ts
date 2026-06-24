@@ -100,8 +100,19 @@ function routerObservabilityConfig(service: WebService): Record<string, unknown>
 
 function certificateToTraefik(certificate: CertificateItem): { certFile: string; keyFile: string } | undefined {
   if (!certificate.certPath || !certificate.keyPath) return undefined;
+  const certFile = mountedCertificatePath(certificate.certPath);
+  const keyFile = mountedCertificatePath(certificate.keyPath);
+  if (!certFile || !keyFile) return undefined;
   return {
-    certFile: path.posix.join(config.certMountPath, path.basename(certificate.certPath)),
-    keyFile: path.posix.join(config.certMountPath, path.basename(certificate.keyPath))
+    certFile,
+    keyFile
   };
+}
+
+function mountedCertificatePath(hostPath: string): string | undefined {
+  const certDir = path.resolve(config.certDir);
+  const resolved = path.resolve(hostPath);
+  const relative = path.relative(certDir, resolved);
+  if (relative.startsWith("..") || path.isAbsolute(relative)) return undefined;
+  return path.posix.join(config.certMountPath, relative.split(path.sep).join(path.posix.sep));
 }
