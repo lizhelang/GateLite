@@ -113,6 +113,12 @@ describe("validateWebService", () => {
     expect(webServiceLabel(webService({ name: "" }))).toBe("secure.localhost");
   });
 
+  it("rejects multi-domain Host rules so one saved rule stays one table row", () => {
+    expect(() =>
+      validateWebService(webService({ domains: ["app.localhost", "www.localhost"] }), state())
+    ).toThrow(/exactly one frontend domain/);
+  });
+
   it("rejects duplicate enabled frontend domains on the same entrypoint", () => {
     const existing = webService({ id: "svc-existing", domains: ["app.localhost"], entryPoints: ["web"] });
     const duplicate = webService({ id: "svc-duplicate", domains: ["app.localhost"], entryPoints: ["web"], tls: { mode: "none" } });
@@ -174,5 +180,21 @@ describe("webServiceInputSchema", () => {
     });
 
     expect(parsed.targetUrl).toBe("https://192.168.31.2:8006");
+  });
+
+  it("rejects multi-domain Host rules", () => {
+    expect(() =>
+      webServiceInputSchema.parse({
+        name: "",
+        enabled: true,
+        groupId: "local",
+        domains: ["app.localhost", "www.localhost"],
+        listenPort: 18080,
+        entryPoints: ["web"],
+        targetUrl: "whoami:80",
+        middlewares: [],
+        tls: { mode: "none" }
+      })
+    ).toThrow(/exactly one frontend domain/);
   });
 });

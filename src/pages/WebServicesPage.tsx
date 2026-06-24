@@ -1018,6 +1018,8 @@ function ServiceForm({
   const isDefaultRule = draft.matchMode === "default";
   const isCustomRule = draft.matchMode === "custom";
   const domainPreview = isDefaultRule ? [] : composeDomains(draft.domainRoot, draft.subdomainsText);
+  const hostDomainInvalid = draft.matchMode === "host" && domainPreview.length !== 1;
+  const hostDomainTooMany = draft.matchMode === "host" && domainPreview.length > 1;
   const title = service
     ? isDefaultRule
       ? t("Edit default rule", "编辑默认规则")
@@ -1081,7 +1083,7 @@ function ServiceForm({
               </Field>
               {mode === "subrule" || service ? (
                 <Field label={mode === "subrule" ? t("Frontend subdomain", "前端子域名") : t("Domain label", "域名前缀")}>
-                  <Input value={draft.subdomainsText} onChange={(event) => setDraft({ ...draft, subdomainsText: event.target.value })} placeholder={isCustomRule ? "optional display domain" : mode === "subrule" ? "qb" : "@ / www"} required={draft.matchMode === "host" && mode === "subrule" && !service} />
+                  <Input value={draft.subdomainsText} onChange={(event) => setDraft({ ...draft, subdomainsText: event.target.value })} placeholder={isCustomRule ? "optional display domain" : mode === "subrule" ? "qb" : "@"} required={draft.matchMode === "host" && mode === "subrule" && !service} />
                 </Field>
               ) : null}
             </>
@@ -1094,6 +1096,11 @@ function ServiceForm({
             backend={draft.targetUrl}
             isDefaultRule={isDefaultRule}
           />
+          {hostDomainTooMany ? (
+            <div className="md:col-span-2 rounded-lg border border-amber-300/25 bg-amber-300/10 px-3 py-2 text-xs text-amber-100">
+              {t("One reverse proxy rule maps one frontend domain to one backend. Create separate rules or sub-rules for additional domains.", "一条反代规则只对应一个前端域名和一个后端。多个域名请分别创建规则或子规则。")}
+            </div>
+          ) : null}
           <Field label={t("Rule name", "规则名称")}>
             <Input value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} placeholder={t("Optional", "可留空")} />
           </Field>
@@ -1198,7 +1205,7 @@ function ServiceForm({
           <Button type="button" variant="outline" onClick={onClose}>
             {t("Cancel", "取消")}
           </Button>
-          <Button type="submit" disabled={saving || (draft.matchMode === "host" && domainPreview.length === 0) || (isCustomRule && !draft.customRule.trim()) || !draft.targetUrl.trim() || (draft.matchMode === "host" && mode === "subrule" && !service && !draft.subdomainsText.trim())}>
+          <Button type="submit" disabled={saving || hostDomainInvalid || (isCustomRule && !draft.customRule.trim()) || !draft.targetUrl.trim() || (draft.matchMode === "host" && mode === "subrule" && !service && !draft.subdomainsText.trim())}>
             <Save className="size-4" />
             {saving ? t("Saving...", "保存中...") : t("Save rule", "保存规则")}
           </Button>

@@ -55,10 +55,18 @@ export const webServiceInputSchema = z
     notes: z.string().optional()
   })
   .superRefine((service, context) => {
-    if (service.matchMode === "host" && !service.domains.some((domain) => domain.trim())) {
+    const hostDomains = service.domains.map((domain) => domain.trim()).filter(Boolean);
+    if (service.matchMode === "host" && hostDomains.length === 0) {
       context.addIssue({
         code: z.ZodIssueCode.custom,
         message: "At least one frontend domain is required for host rules.",
+        path: ["domains"]
+      });
+    }
+    if (service.matchMode === "host" && hostDomains.length > 1) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Host reverse proxy rules must use exactly one frontend domain. Create separate rules for additional domains.",
         path: ["domains"]
       });
     }

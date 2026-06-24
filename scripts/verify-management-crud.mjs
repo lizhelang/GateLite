@@ -48,6 +48,7 @@ try {
   const group = await createAndVerifyGroup();
   created.groupId = group.id;
   await verifyWebServiceValidation(group.id);
+  await verifySingleDomainRuleValidation(group.id);
 
   const certificate = await createAndVerifyCertificate();
   created.certificateId = certificate.id;
@@ -160,6 +161,28 @@ async function verifyWebServiceValidation(groupId) {
   }
 
   console.log("[ok] Web service validation rejects missing groups and certificate references.");
+}
+
+async function verifySingleDomainRuleValidation(groupId) {
+  const response = await request(`${gateliteApiUrl}/api/web-services`, {
+    method: "POST",
+    body: JSON.stringify({
+      name: `CRUD multi-domain ${suffix}`,
+      enabled: true,
+      groupId,
+      domains: [`multi-a-${suffix}.localhost`, `multi-b-${suffix}.localhost`],
+      listenPort: 18080,
+      entryPoints: ["web"],
+      targetUrl: "whoami:80",
+      middlewares: [],
+      tls: { mode: "none" }
+    }),
+    headers: { "Content-Type": "application/json" }
+  });
+  if (response.status !== 400 || !response.body.includes("exactly one frontend domain")) {
+    throw new Error(`Multi-domain Host Web service should return HTTP 400, got ${response.status}: ${response.body.slice(0, 300)}`);
+  }
+  console.log("[ok] Web service validation keeps one Host rule mapped to one frontend domain.");
 }
 
 async function createAndVerifyCertificate() {

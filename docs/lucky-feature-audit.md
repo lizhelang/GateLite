@@ -94,6 +94,10 @@ GateLite MVP mapping:
   frontend domain on the same Traefik entrypoint, and disabled duplicate
   drafts are blocked when enabled, keeping the domain list truthful and the
   generated router set unambiguous.
+- One row / one Host rule -> normal reverse-proxy rules accept exactly one
+  frontend domain. Additional domains must be modeled as separate rules or
+  sub-rules so table actions do not silently edit or delete multiple rows at
+  once.
 
 ## SSL/TLS Core Behaviors
 

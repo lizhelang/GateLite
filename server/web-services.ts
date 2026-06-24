@@ -2,8 +2,12 @@ import type { CertificateItem, GateLiteState, WebService } from "../shared/types
 import { BadRequestError } from "./errors";
 
 export function validateWebService(service: WebService, state: GateLiteState): void {
-  if (service.matchMode !== "default" && service.domains.length === 0) {
+  const hostDomainCount = service.domains.map((domain) => domain.trim()).filter(Boolean).length;
+  if (service.matchMode !== "default" && hostDomainCount === 0) {
     throw new BadRequestError("At least one frontend domain is required for host rules.");
+  }
+  if (service.matchMode === "host" && hostDomainCount > 1) {
+    throw new BadRequestError("Host reverse proxy rules must use exactly one frontend domain. Create separate rules for additional domains.");
   }
   if (!state.groups.some((group) => group.id === service.groupId)) {
     throw new BadRequestError(`Web service group does not exist: ${service.groupId}`);
