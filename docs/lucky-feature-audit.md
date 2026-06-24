@@ -85,7 +85,7 @@ Lucky behaviors observed from the SSL chunk:
 GateLite MVP mapping:
 
 - Self-signed local certificate generation for immediate Docker validation.
-- PEM upload and existing path registration.
+- PEM upload by local file picker or paste, plus existing path registration.
 - ACME resolver reference for Traefik-managed issuance.
 - Certificate status from `openssl x509` metadata where files are available.
 - Expiry status: valid, expiring, expired, pending, invalid.

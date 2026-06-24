@@ -1,5 +1,5 @@
 import { ArrowRight, CalendarClock, Copy, Download, EllipsisVertical, FileKey2, GripVertical, KeyRound, Pencil, Plus, Power, RefreshCw, Trash2, Upload } from "lucide-react";
-import { FormEvent, useMemo, useState, type ReactNode } from "react";
+import { useMemo, useState, type ChangeEvent, type FormEvent, type ReactNode } from "react";
 import type { CertificateWithBindings, DashboardPayload } from "../../shared/types";
 import { createCertificate, deleteCertificate, refreshCertificate, reorderCertificates, toggleCertificate, updateCertificate, type CertificateInput } from "../api";
 import { Modal } from "../components/Modal";
@@ -666,6 +666,7 @@ function CertificateForm({
         }
       : { ...emptyDraft, source: initialSource, ...(draftPreset || {}) }
   );
+  const [fileError, setFileError] = useState<string | null>(null);
   const uploadPemStarted = draft.source === "upload" && (draft.certPem.trim().length > 0 || draft.keyPem.trim().length > 0);
   const uploadPemRequired = draft.source === "upload" && (!certificate || certificate.source !== "upload" || uploadPemStarted);
   const submitDisabled =
@@ -698,6 +699,21 @@ function CertificateForm({
     });
   };
 
+  const handlePemFile = async (event: ChangeEvent<HTMLInputElement>, field: "certPem" | "keyPem") => {
+    const input = event.currentTarget;
+    const file = input.files?.[0];
+    if (!file) return;
+    setFileError(null);
+    try {
+      const text = await file.text();
+      setDraft((current) => ({ ...current, [field]: text }));
+    } catch {
+      setFileError(t("Unable to read selected PEM file.", "无法读取选择的 PEM 文件。"));
+    } finally {
+      input.value = "";
+    }
+  };
+
   return (
     <Modal title={certificate ? t("Edit certificate", "编辑证书") : draft.source === "upload" ? t("Upload certificate", "上传证书") : t("New certificate", "新建证书")} subtitle={t("Register file, path, ACME, or sync certificates for Traefik TLS without writing YAML.", "无需手写 YAML，即可为 Traefik TLS 登记文件、路径、ACME 或同步证书。")} onClose={onClose}>
       <form className="grid gap-4 md:grid-cols-2" onSubmit={(event) => void submit(event)}>
@@ -725,11 +741,30 @@ function CertificateForm({
 
         {draft.source === "upload" ? (
           <>
+            <div className="grid gap-3 md:col-span-2 md:grid-cols-2">
+              <Field label={t("Certificate file", "证书文件")}>
+                <Input
+                  type="file"
+                  accept=".pem,.crt,.cer,.cert,text/plain,application/x-pem-file"
+                  onChange={(event) => void handlePemFile(event, "certPem")}
+                  className="cursor-pointer text-xs file:mr-3 file:rounded-md file:border-0 file:bg-muted file:px-2 file:py-1 file:text-xs file:font-medium"
+                />
+              </Field>
+              <Field label={t("Private key file", "私钥文件")}>
+                <Input
+                  type="file"
+                  accept=".pem,.key,text/plain,application/x-pem-file"
+                  onChange={(event) => void handlePemFile(event, "keyPem")}
+                  className="cursor-pointer text-xs file:mr-3 file:rounded-md file:border-0 file:bg-muted file:px-2 file:py-1 file:text-xs file:font-medium"
+                />
+              </Field>
+            </div>
+            {fileError ? <p className="md:col-span-2 text-xs text-destructive">{fileError}</p> : null}
             <Field className="md:col-span-2" label={certificate?.source === "upload" ? t("Certificate PEM replacement", "替换证书 PEM") : t("Certificate PEM", "证书 PEM")}>
-              <Textarea value={draft.certPem} onChange={(event) => setDraft({ ...draft, certPem: event.target.value })} rows={6} placeholder="-----BEGIN CERTIFICATE-----" />
+              <Textarea value={draft.certPem} onChange={(event) => setDraft({ ...draft, certPem: event.target.value })} rows={4} placeholder="-----BEGIN CERTIFICATE-----" />
             </Field>
             <Field className="md:col-span-2" label={certificate?.source === "upload" ? t("Private key PEM replacement", "替换私钥 PEM") : t("Private key PEM", "私钥 PEM")}>
-              <Textarea value={draft.keyPem} onChange={(event) => setDraft({ ...draft, keyPem: event.target.value })} rows={6} placeholder="-----BEGIN PRIVATE KEY-----" />
+              <Textarea value={draft.keyPem} onChange={(event) => setDraft({ ...draft, keyPem: event.target.value })} rows={4} placeholder="-----BEGIN PRIVATE KEY-----" />
             </Field>
           </>
         ) : null}
