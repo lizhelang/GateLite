@@ -58,9 +58,10 @@ GateLite MVP mapping:
   Lucky mental model that Web 服务 means reverse proxy rules. Each row leads
   with frontend domain -> backend IP:port and then shows downstream/upstream
   bytes plus current connection count instead of a bulky service card.
-- Web service toolbar -> top-level creation is `New rule`; `New sub-rule`
-  appears only in the selected/main-domain table context, keeping sub-rules
-  scoped to an existing domain the way Lucky presents them.
+- Web service toolbar -> top-level creation is always a blank `New rule` for
+  a new main-domain rule; `New sub-rule` appears only in the selected/main-
+  domain table context, keeping sub-rules scoped to an existing domain the way
+  Lucky presents them.
 - Rule row density -> each reverse-proxy rule is a single shadcn-style data
   table row with rule name, frontend domain, backend IP:port, downstream
   traffic, upstream traffic, live connection count, and status.
@@ -70,12 +71,13 @@ GateLite MVP mapping:
 - Live connection count -> service-level Traefik connection metrics are used
   when available; otherwise the table shows the Traefik entrypoint aggregate
   with an explicit `entrypoint` source label.
-- Lucky-style rule creation -> `New rule` creates the main-domain rule
-  context and first `@`/subdomain mapping. `New sub-rule` is only enabled
-  inside a selected main domain, or from that domain's table header. It
-  pre-fills the main domain and inherits TLS, entrypoints, middleware, and
-  group settings only when that domain has an explicit `@` rule, avoiding
-  accidental inheritance from an arbitrary sibling sub-rule.
+- Lucky-style rule creation -> `New rule` asks for a main frontend domain and
+  backend IP:port without inheriting the currently filtered domain. `New
+  sub-rule` is only enabled inside a selected main domain, or from that
+  domain's table header. It pre-fills the main domain and inherits TLS,
+  entrypoints, middleware, and group settings only when that domain has an
+  explicit `@` rule, avoiding accidental inheritance from an arbitrary sibling
+  sub-rule.
 - Web service detail view -> explicit row action opens a compact rule detail
   dialog with frontend/backend mapping, generated Traefik rule, runtime status,
   TLS, Host header behavior, traffic, and notes.

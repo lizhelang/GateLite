@@ -143,7 +143,6 @@ export function WebServicesPage({ dashboard, onRefresh }: WebServicesPageProps) 
   const allRoutes = zones.flatMap((zone) => zone.routes);
   const routeCount = allRoutes.length;
   const activeRoutes = (activeRoot === "__all" ? allRoutes : zones.find((zone) => zone.root === activeRoot)?.routes || allRoutes).filter((route) => !groupsById.get(route.service.groupId)?.collapsed);
-  const canCreateSubrule = !["__all", "__default", "__custom"].includes(activeRoot);
   const selectedServices = useMemo(() => {
     const selectedServiceIds = new Set(activeRoutes.filter((route) => selectedRouteIds.includes(route.routeId)).map((route) => route.service.id));
     return sortedServices.filter((service) => selectedServiceIds.has(service.id));
@@ -154,26 +153,8 @@ export function WebServicesPage({ dashboard, onRefresh }: WebServicesPageProps) 
   );
 
   const openCreate = (mode: "rule" | "subrule" | "default" = "rule") => {
-    const rootScopedPreset =
-      mode === "rule" && canCreateSubrule && activeRootTemplate
-        ? {
-            groupId: activeRootTemplate.groupId,
-            domainRoot: activeRoot,
-            subdomainsText: "",
-            listenPort: activeRootTemplate.listenPort,
-            entryPointsText: activeRootTemplate.entryPoints.join(", "),
-            passHostHeader: activeRootTemplate.passHostHeader ?? true,
-            middlewaresText: activeRootTemplate.middlewares.join(", "),
-            tlsMode: activeRootTemplate.tls.mode,
-            certificateId: activeRootTemplate.tls.certificateId || "",
-            resolver: activeRootTemplate.tls.resolver || "letsencrypt",
-            accessLogs: activeRootTemplate.observability?.accessLogs ?? true,
-            metrics: activeRootTemplate.observability?.metrics ?? true,
-            tracing: activeRootTemplate.observability?.tracing ?? false
-          }
-        : null;
     setEditing(null);
-    setDraftPreset(rootScopedPreset);
+    setDraftPreset(null);
     setCreateMode(mode);
     setShowForm(true);
   };
@@ -530,27 +511,30 @@ function RouteDataTable({
   return (
     <div className="overflow-hidden rounded-xl border bg-card/80">
       <div className="overflow-x-auto">
-        <Table className="min-w-[680px]">
+        <Table className="min-w-[940px]">
           <TableHeader className="bg-muted/65">
             <TableRow className="hover:bg-transparent">
               <TableHead className="w-6 px-1" />
               <TableHead className="w-7 px-1">
                 <Checkbox aria-label={t("Select visible rules", "选择当前规则")} checked={allVisibleSelected} onCheckedChange={(checked) => onSelectAll(Boolean(checked))} />
               </TableHead>
-              <TableHead className="min-w-[300px]">{t("Rule mapping", "规则映射")}</TableHead>
-              <TableHead className="w-20 text-right">
+              <TableHead className="min-w-[150px]">{t("Rule", "规则")}</TableHead>
+              <TableHead className="min-w-[250px]">{t("Frontend domain", "前端域名")}</TableHead>
+              <TableHead className="min-w-[210px]">{t("Backend IP:port", "后端 IP:端口")}</TableHead>
+              <TableHead className="w-28">{t("Status", "状态")}</TableHead>
+              <TableHead className="w-24 text-right">
                 <span className="inline-flex items-center gap-1">
                   <Download className="size-3.5" />
                   {t("Down", "下行")}
                 </span>
               </TableHead>
-              <TableHead className="w-20 text-right">
+              <TableHead className="w-24 text-right">
                 <span className="inline-flex items-center gap-1">
                   <Upload className="size-3.5" />
                   {t("Up", "上行")}
                 </span>
               </TableHead>
-              <TableHead className="w-14 text-right">
+              <TableHead className="w-16 text-right">
                 <span className="inline-flex items-center gap-1">
                   {t("Conn.", "连接")}
                 </span>
@@ -563,7 +547,7 @@ function RouteDataTable({
               <Fragment key={section.root}>
                 {section.showHeader ? (
                   <TableRow key={`${section.root}:heading`} className="bg-muted/25 hover:bg-muted/25">
-                    <TableCell colSpan={7} className="h-9 px-3 py-1.5">
+                    <TableCell colSpan={10} className="h-9 px-3 py-1.5">
                       <div className="flex min-w-0 items-center justify-between gap-3">
                         <div className="flex min-w-0 items-center gap-2">
                           <span className="text-xs text-muted-foreground">{t("Main domain", "主域名")}</span>
@@ -602,7 +586,7 @@ function RouteDataTable({
             ))}
             {routes.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={7} className="h-24 text-center text-sm text-muted-foreground">
+                <TableCell colSpan={10} className="h-24 text-center text-sm text-muted-foreground">
                   {t("No visible rules in this domain view. Expand groups or add a rule.", "这个域名视图里没有可见规则。可以展开分组或新增规则。")}
                 </TableCell>
               </TableRow>
@@ -663,7 +647,7 @@ function RouteTableRow({
   return (
     <TableRow
       data-state={selected ? "selected" : undefined}
-      className={`${dragging ? "outline outline-1 outline-cyan-300/70" : ""} h-12`}
+      className={`${dragging ? "outline outline-1 outline-cyan-300/70" : ""} h-10`}
       draggable
       onDragStart={() => onDragStart(service.id)}
       onDragOver={(event) => event.preventDefault()}
@@ -679,33 +663,37 @@ function RouteTableRow({
         <Checkbox checked={selected} aria-label={t(`Select ${displayName}`, `选择 ${displayName}`)} onClick={(event) => event.stopPropagation()} onCheckedChange={(checked) => onSelect(route.routeId, Boolean(checked))} />
       </TableCell>
       <TableCell className="py-1.5">
-        <div className="grid min-w-0 gap-1">
-          <div className="flex min-w-0 items-center gap-1.5">
-            <span className="max-w-40 truncate text-sm font-medium">{displayName}</span>
-            <Badge variant="outline" className="h-5 shrink-0 rounded-md px-1.5 text-[10px]">
-              {routeKindLabel(route, isRootRule, t)}
-            </Badge>
-            <StatusBadge status={service.runtime?.status || (service.enabled ? "unknown" : "offline")} label={service.enabled ? undefined : t("Disabled", "停用")} />
-            <Badge variant="outline" className="h-5 shrink-0 rounded-md px-1.5 text-[10px]">
-              {service.tls.mode === "none" ? "HTTP" : "TLS"}
-            </Badge>
-          </div>
-          <div className="flex min-w-0 items-center gap-1.5">
-            {frontend.href ? (
-              <a className="inline-flex min-w-0 items-center gap-1 rounded-md bg-sky-500/15 px-2 py-1 font-mono text-xs font-medium text-cyan-100 hover:text-cyan-200" href={frontend.href} target="_blank" rel="noreferrer" onClick={(event) => event.stopPropagation()}>
-                <span className="truncate">{frontend.label}</span>
-                <ExternalLink className="size-3 shrink-0" />
-              </a>
-            ) : (
-              <span className="min-w-0 truncate rounded-md bg-sky-500/15 px-2 py-1 font-mono text-xs font-medium text-cyan-100">{frontend.label}</span>
-            )}
-            <span className="hidden shrink-0 text-[10px] text-muted-foreground sm:inline">{frontend.meta}</span>
-            <ArrowRight className="size-3.5 shrink-0 text-muted-foreground" />
-            <span className="min-w-0 truncate rounded-md bg-muted px-2 py-1 font-mono text-xs text-foreground">{backend.hostPort || service.targetUrl}</span>
-            <Badge variant="outline" className="hidden h-5 shrink-0 rounded-md px-1.5 text-[10px] text-muted-foreground sm:inline-flex">
-              {backend.scheme}
-            </Badge>
-          </div>
+        <div className="flex min-w-0 items-center gap-1.5">
+          <span className="max-w-36 truncate text-sm font-medium">{displayName}</span>
+          <Badge variant="outline" className="h-5 shrink-0 rounded-md px-1.5 text-[10px]">
+            {routeKindLabel(route, isRootRule, t)}
+          </Badge>
+        </div>
+      </TableCell>
+      <TableCell className="py-1.5">
+        {frontend.href ? (
+          <a className="inline-flex min-w-0 max-w-full items-center gap-1 font-mono text-xs font-medium text-cyan-100 hover:text-cyan-200" href={frontend.href} target="_blank" rel="noreferrer" onClick={(event) => event.stopPropagation()}>
+            <span className="truncate">{frontend.displayUrl}</span>
+            <ExternalLink className="size-3 shrink-0" />
+          </a>
+        ) : (
+          <span className="block min-w-0 truncate font-mono text-xs text-cyan-100">{frontend.displayUrl}</span>
+        )}
+      </TableCell>
+      <TableCell className="py-1.5">
+        <div className="flex min-w-0 items-center gap-1.5">
+          <span className="min-w-0 truncate font-mono text-xs text-foreground">{backend.hostPort || service.targetUrl}</span>
+          <Badge variant="outline" className="h-5 shrink-0 rounded-md px-1.5 text-[10px] text-muted-foreground">
+            {backend.scheme}
+          </Badge>
+        </div>
+      </TableCell>
+      <TableCell className="py-1.5">
+        <div className="flex min-w-0 items-center gap-1">
+          <StatusBadge status={service.runtime?.status || (service.enabled ? "unknown" : "offline")} label={service.enabled ? undefined : t("Disabled", "停用")} className="h-5 rounded-md px-1.5 text-[10px]" />
+          <Badge variant="outline" className="h-5 shrink-0 rounded-md px-1.5 text-[10px]">
+            {service.tls.mode === "none" ? "HTTP" : "TLS"}
+          </Badge>
         </div>
       </TableCell>
       <TableCell className="text-right">
@@ -909,13 +897,16 @@ function formatFrontendEndpoint(
   route: DomainRoute,
   service: WebServiceWithRuntime,
   t: (english: string, chinese: string) => string
-): { label: string; meta: string; href?: string } {
+): { label: string; meta: string; displayUrl: string; href?: string } {
   if (route.isDefault) {
-    return { label: t("Unmatched domains", "未匹配域名"), meta: t("Default fallback", "默认规则") };
+    const label = t("Unmatched domains", "未匹配域名");
+    return { label, displayUrl: label, meta: t("Default fallback", "默认规则") };
   }
   if (!isOpenableDomain(route.primaryDomain)) {
+    const label = service.matchMode === "custom" ? service.customRule || t("Custom Traefik rule", "自定义 Traefik 规则") : route.primaryDomain;
     return {
-      label: service.matchMode === "custom" ? service.customRule || t("Custom Traefik rule", "自定义 Traefik 规则") : route.primaryDomain,
+      label,
+      displayUrl: label,
       meta: service.matchMode === "custom" ? t("Custom match", "自定义匹配") : t("Not openable", "不可直接打开")
     };
   }
@@ -923,6 +914,7 @@ function formatFrontendEndpoint(
   const href = `${scheme}://${route.primaryDomain}:${service.listenPort}`;
   return {
     label: route.primaryDomain,
+    displayUrl: href,
     meta: `${scheme.toUpperCase()} :${service.listenPort}`,
     href
   };
@@ -1089,7 +1081,7 @@ function ServiceForm({
               </Field>
               {mode === "subrule" || service ? (
                 <Field label={mode === "subrule" ? t("Frontend subdomain", "前端子域名") : t("Domain label", "域名前缀")}>
-                  <Input value={draft.subdomainsText} onChange={(event) => setDraft({ ...draft, subdomainsText: event.target.value })} placeholder={isCustomRule ? "optional display domain" : mode === "subrule" ? "qb / pve / immich" : "@ / www / app"} required={draft.matchMode === "host" && mode === "subrule" && !service} />
+                  <Input value={draft.subdomainsText} onChange={(event) => setDraft({ ...draft, subdomainsText: event.target.value })} placeholder={isCustomRule ? "optional display domain" : mode === "subrule" ? "qb" : "@ / www"} required={draft.matchMode === "host" && mode === "subrule" && !service} />
                 </Field>
               ) : null}
             </>
