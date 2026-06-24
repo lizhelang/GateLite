@@ -91,6 +91,9 @@ GateLite MVP mapping:
 
 - Self-signed local certificate generation for immediate Docker validation.
 - PEM upload by local file picker or paste, plus existing path registration.
+- Uploaded PEM certificates are covered by the local CRUD verifier: a temporary
+  PEM bundle is uploaded, bound to an HTTPS Web service, reached through
+  Traefik, and then cleaned up.
 - ACME resolver reference for Traefik-managed issuance.
 - Certificate status from `openssl x509` metadata where files are available.
 - Expiry status: valid, expiring, expired, pending, invalid.

@@ -1,5 +1,9 @@
 import http from "node:http";
 import https from "node:https";
+import { execFileSync } from "node:child_process";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 
 const gateliteApiUrl = process.env.GATELITE_API_URL || "http://localhost:3001";
 const traefikApiUrl = process.env.TRAEFIK_API_URL || "http://localhost:18081";
@@ -12,6 +16,7 @@ const customHttpHost = `crud-custom-${suffix}.localhost`;
 const defaultFallbackHost = `unmatched-${suffix}.localhost`;
 const httpsHost = `crud-tls-${suffix}.localhost`;
 const editedHttpsHost = `crud-tls-edit-${suffix}.localhost`;
+const uploadedHttpsHost = `crud-upload-${suffix}.localhost`;
 const acmeHost = `crud-acme-${suffix}.localhost`;
 const acmeResolver = `resolver-${suffix}`;
 
@@ -23,6 +28,9 @@ const created = {
   customServiceId: "",
   defaultServiceId: "",
   httpsServiceId: "",
+  httpsHost: "",
+  uploadedCertificateId: "",
+  uploadedServiceId: "",
   acmeServiceId: ""
 };
 
@@ -36,6 +44,7 @@ try {
   await downloadAndVerifyCertificate(certificate.id);
   await reorderAndVerifyCertificates(certificate.id);
   await createRefreshAndDeleteSyncCertificate();
+  await createAndVerifyUploadedCertificateRoute(group.id);
 
   const httpService = await createAndVerifyHttpService(group.id);
   created.httpServiceId = httpService.id;
@@ -51,6 +60,7 @@ try {
 
   const httpsService = await createAndVerifyHttpsService(group.id, certificate.id, certificate.domains[0] || editedHttpsHost);
   created.httpsServiceId = httpsService.id;
+  created.httpsHost = certificate.domains[0] || editedHttpsHost;
   await verifyCertificateBinding(certificate.id, httpsService.id, "HTTPS file certificate");
   await createAndVerifyAcmeResolverBinding(group.id);
   await reorderAndVerifyServices([httpsService.id, httpService.id]);
@@ -202,6 +212,33 @@ async function createRefreshAndDeleteSyncCertificate() {
 
   await apiNoContent(`/api/certificates/${certificate.id}`, "DELETE");
   console.log("[ok] Sync certificate target registration and refresh status action work.");
+}
+
+async function createAndVerifyUploadedCertificateRoute(groupId) {
+  const { certPem, keyPem } = createTemporaryPemBundle(uploadedHttpsHost);
+  const certificate = await apiJson("/api/certificates", {
+    method: "POST",
+    body: {
+      name: `CRUD uploaded TLS ${suffix}`,
+      enabled: true,
+      source: "upload",
+      domains: [uploadedHttpsHost],
+      certPem,
+      keyPem
+    },
+    expectedStatus: 201
+  });
+  created.uploadedCertificateId = certificate.id;
+
+  if (certificate.source !== "upload" || certificate.status !== "valid" || !certificate.domains.includes(uploadedHttpsHost)) {
+    throw new Error("Uploaded PEM certificate was not parsed as a valid certificate with the expected SAN.");
+  }
+  await downloadAndVerifyCertificate(certificate.id);
+
+  const service = await createAndVerifyHttpsService(groupId, certificate.id, uploadedHttpsHost);
+  created.uploadedServiceId = service.id;
+  await verifyCertificateBinding(certificate.id, service.id, "uploaded PEM certificate");
+  console.log("[ok] Uploaded PEM certificate binds to a verified HTTPS route.");
 }
 
 async function createAndVerifyHttpService(groupId) {
@@ -455,9 +492,15 @@ async function deleteAndVerifyResources() {
   await apiNoContent(`/api/certificates/${created.acmeCertificateId}`, "DELETE");
   created.acmeCertificateId = "";
 
+  await apiNoContent(`/api/web-services/${created.uploadedServiceId}`, "DELETE");
+  created.uploadedServiceId = "";
+  await waitForRouteUnavailable(uploadedHttpsHost, "https");
+  await apiNoContent(`/api/certificates/${created.uploadedCertificateId}`, "DELETE");
+  created.uploadedCertificateId = "";
+
   await apiNoContent(`/api/web-services/${created.httpsServiceId}`, "DELETE");
   created.httpsServiceId = "";
-  await waitForRouteUnavailable(httpsHost, "https");
+  await waitForRouteUnavailable(created.httpsHost || editedHttpsHost, "https");
 
   await apiNoContent(`/api/web-services/${created.httpServiceId}`, "DELETE");
   created.httpServiceId = "";
@@ -476,11 +519,13 @@ async function deleteAndVerifyResources() {
 
 async function cleanup() {
   await ignoreNotFound(async () => created.acmeServiceId && apiNoContent(`/api/web-services/${created.acmeServiceId}`, "DELETE"));
+  await ignoreNotFound(async () => created.uploadedServiceId && apiNoContent(`/api/web-services/${created.uploadedServiceId}`, "DELETE"));
   await ignoreNotFound(async () => created.httpsServiceId && apiNoContent(`/api/web-services/${created.httpsServiceId}`, "DELETE"));
   await ignoreNotFound(async () => created.defaultServiceId && apiNoContent(`/api/web-services/${created.defaultServiceId}`, "DELETE"));
   await ignoreNotFound(async () => created.customServiceId && apiNoContent(`/api/web-services/${created.customServiceId}`, "DELETE"));
   await ignoreNotFound(async () => created.httpServiceId && apiNoContent(`/api/web-services/${created.httpServiceId}`, "DELETE"));
   await ignoreNotFound(async () => created.acmeCertificateId && apiNoContent(`/api/certificates/${created.acmeCertificateId}`, "DELETE"));
+  await ignoreNotFound(async () => created.uploadedCertificateId && apiNoContent(`/api/certificates/${created.uploadedCertificateId}`, "DELETE"));
   await ignoreNotFound(async () => created.certificateId && apiNoContent(`/api/certificates/${created.certificateId}`, "DELETE"));
   await ignoreNotFound(async () => created.groupId && apiJson(`/api/groups/${created.groupId}`, { method: "DELETE" }));
 }
@@ -607,6 +652,42 @@ function withRequestPath(url, requestPath) {
 
 function isGateLiteDefaultRouter(router) {
   return router.name?.startsWith("gatelite-") && router.rule === "PathPrefix(`/`)" && router.status === "enabled";
+}
+
+function createTemporaryPemBundle(host) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "gatelite-upload-"));
+  const certPath = path.join(dir, "uploaded.crt");
+  const keyPath = path.join(dir, "uploaded.key");
+  try {
+    execFileSync(
+      "openssl",
+      [
+        "req",
+        "-x509",
+        "-newkey",
+        "rsa:2048",
+        "-sha256",
+        "-nodes",
+        "-days",
+        "90",
+        "-subj",
+        `/CN=${host}`,
+        "-addext",
+        `subjectAltName=DNS:${host}`,
+        "-keyout",
+        keyPath,
+        "-out",
+        certPath
+      ],
+      { stdio: "ignore" }
+    );
+    return {
+      certPem: fs.readFileSync(certPath, "utf8"),
+      keyPem: fs.readFileSync(keyPath, "utf8")
+    };
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
 }
 
 function request(url, { method = "GET", body, headers = {}, allowSelfSigned = false } = {}) {
