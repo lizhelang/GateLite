@@ -83,6 +83,24 @@ describe("validateWebService", () => {
     ).toThrow(/cannot be used/);
   });
 
+  it("accepts synced certificates after a local PEM bundle has been received", () => {
+    expect(() =>
+      validateWebService(
+        webService({ tls: { mode: "file-certificate", certificateId: "cert-sync" } }),
+        state({ certificates: [certificate({ id: "cert-sync", source: "sync", status: "valid" })] })
+      )
+    ).not.toThrow();
+  });
+
+  it("rejects pending sync certificates before local PEM material is available", () => {
+    expect(() =>
+      validateWebService(
+        webService({ tls: { mode: "file-certificate", certificateId: "cert-sync" } }),
+        state({ certificates: [certificate({ id: "cert-sync", source: "sync", status: "pending", certPath: undefined, keyPath: undefined })] })
+      )
+    ).toThrow(/readable certificate/);
+  });
+
   it("rejects invalid, pending, and expired file certificates", () => {
     for (const status of ["invalid", "pending", "expired"] as const) {
       expect(() =>

@@ -30,6 +30,12 @@ export interface CertificateInput {
   sync?: CertificateItem["sync"];
 }
 
+export interface CertificateSyncInput {
+  certPem: string;
+  keyPem: string;
+  domains?: string[];
+}
+
 export function normalizeDomains(domains: string[] | string | undefined): string[] {
   if (!domains) return [];
   const values = Array.isArray(domains) ? domains : domains.split(/[,\n]/);
@@ -286,6 +292,41 @@ export function refreshCertificateFromAction(certificate: CertificateItem): Cert
   });
   return {
     ...next,
+    updatedAt: now
+  };
+}
+
+export function receiveSyncedCertificate(current: CertificateItem, input: CertificateSyncInput): CertificateItem {
+  if (current.source !== "sync") {
+    throw new BadRequestError("Only sync certificates can receive a synced PEM bundle.");
+  }
+  if (!input.certPem.trim() || !input.keyPem.trim()) {
+    throw new BadRequestError("Certificate and private key PEM are required for certificate sync.");
+  }
+
+  fs.mkdirSync(config.certDir, { recursive: true });
+  const version = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const certPath = path.join(config.certDir, `${current.id}-${version}.crt`);
+  const keyPath = path.join(config.certDir, `${current.id}-${version}.key`);
+  fs.writeFileSync(certPath, input.certPem.trim() + "\n", "utf8");
+  fs.writeFileSync(keyPath, input.keyPem.trim() + "\n", { encoding: "utf8", mode: 0o600 });
+
+  const now = new Date().toISOString();
+  const fallbackDomains = input.domains !== undefined ? normalizeDomains(input.domains) : current.domains;
+  const parsed = parseCertificate(certPath, fallbackDomains);
+
+  return {
+    ...current,
+    certPath,
+    keyPath,
+    domains: parsed.domains.length ? parsed.domains : fallbackDomains,
+    notBefore: parsed.notBefore,
+    notAfter: parsed.notAfter,
+    issuer: parsed.issuer,
+    subject: parsed.subject,
+    status: parsed.status,
+    statusMessage: parsed.statusMessage,
+    sync: { ...(current.sync || {}), lastSyncTime: now },
     updatedAt: now
   };
 }

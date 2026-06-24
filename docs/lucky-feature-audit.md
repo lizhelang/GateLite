@@ -125,6 +125,10 @@ GateLite MVP mapping:
 - Expiry status: valid, expiring, expired, pending, invalid.
 - Refresh/sync status action -> row-level certificate status refresh that
   re-reads local PEM metadata and records `lastSyncTime` for sync targets.
+- Certificate sync receive -> sync certificate rows expose a PEM receive
+  action and the agent API can import a synced PEM bundle into the Docker-
+  mounted certificate store, turning a pending sync target into a bindable
+  Traefik TLS certificate while preserving bound-domain coverage checks.
 - Binding view from Web services using a certificate ID.
 - ACME resolver binding view from Web services using the same resolver name.
 - PEM bundle download for locally readable certificate/key pairs.

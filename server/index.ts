@@ -5,10 +5,10 @@ import { z } from "zod";
 import type { CertificateItem, CertificateWithBindings, DashboardPayload, WebService, WebServiceWithRuntime } from "../shared/types";
 import { certificateCoversDomain, resolverName, webServicesBoundToCertificate } from "./bindings";
 import { config } from "./config";
-import { createCertificateFromInput, refreshCertificateFromAction, updateCertificateFromInput, type CertificateInput } from "./certificates";
+import { createCertificateFromInput, receiveSyncedCertificate, refreshCertificateFromAction, updateCertificateFromInput, type CertificateInput } from "./certificates";
 import { createId, traefikName } from "./ids";
 import { getTrafficSnapshot } from "./metrics";
-import { certificateInputSchema, groupInputSchema, reorderSchema, webServiceInputSchema } from "./schemas";
+import { certificateInputSchema, certificateSyncInputSchema, groupInputSchema, reorderSchema, webServiceInputSchema } from "./schemas";
 import { ensureState, loadState, saveState } from "./store";
 import { getTraefikRuntime } from "./traefik";
 import { validateWebService, webServiceLabel } from "./web-services";
@@ -206,6 +206,25 @@ app.patch("/api/certificates/:id/refresh", (request, response) => {
   response.json(next.certificates.find((item) => item.id === request.params.id));
 });
 
+app.post("/api/certificates/:id/sync", (request, response) => {
+  const parsed = certificateSyncInputSchema.parse(request.body);
+  const state = loadState();
+  const index = state.certificates.findIndex((item) => item.id === request.params.id);
+  if (index === -1) return response.status(404).json({ error: "Certificate not found." });
+
+  const current = state.certificates[index];
+  const synced = receiveSyncedCertificate(current, parsed);
+  const bindingConflict = boundCertificateResultConflict(synced, state.webServices);
+  if (bindingConflict) {
+    removeReceivedCertificateFiles(synced, current);
+    return response.status(409).json({ error: bindingConflict });
+  }
+
+  state.certificates[index] = synced;
+  const next = saveState(state, "certificate.sync.receive", `Received synced certificate ${synced.name}.`);
+  response.json(next.certificates.find((item) => item.id === request.params.id));
+});
+
 app.post("/api/certificates/reorder", (request, response) => {
   const { orderedIds } = reorderSchema.parse(request.body);
   const state = loadState();
@@ -361,8 +380,14 @@ function boundCertificateResultConflict(certificate: CertificateItem, services: 
   const fileBoundServices = services.filter((service) => service.tls.mode === "file-certificate" && service.tls.certificateId === certificate.id);
   if (fileBoundServices.length === 0) return undefined;
   if (!certificate.enabled) return "Certificate is bound to at least one Web service.";
-  if (certificate.source === "acme" || certificate.source === "sync") {
+  if (certificate.source === "acme") {
     return "Certificate is bound to file-certificate Web services and must remain a local certificate source.";
+  }
+  if (!certificate.certPath || !certificate.keyPath) {
+    return "Certificate is bound to file-certificate Web services and must keep readable certificate files.";
+  }
+  if (certificate.status === "pending" || certificate.status === "invalid" || certificate.status === "expired") {
+    return `Certificate is bound to file-certificate Web services and cannot be ${certificate.status}.`;
   }
   const missingDomains = boundServiceDomains(fileBoundServices).filter((domain) => !certificateCoversDomain(certificate.domains, domain));
   if (missingDomains.length > 0) {
@@ -373,4 +398,15 @@ function boundCertificateResultConflict(certificate: CertificateItem, services: 
 
 function boundServiceDomains(services: WebService[]): string[] {
   return Array.from(new Set(services.flatMap((service) => service.domains).map((domain) => domain.trim().toLowerCase()).filter(Boolean)));
+}
+
+function removeReceivedCertificateFiles(next: CertificateItem, current: CertificateItem): void {
+  const certDir = path.resolve(config.certDir);
+  for (const filePath of [next.certPath, next.keyPath]) {
+    if (!filePath || filePath === current.certPath || filePath === current.keyPath) continue;
+    const resolved = path.resolve(filePath);
+    const relative = path.relative(certDir, resolved);
+    if (relative.startsWith("..") || path.isAbsolute(relative)) continue;
+    fs.rmSync(resolved, { force: true });
+  }
 }

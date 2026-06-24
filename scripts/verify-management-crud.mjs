@@ -18,6 +18,7 @@ const httpsHost = `crud-tls-${suffix}.localhost`;
 const editedHttpsHost = `crud-tls-edit-${suffix}.localhost`;
 const uploadedHttpsHost = `crud-upload-${suffix}.localhost`;
 const pathHttpsHost = `crud-path-${suffix}.localhost`;
+const syncHttpsHost = `crud-sync-received-${suffix}.localhost`;
 const acmeHost = `crud-acme-${suffix}.localhost`;
 const acmeResolver = `resolver-${suffix}`;
 const mountedCertDir = path.resolve(process.env.GATELITE_VERIFY_CERT_DIR || "runtime/certs");
@@ -35,6 +36,8 @@ const created = {
   uploadedServiceId: "",
   pathCertificateId: "",
   pathServiceId: "",
+  syncedCertificateId: "",
+  syncedServiceId: "",
   pathCertificateFiles: [],
   acmeServiceId: ""
 };
@@ -50,6 +53,7 @@ try {
   await downloadAndVerifyCertificate(certificate.id);
   await reorderAndVerifyCertificates(certificate.id);
   await createRefreshAndDeleteSyncCertificate();
+  await createAndVerifySyncedCertificateRoute(group.id);
   await createAndVerifyUploadedCertificateRoute(group.id);
   await createAndVerifyPathCertificateRoute(group.id);
 
@@ -263,6 +267,50 @@ async function createRefreshAndDeleteSyncCertificate() {
 
   await apiNoContent(`/api/certificates/${certificate.id}`, "DELETE");
   console.log("[ok] Sync certificate target registration and refresh status action work.");
+}
+
+async function createAndVerifySyncedCertificateRoute(groupId) {
+  const certificate = await apiJson("/api/certificates", {
+    method: "POST",
+    body: {
+      name: `CRUD synced TLS ${suffix}`,
+      enabled: true,
+      source: "sync",
+      domains: [syncHttpsHost],
+      sync: { target: `https://peer.example.com/sync/${suffix}/receive` }
+    },
+    expectedStatus: 201
+  });
+  created.syncedCertificateId = certificate.id;
+  if (certificate.status !== "pending" || certificate.certPath || certificate.keyPath) {
+    throw new Error("New sync certificate should start pending without local PEM files.");
+  }
+
+  const { certPem, keyPem } = createTemporaryPemBundle(syncHttpsHost);
+  const received = await apiJson(`/api/certificates/${certificate.id}/sync`, {
+    method: "POST",
+    body: {
+      certPem,
+      keyPem,
+      domains: [syncHttpsHost]
+    }
+  });
+  if (received.status !== "valid" || received.source !== "sync" || !received.certPath || !received.keyPath || !received.sync?.lastSyncTime) {
+    throw new Error("Received sync certificate was not parsed into a valid local certificate bundle.");
+  }
+  if (!received.domains.includes(syncHttpsHost)) {
+    throw new Error("Received sync certificate did not keep the expected SAN.");
+  }
+  await verifyGeneratedConfigIncludes(`/certs/${path.basename(received.certPath)}`, "synced certificate generated cert mount");
+  await verifyGeneratedConfigIncludes(`/certs/${path.basename(received.keyPath)}`, "synced certificate generated key mount");
+
+  const service = await createAndVerifyHttpsService(groupId, certificate.id, syncHttpsHost);
+  created.syncedServiceId = service.id;
+  await verifyCertificateBinding(certificate.id, service.id, "synced PEM certificate");
+  await verifyBoundCertificateToggleProtection(certificate.id, "synced PEM certificate");
+  await verifyBoundFileCertificateUpdateProtection(certificate.id, syncHttpsHost, "synced PEM certificate");
+  await verifyBoundSyncedCertificateReceiveProtection(certificate.id, syncHttpsHost);
+  console.log("[ok] Synced PEM certificate receive action binds to a verified HTTPS route.");
 }
 
 async function createAndVerifyUploadedCertificateRoute(groupId) {
@@ -632,6 +680,30 @@ async function verifyBoundAcmeResolverUpdateProtection(certificateId, resolver) 
   console.log("[ok] Bound ACME resolver edit protection keeps resolver routes bound.");
 }
 
+async function verifyBoundSyncedCertificateReceiveProtection(certificateId, boundHost) {
+  const replacementHost = `wrong-${boundHost}`;
+  const { certPem, keyPem } = createTemporaryPemBundle(replacementHost);
+  const response = await request(`${gateliteApiUrl}/api/certificates/${certificateId}/sync`, {
+    method: "POST",
+    body: JSON.stringify({
+      certPem,
+      keyPem,
+      domains: [replacementHost]
+    }),
+    headers: { "Content-Type": "application/json" }
+  });
+  if (response.status !== 409 || !response.body.includes("covering")) {
+    throw new Error(`Receiving a synced PEM that drops bound ${boundHost} should return HTTP 409, got ${response.status}: ${response.body.slice(0, 300)}`);
+  }
+
+  const certificate = await readCertificate(certificateId);
+  if (!certificate.domains.includes(boundHost)) {
+    throw new Error(`Rejected synced PEM receive should leave the bound certificate covering ${boundHost}.`);
+  }
+  await waitForHttpRoute(boundHost, "https");
+  console.log("[ok] Bound synced PEM receive protection keeps the existing HTTPS route usable.");
+}
+
 async function expectCertificateUpdateConflict(certificateId, body, message) {
   const response = await request(`${gateliteApiUrl}/api/certificates/${certificateId}`, {
     method: "PUT",
@@ -673,6 +745,12 @@ async function deleteAndVerifyResources() {
   await apiNoContent(`/api/certificates/${created.acmeCertificateId}`, "DELETE");
   created.acmeCertificateId = "";
 
+  await apiNoContent(`/api/web-services/${created.syncedServiceId}`, "DELETE");
+  created.syncedServiceId = "";
+  await waitForRouteUnavailable(syncHttpsHost, "https");
+  await apiNoContent(`/api/certificates/${created.syncedCertificateId}`, "DELETE");
+  created.syncedCertificateId = "";
+
   await apiNoContent(`/api/web-services/${created.uploadedServiceId}`, "DELETE");
   created.uploadedServiceId = "";
   await waitForRouteUnavailable(uploadedHttpsHost, "https");
@@ -707,6 +785,7 @@ async function deleteAndVerifyResources() {
 
 async function cleanup() {
   await ignoreNotFound(async () => created.acmeServiceId && apiNoContent(`/api/web-services/${created.acmeServiceId}`, "DELETE"));
+  await ignoreNotFound(async () => created.syncedServiceId && apiNoContent(`/api/web-services/${created.syncedServiceId}`, "DELETE"));
   await ignoreNotFound(async () => created.pathServiceId && apiNoContent(`/api/web-services/${created.pathServiceId}`, "DELETE"));
   await ignoreNotFound(async () => created.uploadedServiceId && apiNoContent(`/api/web-services/${created.uploadedServiceId}`, "DELETE"));
   await ignoreNotFound(async () => created.httpsServiceId && apiNoContent(`/api/web-services/${created.httpsServiceId}`, "DELETE"));
@@ -714,6 +793,7 @@ async function cleanup() {
   await ignoreNotFound(async () => created.customServiceId && apiNoContent(`/api/web-services/${created.customServiceId}`, "DELETE"));
   await ignoreNotFound(async () => created.httpServiceId && apiNoContent(`/api/web-services/${created.httpServiceId}`, "DELETE"));
   await ignoreNotFound(async () => created.acmeCertificateId && apiNoContent(`/api/certificates/${created.acmeCertificateId}`, "DELETE"));
+  await ignoreNotFound(async () => created.syncedCertificateId && apiNoContent(`/api/certificates/${created.syncedCertificateId}`, "DELETE"));
   await ignoreNotFound(async () => created.pathCertificateId && apiNoContent(`/api/certificates/${created.pathCertificateId}`, "DELETE"));
   await ignoreNotFound(async () => created.uploadedCertificateId && apiNoContent(`/api/certificates/${created.uploadedCertificateId}`, "DELETE"));
   await ignoreNotFound(async () => created.certificateId && apiNoContent(`/api/certificates/${created.certificateId}`, "DELETE"));

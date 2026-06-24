@@ -31,7 +31,7 @@ function validateFileCertificateBinding(service: WebService, certificates: Certi
   if (!certificate.enabled) {
     throw new BadRequestError(`Certificate is disabled: ${certificate.name}`);
   }
-  if (certificate.source === "acme" || certificate.source === "sync") {
+  if (certificate.source === "acme") {
     throw new BadRequestError(`Certificate source ${certificate.source} cannot be used with file-certificate TLS mode.`);
   }
   if (!certificate.certPath || !certificate.keyPath) {

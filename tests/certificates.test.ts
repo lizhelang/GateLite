@@ -7,7 +7,7 @@ import { afterAll, describe, expect, it } from "vitest";
 const certDir = fs.mkdtempSync(path.join(os.tmpdir(), "gatelite-certs-"));
 process.env.GATELITE_CERT_DIR = certDir;
 
-const { createCertificateFromInput, refreshCertificateFromAction } = await import("../server/certificates");
+const { createCertificateFromInput, receiveSyncedCertificate, refreshCertificateFromAction } = await import("../server/certificates");
 
 afterAll(() => {
   fs.rmSync(certDir, { recursive: true, force: true });
@@ -44,6 +44,31 @@ describe("createCertificateFromInput", () => {
 
     expect(refreshed.status).toBe("pending");
     expect(refreshed.sync?.lastSyncTime).toBeTruthy();
+  });
+
+  it("receives synced PEM bundles into the mounted certificate directory", () => {
+    const certificate = createCertificateFromInput({
+      name: "Sync target",
+      enabled: true,
+      source: "sync",
+      domains: ["sync-received.localhost"],
+      sync: { target: "https://peer.example.com/api/ssl/sync" }
+    });
+    const { certPem, keyPem } = createTemporaryPemBundle("sync-received.localhost");
+
+    const received = receiveSyncedCertificate(certificate, {
+      certPem,
+      keyPem,
+      domains: ["sync-received.localhost"]
+    });
+
+    expect(received.source).toBe("sync");
+    expect(received.status).toBe("valid");
+    expect(received.domains).toContain("sync-received.localhost");
+    expect(received.certPath?.startsWith(certDir)).toBe(true);
+    expect(received.keyPath?.startsWith(certDir)).toBe(true);
+    expect(received.sync?.lastSyncTime).toBeTruthy();
+    expect(received.notAfter).toBeTruthy();
   });
 
   it("accepts existing path certificates only from the mounted certificate directory", () => {
@@ -107,3 +132,34 @@ describe("createCertificateFromInput", () => {
     }
   });
 });
+
+function createTemporaryPemBundle(host: string): { certPem: string; keyPem: string } {
+  const certPath = path.join(certDir, `${host}.crt`);
+  const keyPath = path.join(certDir, `${host}.key`);
+  execFileSync(
+    "openssl",
+    [
+      "req",
+      "-x509",
+      "-newkey",
+      "rsa:2048",
+      "-sha256",
+      "-nodes",
+      "-days",
+      "90",
+      "-subj",
+      `/CN=${host}`,
+      "-addext",
+      `subjectAltName=DNS:${host}`,
+      "-keyout",
+      keyPath,
+      "-out",
+      certPath
+    ],
+    { stdio: "ignore" }
+  );
+  return {
+    certPem: fs.readFileSync(certPath, "utf8"),
+    keyPem: fs.readFileSync(keyPath, "utf8")
+  };
+}

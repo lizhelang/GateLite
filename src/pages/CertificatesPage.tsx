@@ -1,7 +1,7 @@
 import { ArrowRight, CalendarClock, Copy, Download, EllipsisVertical, FileKey2, GripVertical, KeyRound, Pencil, Plus, Power, RefreshCw, Trash2, Upload } from "lucide-react";
 import { useMemo, useState, type ChangeEvent, type FormEvent, type ReactNode } from "react";
 import type { CertificateWithBindings, DashboardPayload } from "../../shared/types";
-import { createCertificate, deleteCertificate, refreshCertificate, reorderCertificates, toggleCertificate, updateCertificate, type CertificateInput } from "../api";
+import { createCertificate, deleteCertificate, receiveCertificateSync, refreshCertificate, reorderCertificates, toggleCertificate, updateCertificate, type CertificateInput, type CertificateSyncInput } from "../api";
 import { Modal } from "../components/Modal";
 import { StatusBadge } from "../components/StatusBadge";
 import { Badge } from "@/components/ui/badge";
@@ -69,12 +69,14 @@ export function CertificatesPage({ dashboard, onRefresh }: CertificatesPageProps
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<CertificateWithBindings | null>(null);
   const [details, setDetails] = useState<CertificateWithBindings | null>(null);
+  const [syncReceiving, setSyncReceiving] = useState<CertificateWithBindings | null>(null);
   const [initialSource, setInitialSource] = useState<CertificateInput["source"]>("self-signed");
   const [draftPreset, setDraftPreset] = useState<Partial<DraftCertificate> | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [filter, setFilter] = useState<CertificateFilter>("all");
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [syncSaving, setSyncSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const certificates = useMemo(() => [...dashboard.certificates].sort((a, b) => a.order - b.order), [dashboard.certificates]);
@@ -289,6 +291,7 @@ export function CertificatesPage({ dashboard, onRefresh }: CertificatesPageProps
         onDuplicate={openDuplicate}
         onDownload={handleDownload}
         onRefreshStatus={handleRefresh}
+        onReceiveSync={setSyncReceiving}
         onDetails={setDetails}
         onEdit={openEdit}
         onDelete={handleDelete}
@@ -330,6 +333,27 @@ export function CertificatesPage({ dashboard, onRefresh }: CertificatesPageProps
           <CertificateDetails certificate={details} />
         </Modal>
       ) : null}
+
+      {syncReceiving ? (
+        <SyncReceiveForm
+          certificate={syncReceiving}
+          saving={syncSaving}
+          onClose={() => setSyncReceiving(null)}
+          onSubmit={async (input) => {
+            setSyncSaving(true);
+            setError(null);
+            try {
+              await receiveCertificateSync(syncReceiving.id, input);
+              setSyncReceiving(null);
+              await onRefresh();
+            } catch (syncError) {
+              setError(syncError instanceof Error ? syncError.message : t("Sync receive failed.", "接收同步证书失败。"));
+            } finally {
+              setSyncSaving(false);
+            }
+          }}
+        />
+      ) : null}
     </section>
   );
 }
@@ -347,6 +371,7 @@ function CertificateDataTable({
   onDuplicate,
   onDownload,
   onRefreshStatus,
+  onReceiveSync,
   onDetails,
   onEdit,
   onDelete
@@ -363,6 +388,7 @@ function CertificateDataTable({
   onDuplicate: (certificate: CertificateWithBindings) => void;
   onDownload: (certificate: CertificateWithBindings) => void;
   onRefreshStatus: (certificate: CertificateWithBindings) => Promise<void>;
+  onReceiveSync: (certificate: CertificateWithBindings) => void;
   onDetails: (certificate: CertificateWithBindings) => void;
   onEdit: (certificate: CertificateWithBindings) => void;
   onDelete: (certificate: CertificateWithBindings) => Promise<void>;
@@ -484,6 +510,12 @@ function CertificateDataTable({
                             <RefreshCw className="size-4" />
                             {t("Refresh status", "刷新状态")}
                           </DropdownMenuItem>
+                          {certificate.source === "sync" ? (
+                            <DropdownMenuItem onSelect={() => onReceiveSync(certificate)}>
+                              <Upload className="size-4" />
+                              {t("Receive synced PEM", "接收同步 PEM")}
+                            </DropdownMenuItem>
+                          ) : null}
                           <DropdownMenuItem onSelect={() => onEdit(certificate)}>
                             <Pencil className="size-4" />
                             {t("Edit", "编辑")}
@@ -854,6 +886,106 @@ function CertificateForm({
           <Button type="submit" disabled={submitDisabled}>
             {draft.source === "upload" ? <Upload className="size-4" /> : <KeyRound className="size-4" />}
             {saving ? t("Saving...", "保存中...") : t("Save", "保存")}
+          </Button>
+        </footer>
+      </form>
+    </Modal>
+  );
+}
+
+function SyncReceiveForm({
+  certificate,
+  saving,
+  onClose,
+  onSubmit
+}: {
+  certificate: CertificateWithBindings;
+  saving: boolean;
+  onClose: () => void;
+  onSubmit: (input: CertificateSyncInput) => Promise<void>;
+}) {
+  const { t } = useLanguage();
+  const [certPem, setCertPem] = useState("");
+  const [keyPem, setKeyPem] = useState("");
+  const [domainsText, setDomainsText] = useState(certificate.domains.join(", "));
+  const [fileError, setFileError] = useState<string | null>(null);
+  const boundCount = certificate.boundServices.length;
+
+  const handlePemFile = async (event: ChangeEvent<HTMLInputElement>, field: "certPem" | "keyPem") => {
+    const input = event.currentTarget;
+    const file = input.files?.[0];
+    if (!file) return;
+    setFileError(null);
+    try {
+      const text = await file.text();
+      if (field === "certPem") {
+        setCertPem(text);
+      } else {
+        setKeyPem(text);
+      }
+    } catch {
+      setFileError(t("Unable to read selected PEM file.", "无法读取选择的 PEM 文件。"));
+    } finally {
+      input.value = "";
+    }
+  };
+
+  const submit = async (event: FormEvent) => {
+    event.preventDefault();
+    await onSubmit({
+      certPem,
+      keyPem,
+      domains: splitList(domainsText)
+    });
+  };
+
+  return (
+    <Modal title={t("Receive synced certificate", "接收同步证书")} subtitle={t("Import a synced PEM bundle into the local Docker-mounted certificate store.", "把同步过来的 PEM 证书包导入本地 Docker 可读证书目录。")} onClose={onClose}>
+      <form className="grid gap-4 md:grid-cols-2" onSubmit={(event) => void submit(event)}>
+        {boundCount > 0 ? (
+          <div className="md:col-span-2 rounded-lg border border-amber-300/25 bg-amber-300/10 p-3 text-sm text-amber-100">
+            <div className="font-medium">{t("Bound domains must stay covered", "已绑定域名必须保持覆盖")}</div>
+            <div className="mt-1 text-xs text-amber-100/75">
+              {t(`This sync certificate is used by ${boundCount} Web service rule(s). The received PEM must still cover those frontend domains.`, `这张同步证书正在被 ${boundCount} 条 Web 服务规则使用。接收的新 PEM 必须继续覆盖这些前端域名。`)}
+            </div>
+          </div>
+        ) : null}
+        <Field className="md:col-span-2" label={t("Domains / SAN hint", "域名 / SAN 提示")}>
+          <Input value={domainsText} onChange={(event) => setDomainsText(event.target.value)} placeholder="secure.localhost, app.example.com" />
+        </Field>
+        <div className="grid gap-3 md:col-span-2 md:grid-cols-2">
+          <Field label={t("Certificate file", "证书文件")}>
+            <Input
+              type="file"
+              accept=".pem,.crt,.cer,.cert,text/plain,application/x-pem-file"
+              onChange={(event) => void handlePemFile(event, "certPem")}
+              className="cursor-pointer text-xs file:mr-3 file:rounded-md file:border-0 file:bg-muted file:px-2 file:py-1 file:text-xs file:font-medium"
+            />
+          </Field>
+          <Field label={t("Private key file", "私钥文件")}>
+            <Input
+              type="file"
+              accept=".pem,.key,text/plain,application/x-pem-file"
+              onChange={(event) => void handlePemFile(event, "keyPem")}
+              className="cursor-pointer text-xs file:mr-3 file:rounded-md file:border-0 file:bg-muted file:px-2 file:py-1 file:text-xs file:font-medium"
+            />
+          </Field>
+        </div>
+        {fileError ? <p className="md:col-span-2 text-xs text-destructive">{fileError}</p> : null}
+        <Field className="md:col-span-2" label={t("Certificate PEM", "证书 PEM")}>
+          <Textarea value={certPem} onChange={(event) => setCertPem(event.target.value)} rows={5} placeholder="-----BEGIN CERTIFICATE-----" required />
+        </Field>
+        <Field className="md:col-span-2" label={t("Private key PEM", "私钥 PEM")}>
+          <Textarea value={keyPem} onChange={(event) => setKeyPem(event.target.value)} rows={5} placeholder="-----BEGIN PRIVATE KEY-----" required />
+        </Field>
+        <Separator className="md:col-span-2" />
+        <footer className="flex justify-end gap-2 md:col-span-2">
+          <Button type="button" variant="outline" onClick={onClose}>
+            {t("Cancel", "取消")}
+          </Button>
+          <Button type="submit" disabled={saving || !certPem.trim() || !keyPem.trim()}>
+            <Upload className="size-4" />
+            {saving ? t("Receiving...", "接收中...") : t("Receive PEM", "接收 PEM")}
           </Button>
         </footer>
       </form>

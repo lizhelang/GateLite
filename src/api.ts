@@ -30,6 +30,12 @@ export type CertificateInput = {
   };
 };
 
+export type CertificateSyncInput = {
+  certPem: string;
+  keyPem: string;
+  domains?: string[];
+};
+
 export async function getDashboard(): Promise<DashboardPayload> {
   return request<DashboardPayload>("/api/dashboard");
 }
@@ -120,6 +126,13 @@ export async function toggleCertificate(id: string, enabled: boolean): Promise<C
 export async function refreshCertificate(id: string): Promise<CertificateWithBindings> {
   return request<CertificateWithBindings>(`/api/certificates/${id}/refresh`, {
     method: "PATCH"
+  });
+}
+
+export async function receiveCertificateSync(id: string, input: CertificateSyncInput): Promise<CertificateWithBindings> {
+  return request<CertificateWithBindings>(`/api/certificates/${id}/sync`, {
+    method: "POST",
+    body: JSON.stringify(input)
   });
 }
 

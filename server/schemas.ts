@@ -97,6 +97,12 @@ export const certificateInputSchema = z.object({
     .optional()
 });
 
+export const certificateSyncInputSchema = z.object({
+  certPem: z.string().trim().min(1),
+  keyPem: z.string().trim().min(1),
+  domains: z.array(z.string().trim()).optional()
+});
+
 export const reorderSchema = z.object({
   orderedIds: z.array(z.string()).min(1)
 });
