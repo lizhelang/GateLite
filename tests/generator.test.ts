@@ -124,6 +124,41 @@ describe("generateTraefikDynamicConfig", () => {
     expect(generated.yaml.trim()).toBe("{}");
   });
 
+  it("omits mapped Traefik routes so existing provider routers are not duplicated", () => {
+    const state: GateLiteState = {
+      version: 1,
+      groups: [],
+      certificates: [],
+      webServices: [
+        {
+          id: "svc-mapped",
+          name: "Mapped Docker",
+          enabled: true,
+          managementMode: "mapped",
+          sourceRouterName: "erp@docker",
+          sourceProvider: "docker",
+          sourceServiceName: "erp@docker",
+          groupId: "local",
+          domains: ["erp.localhost"],
+          listenPort: 443,
+          entryPoints: ["websecure"],
+          targetUrl: "http://172.20.0.7:8080",
+          middlewares: [],
+          tls: { mode: "none" },
+          order: 1,
+          createdAt: "2026-06-23T00:00:00.000Z",
+          updatedAt: "2026-06-23T00:00:00.000Z"
+        }
+      ],
+      history: []
+    };
+
+    const generated = generateTraefikDynamicConfig(state);
+
+    expect(generated.object).toEqual({});
+    expect(generated.yaml.trim()).toBe("{}");
+  });
+
   it("renders default fallback services as low-priority catch-all routers", () => {
     const state: GateLiteState = {
       version: 1,

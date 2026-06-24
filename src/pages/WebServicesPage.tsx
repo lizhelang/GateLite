@@ -17,13 +17,15 @@ import {
   Upload
 } from "lucide-react";
 import { Fragment, FormEvent, useMemo, useState, type ReactNode } from "react";
-import type { DashboardPayload, ServiceGroup, WebServicePreview, WebServiceTrafficStats, WebServiceWithRuntime } from "../../shared/types";
+import type { DashboardPayload, DiscoveredRoute, ImportRoutePreview, ServiceGroup, WebServicePreview, WebServiceTrafficStats, WebServiceWithRuntime } from "../../shared/types";
 import {
   createGroup,
   createWebService,
   deleteGroup,
   deleteWebService,
+  importDiscoveredRoute,
   previewCreateWebService,
+  previewImportDiscoveredRoute,
   previewUpdateWebService,
   reorderGroups,
   reorderWebServices,
@@ -137,6 +139,9 @@ export function WebServicesPage({ dashboard, onRefresh }: WebServicesPageProps) 
   const [activeRoot, setActiveRoot] = useState("__all");
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [draggingGroupId, setDraggingGroupId] = useState<string | null>(null);
+  const [importPreview, setImportPreview] = useState<ImportRoutePreview | null>(null);
+  const [importingRouterName, setImportingRouterName] = useState<string | null>(null);
+  const [importSaving, setImportSaving] = useState(false);
   const [saving, setSaving] = useState(false);
   const [groupSaving, setGroupSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -389,6 +394,34 @@ export function WebServicesPage({ dashboard, onRefresh }: WebServicesPageProps) 
     }
   };
 
+  const handlePreviewImport = async (route: DiscoveredRoute) => {
+    setError(null);
+    setImportPreview(null);
+    setImportingRouterName(route.routerName);
+    try {
+      setImportPreview(await previewImportDiscoveredRoute(route.routerName));
+    } catch (importError) {
+      setError(importError instanceof Error ? importError.message : t("Import preview failed.", "导入预览失败。"));
+    } finally {
+      setImportingRouterName(null);
+    }
+  };
+
+  const handleApplyImport = async () => {
+    if (!importPreview) return;
+    setImportSaving(true);
+    setError(null);
+    try {
+      await importDiscoveredRoute(importPreview.route.routerName, importPreview.service.groupId);
+      setImportPreview(null);
+      await onRefresh();
+    } catch (importError) {
+      setError(importError instanceof Error ? importError.message : t("Import failed.", "导入失败。"));
+    } finally {
+      setImportSaving(false);
+    }
+  };
+
   return (
     <section className="grid gap-3">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -438,6 +471,12 @@ export function WebServicesPage({ dashboard, onRefresh }: WebServicesPageProps) 
       />
 
       {error ? <div className="rounded-xl border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">{error}</div> : null}
+
+      <DiscoveredRouteTable
+        routes={dashboard.discoveredRoutes}
+        importingRouterName={importingRouterName}
+        onPreviewImport={handlePreviewImport}
+      />
 
       <RouteDataTable
         routes={activeRoutes}
@@ -505,7 +544,179 @@ export function WebServicesPage({ dashboard, onRefresh }: WebServicesPageProps) 
           onSubmit={handleSaveGroup}
         />
       ) : null}
+
+      {importPreview ? (
+        <Modal title={t("Map existing Traefik router", "映射已有 Traefik 路由")} subtitle={t("Create a GateLite-managed mapping without writing a duplicate file-provider router.", "创建 GateLite 管理映射，但不写出重复的 file-provider 路由。")} onClose={() => setImportPreview(null)}>
+          <div className="grid gap-4">
+            <div className="grid gap-3 rounded-lg border bg-background/35 p-3 text-sm md:grid-cols-3">
+              <DetailCell label={t("Frontend domain", "前端域名")} value={importPreview.route.domains.join(", ")} mono />
+              <DetailCell label={t("Backend IP:port", "后端 IP:端口")} value={formatBackendTarget(importPreview.route.backend.targetUrl || "").hostPort || importPreview.route.backend.targetUrl || ""} mono />
+              <DetailCell label="Provider" value={importPreview.route.provider || "unknown"} />
+            </div>
+            <ConfigPreviewPanel
+              title={t("Mapping preview", "映射预览")}
+              description={t("Mapped routes stay read-only in Traefik and do not generate duplicate YAML.", "映射路由保持读取现有 Traefik 对象，不生成重复 YAML。")}
+              actionLabel={t("map", "映射")}
+              targetLabel={importPreview.route.routerName}
+              currentYaml={importPreview.currentYaml}
+              nextYaml={importPreview.nextYaml}
+              diff={importPreview.diff}
+              clearLabel={t("Clear", "清除")}
+              noChangesLabel={t("No generated YAML changes. This is expected for mapped imports.", "生成的 YAML 没有变化；映射导入就是这样。")}
+              currentLabel={t("Current YAML", "当前 YAML")}
+              nextLabel={t("Next YAML", "下一版 YAML")}
+              addedLabel={t("added", "新增")}
+              removedLabel={t("removed", "删除")}
+              onClear={() => setImportPreview(null)}
+            />
+            <div className="rounded-lg border bg-muted/25 p-3 text-xs text-muted-foreground">
+              {importPreview.warnings.map((warning) => (
+                <div key={warning}>{warning}</div>
+              ))}
+            </div>
+            <footer className="flex justify-end gap-2">
+              <Button type="button" variant="outline" onClick={() => setImportPreview(null)}>
+                {t("Cancel", "取消")}
+              </Button>
+              <Button type="button" disabled={importSaving} onClick={() => void handleApplyImport()}>
+                <Save className="size-4" />
+                {importSaving ? t("Mapping...", "映射中...") : t("Map into GateLite", "映射到 GateLite")}
+              </Button>
+            </footer>
+          </div>
+        </Modal>
+      ) : null}
     </section>
+  );
+}
+
+function DiscoveredRouteTable({
+  routes,
+  importingRouterName,
+  onPreviewImport
+}: {
+  routes: DiscoveredRoute[];
+  importingRouterName: string | null;
+  onPreviewImport: (route: DiscoveredRoute) => Promise<void>;
+}) {
+  const { t } = useLanguage();
+  const unmanagedCount = routes.filter((route) => route.managedMode === "unmanaged").length;
+  return (
+    <div className="overflow-hidden rounded-xl border bg-card/80">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3">
+        <div className="min-w-0">
+          <div className="text-xs text-muted-foreground">{t("Discovered from Traefik runtime", "从 Traefik 运行时发现")}</div>
+          <h2 className="truncate text-base font-semibold">{t("Reverse proxy domains", "反代域名")}</h2>
+        </div>
+        <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+          <Badge variant="secondary" className="rounded-md">
+            {t(`${routes.length} routers`, `${routes.length} 个路由`)}
+          </Badge>
+          <Badge variant="outline" className="rounded-md">
+            {t(`${unmanagedCount} unmapped`, `${unmanagedCount} 个未映射`)}
+          </Badge>
+        </div>
+      </div>
+      <div className="overflow-x-auto">
+        <Table className="min-w-[1040px]">
+          <TableHeader className="bg-muted/65">
+            <TableRow className="hover:bg-transparent">
+              <TableHead className="min-w-[250px]">{t("Frontend domain", "前端域名")}</TableHead>
+              <TableHead className="min-w-[230px]">{t("Backend IP:port", "后端 IP:端口")}</TableHead>
+              <TableHead className="w-28">Provider</TableHead>
+              <TableHead className="w-28">{t("Status", "状态")}</TableHead>
+              <TableHead className="w-24 text-right">
+                <span className="inline-flex items-center gap-1">
+                  <Download className="size-3.5" />
+                  {t("Down", "下行")}
+                </span>
+              </TableHead>
+              <TableHead className="w-24 text-right">
+                <span className="inline-flex items-center gap-1">
+                  <Upload className="size-3.5" />
+                  {t("Up", "上行")}
+                </span>
+              </TableHead>
+              <TableHead className="w-16 text-right">{t("Conn.", "实时连接")}</TableHead>
+              <TableHead className="w-28 text-right">{t("Management", "管理")}</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {routes.map((route) => {
+              const frontend = discoveredFrontend(route);
+              const backend = formatBackendTarget(route.backend.targetUrl || route.backend.servers[0] || "");
+              const canImport = route.importable && route.managedMode === "unmanaged";
+              return (
+                <TableRow key={route.routerName} className="h-11">
+                  <TableCell className="py-1.5">
+                    <div className="grid min-w-0 gap-0.5">
+                      <span className="truncate font-mono text-xs font-medium text-cyan-100">{frontend.label}</span>
+                      <span className="truncate text-[10px] text-muted-foreground">{frontend.meta}</span>
+                    </div>
+                  </TableCell>
+                  <TableCell className="py-1.5">
+                    <div className="grid min-w-0 grid-cols-[1rem_minmax(0,1fr)] items-center gap-x-1 text-xs leading-tight">
+                      <ArrowRight className="size-3.5 text-muted-foreground" />
+                      <span className="truncate font-mono text-foreground">{backend.hostPort || route.backend.targetUrl || t("No server URL", "无后端地址")}</span>
+                      <span />
+                      <span className="truncate text-muted-foreground">{backend.scheme || route.backend.serviceName || route.serviceName || "service"}</span>
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant="outline" className="rounded-md">
+                      {route.provider || "unknown"}
+                    </Badge>
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex flex-wrap gap-1">
+                      <StatusBadge status={route.status} className="h-5 rounded-md px-1.5 text-[10px]" />
+                      <Badge variant="outline" className="h-5 rounded-md px-1.5 text-[10px]">
+                        {route.tls ? "TLS" : "HTTP"}
+                      </Badge>
+                    </div>
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <TrafficValue value={route.traffic?.responseBytes || 0} rate={route.traffic?.responseBytesPerSecond || 0} source={route.traffic?.source} tone="down" />
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <TrafficValue value={route.traffic?.requestBytes || 0} rate={route.traffic?.requestBytesPerSecond || 0} source={route.traffic?.source} tone="up" />
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <ConnectionValue traffic={route.traffic} />
+                  </TableCell>
+                  <TableCell className="text-right">
+                    {route.managedMode !== "unmanaged" ? (
+                      <Badge variant="secondary" className="rounded-md">
+                        {route.managedMode === "mapped" ? t("Mapped", "已映射") : t("Generated", "已生成")}
+                      </Badge>
+                    ) : (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={!canImport || importingRouterName === route.routerName}
+                        title={!route.importable ? route.importWarnings.join(" ") : undefined}
+                        onClick={() => void onPreviewImport(route)}
+                      >
+                        <Plus className="size-3.5" />
+                        {importingRouterName === route.routerName ? t("Previewing...", "预览中...") : t("Map", "映射")}
+                      </Button>
+                    )}
+                  </TableCell>
+                </TableRow>
+              );
+            })}
+            {routes.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={8} className="h-24 text-center text-sm text-muted-foreground">
+                  {t("No Traefik HTTP routers were discovered.", "没有发现 Traefik HTTP 路由。")}
+                </TableCell>
+              </TableRow>
+            ) : null}
+          </TableBody>
+        </Table>
+      </div>
+    </div>
   );
 }
 
@@ -964,6 +1175,15 @@ function formatFrontendEndpoint(
     label: route.primaryDomain,
     meta: `${scheme.toUpperCase()} :${service.listenPort}`,
     href
+  };
+}
+
+function discoveredFrontend(route: DiscoveredRoute): { label: string; meta: string } {
+  const domainLabel = route.domains.length > 1 ? `${route.domains[0]} +${route.domains.length - 1}` : route.domains[0] || route.rule || route.routerName;
+  const entryPoints = route.entryPoints.length ? route.entryPoints.join(", ") : "no entrypoint";
+  return {
+    label: domainLabel,
+    meta: `${route.routerName} · ${entryPoints}`
   };
 }
 

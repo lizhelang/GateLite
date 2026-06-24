@@ -1,6 +1,6 @@
 import { ArrowRight, CalendarClock, ChevronDown, ChevronRight, Copy, Download, EllipsisVertical, FileKey2, FileText, GripVertical, KeyRound, Pencil, Plus, Power, RefreshCw, Trash2, Upload } from "lucide-react";
 import { Fragment, useMemo, useState, type ChangeEvent, type FormEvent, type ReactNode } from "react";
-import type { CertificatePreview, CertificateWithBindings, DashboardPayload } from "../../shared/types";
+import type { CertificatePreview, CertificateWithBindings, DashboardPayload, RuntimeTlsBinding } from "../../shared/types";
 import { createCertificate, deleteCertificate, previewCreateCertificate, previewUpdateCertificate, receiveCertificateSync, refreshCertificate, reorderCertificates, toggleCertificate, updateCertificate, type CertificateInput, type CertificateSyncInput } from "../api";
 import { ConfigPreviewPanel } from "../components/ConfigPreviewPanel";
 import { Modal } from "../components/Modal";
@@ -297,6 +297,8 @@ export function CertificatesPage({ dashboard, onRefresh }: CertificatesPageProps
 
       {error ? <div className="rounded-xl border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">{error}</div> : null}
 
+      <RuntimeTlsBindingTable bindings={dashboard.runtimeTlsBindings} />
+
       <CertificateDataTable
         certificates={filteredCertificates}
         selectedIds={selectedIds}
@@ -376,6 +378,87 @@ export function CertificatesPage({ dashboard, onRefresh }: CertificatesPageProps
         />
       ) : null}
     </section>
+  );
+}
+
+function RuntimeTlsBindingTable({ bindings }: { bindings: RuntimeTlsBinding[] }) {
+  const { t } = useLanguage();
+  return (
+    <div className="overflow-hidden rounded-xl border bg-card/80">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3">
+        <div className="min-w-0">
+          <div className="text-xs text-muted-foreground">{t("Discovered from Traefik TLS routers", "从 Traefik TLS 路由发现")}</div>
+          <h2 className="truncate text-base font-semibold">{t("Runtime TLS coverage", "运行时 TLS 覆盖")}</h2>
+        </div>
+        <Badge variant="secondary" className="rounded-md">
+          {t(`${bindings.length} TLS routers`, `${bindings.length} 个 TLS 路由`)}
+        </Badge>
+      </div>
+      <div className="overflow-x-auto">
+        <Table className="min-w-[900px]">
+          <TableHeader className="bg-muted/65">
+            <TableRow className="hover:bg-transparent">
+              <TableHead className="min-w-[240px]">{t("Domain", "域名")}</TableHead>
+              <TableHead className="min-w-[220px]">{t("Traefik router", "Traefik 路由")}</TableHead>
+              <TableHead className="w-36">{t("TLS source", "TLS 来源")}</TableHead>
+              <TableHead className="w-36">{t("GateLite mapping", "GateLite 映射")}</TableHead>
+              <TableHead className="w-28">{t("Status", "状态")}</TableHead>
+              <TableHead className="min-w-[220px]">{t("Import note", "导入说明")}</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {bindings.map((binding) => (
+              <TableRow key={binding.id} className="h-11">
+                <TableCell>
+                  <DomainList domains={binding.domains} />
+                </TableCell>
+                <TableCell>
+                  <div className="grid min-w-0 gap-0.5 text-xs leading-tight">
+                    <span className="truncate font-mono text-foreground">{binding.routerName}</span>
+                    <span className="truncate text-muted-foreground">{binding.provider || "unknown provider"}</span>
+                  </div>
+                </TableCell>
+                <TableCell>
+                  <div className="flex flex-wrap gap-1">
+                    {binding.tlsResolver ? <Badge variant="outline" className="rounded-md">ACME {binding.tlsResolver}</Badge> : null}
+                    {binding.tlsOptions ? <Badge variant="outline" className="rounded-md">{binding.tlsOptions}</Badge> : null}
+                    {!binding.tlsResolver && !binding.tlsOptions ? <Badge variant="outline" className="rounded-md">{t("Router TLS", "路由 TLS")}</Badge> : null}
+                  </div>
+                </TableCell>
+                <TableCell>
+                  {binding.managedCertificateId || binding.managedServiceId ? (
+                    <Badge variant="secondary" className="rounded-md">
+                      {binding.managedCertificateId ? t("Certificate mapped", "证书已映射") : t("Route mapped", "路由已映射")}
+                    </Badge>
+                  ) : (
+                    <Badge variant="outline" className="rounded-md">
+                      {t("Runtime only", "仅运行时")}
+                    </Badge>
+                  )}
+                </TableCell>
+                <TableCell>
+                  <StatusBadge status={binding.status} className="h-5 rounded-md px-1.5 text-[10px]" />
+                </TableCell>
+                <TableCell>
+                  <span className="text-xs text-muted-foreground">
+                    {binding.importable
+                      ? t("Can be represented as an ACME resolver certificate.", "可映射为 ACME 解析器证书。")
+                      : binding.importWarnings.join(" ") || t("Traefik did not expose certificate material.", "Traefik 没有暴露证书材料。")}
+                  </span>
+                </TableCell>
+              </TableRow>
+            ))}
+            {bindings.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={6} className="h-24 text-center text-sm text-muted-foreground">
+                  {t("No TLS routers were exposed by Traefik runtime.", "Traefik 运行时没有暴露 TLS 路由。")}
+                </TableCell>
+              </TableRow>
+            ) : null}
+          </TableBody>
+        </Table>
+      </div>
+    </div>
   );
 }
 

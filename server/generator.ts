@@ -71,7 +71,10 @@ export function writeTraefikDynamicConfig(state: GateLiteState): GeneratedConfig
 }
 
 function sortedEnabledServices(webServices: WebService[]): WebService[] {
-  return [...webServices].filter((service) => service.enabled).sort((a, b) => a.order - b.order);
+  return [...webServices]
+    .filter((service) => service.enabled)
+    .filter((service) => (service.managementMode || "generated") === "generated")
+    .sort((a, b) => a.order - b.order);
 }
 
 function routerRule(service: WebService): string {

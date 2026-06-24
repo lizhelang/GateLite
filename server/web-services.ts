@@ -15,7 +15,7 @@ export function validateWebService(service: WebService, state: GateLiteState): v
   if (service.tls.mode === "file-certificate") {
     validateFileCertificateBinding(service, state.certificates);
   }
-  if (service.tls.mode !== "none" && !service.entryPoints.includes("websecure")) {
+  if (service.managementMode !== "mapped" && service.tls.mode !== "none" && !service.entryPoints.includes("websecure")) {
     throw new BadRequestError("TLS services must include the websecure entrypoint.");
   }
   validateFrontendDomainAvailability(service, state.webServices);

@@ -2,11 +2,12 @@ import express from "express";
 import fs from "node:fs";
 import path from "node:path";
 import { z } from "zod";
-import type { CertificateItem, CertificatePreview, CertificateWithBindings, DashboardPayload, WebService, WebServicePreview, WebServiceWithRuntime } from "../shared/types";
+import type { CertificateItem, CertificatePreview, CertificateWithBindings, DashboardPayload, DiscoveredRoute, ImportRoutePreview, WebService, WebServicePreview, WebServiceWithRuntime } from "../shared/types";
 import { certificateCoversDomain, resolverName, webServicesBoundToCertificate } from "./bindings";
 import { diffText } from "./config-preview";
 import { config } from "./config";
 import { createCertificateFromInput, receiveSyncedCertificate, refreshCertificateFromAction, updateCertificateFromInput, type CertificateInput } from "./certificates";
+import { buildDiscoveredRoutes, buildRuntimeTlsBindings, createMappedWebServiceFromRoute, ensureImportedGroup, findDiscoveredRoute, transientServicesForUnmanagedRoutes } from "./discovery";
 import { generateTraefikDynamicConfig } from "./generator";
 import { createId, traefikName } from "./ids";
 import { getTrafficSnapshot } from "./metrics";
@@ -20,6 +21,11 @@ ensureState();
 
 const app = express();
 app.use(express.json({ limit: "4mb" }));
+
+const importRouteSchema = z.object({
+  routerName: z.string().trim().min(1),
+  groupId: z.string().trim().optional()
+});
 
 app.get("/api/health", (_request, response) => {
   response.json({
@@ -42,8 +48,29 @@ app.get("/api/web-services", async (_request, response) => {
   const payload = await dashboardPayload();
   response.json({
     groups: payload.groups,
-    webServices: payload.webServices
+    webServices: payload.webServices,
+    discoveredRoutes: payload.discoveredRoutes
   });
+});
+
+app.post("/api/discovered-routes/import-preview", async (request, response) => {
+  const parsed = importRouteSchema.parse(request.body);
+  const state = loadState();
+  const route = await loadImportableDiscoveredRoute(state, parsed.routerName);
+  response.json(previewImportRouteChange(state, route, parsed.groupId));
+});
+
+app.post("/api/discovered-routes/import", async (request, response) => {
+  const parsed = importRouteSchema.parse(request.body);
+  const state = loadState();
+  const route = await loadImportableDiscoveredRoute(state, parsed.routerName);
+  const groupId = ensureImportedGroup(state, parsed.groupId);
+  const now = new Date().toISOString();
+  const service = createMappedWebServiceFromRoute(route, createId("svc"), groupId, state.webServices.length + 1, now);
+  validateWebService(service, state);
+  state.webServices.push(service);
+  const next = saveState(state, "web-service.import-map", `Mapped existing Traefik router ${route.routerName} into GateLite.`);
+  response.status(201).json(next.webServices.find((item) => item.id === service.id));
 });
 
 app.post("/api/web-services", (request, response) => {
@@ -107,6 +134,9 @@ app.patch("/api/web-services/:id/toggle", (request, response) => {
   const state = loadState();
   const service = state.webServices.find((item) => item.id === request.params.id);
   if (!service) return response.status(404).json({ error: "Web service not found." });
+  if (service.managementMode === "mapped") {
+    throw new BadRequestError("Mapped Traefik routes are read-only in GateLite. Disable or edit the source router in Traefik/Docker labels, or delete only the GateLite mapping.");
+  }
   const updated: WebService = {
     ...service,
     enabled,
@@ -376,12 +406,16 @@ app.listen(config.port, () => {
 
 async function dashboardPayload(): Promise<DashboardPayload> {
   const state = loadState();
-  const [runtime, trafficSnapshot] = await Promise.all([getTraefikRuntime(), getTrafficSnapshot(state.webServices)]);
+  const runtime = await getTraefikRuntime();
+  const transientServices = transientServicesForUnmanagedRoutes(runtime, state);
+  const trafficSnapshot = await getTrafficSnapshot([...state.webServices, ...transientServices]);
+  const discoveredRoutes = buildDiscoveredRoutes(runtime, state, trafficSnapshot.statsByServiceId);
+  const runtimeTlsBindings = buildRuntimeTlsBindings(runtime, state, discoveredRoutes);
   const groupsById = new Map(state.groups.map((group) => [group.id, group]));
-  const routersByManagedName = new Map(runtime.routers.map((router) => [router.name.replace(/@file$/, ""), router]));
+  const routersByManagedName = new Map(runtime.routers.flatMap((router) => [[router.name, router] as const, [router.name.replace(/@[a-z0-9_-]+$/i, ""), router] as const]));
 
   const webServices: WebServiceWithRuntime[] = state.webServices.map((service) => {
-    const routerName = traefikName("gatelite", service.id);
+    const routerName = service.managementMode === "mapped" && service.sourceRouterName ? service.sourceRouterName : traefikName("gatelite", service.id);
     return {
       ...service,
       groupName: groupsById.get(service.groupId)?.name || "Ungrouped",
@@ -400,9 +434,22 @@ async function dashboardPayload(): Promise<DashboardPayload> {
     groups: state.groups,
     webServices,
     certificates,
+    discoveredRoutes,
+    runtimeTlsBindings,
     traffic: trafficSnapshot.overview,
     history: historyEventsForState(state)
   };
+}
+
+async function loadImportableDiscoveredRoute(state: ReturnType<typeof loadState>, routerName: string): Promise<DiscoveredRoute> {
+  const runtime = await getTraefikRuntime();
+  if (!runtime.connected) throw new BadRequestError(`Traefik runtime is unavailable: ${runtime.error || "not connected"}`);
+  const routes = buildDiscoveredRoutes(runtime, state);
+  const route = findDiscoveredRoute(routes, routerName);
+  if (!route) throw new BadRequestError(`Traefik router not found: ${routerName}`);
+  if (route.managedServiceId) throw new BadRequestError(`Traefik router is already mapped in GateLite: ${route.routerName}`);
+  if (!route.importable) throw new BadRequestError(`Traefik router cannot be imported: ${route.importWarnings.join(" ")}`);
+  return route;
 }
 
 function normalizeDomains(domains: string[]): string[] {
@@ -455,6 +502,31 @@ function previewWebServiceChange(state: ReturnType<typeof loadState>, service: W
     currentYaml,
     nextYaml,
     diff: diffText(currentYaml, nextYaml)
+  };
+}
+
+function previewImportRouteChange(state: ReturnType<typeof loadState>, route: DiscoveredRoute, groupIdInput: string | undefined): ImportRoutePreview {
+  const currentYaml = generateTraefikDynamicConfig(state).yaml;
+  const nextState = JSON.parse(JSON.stringify(state)) as ReturnType<typeof loadState>;
+  const groupId = ensureImportedGroup(nextState, groupIdInput);
+  const now = new Date().toISOString();
+  const service = createMappedWebServiceFromRoute(route, `preview-${route.routerName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "route"}`, groupId, nextState.webServices.length + 1, now);
+  validateWebService(service, nextState);
+  nextState.webServices.push(service);
+  const nextYaml = generateTraefikDynamicConfig(nextState).yaml;
+  return {
+    valid: true,
+    action: "map",
+    route,
+    service,
+    currentYaml,
+    nextYaml,
+    diff: diffText(currentYaml, nextYaml),
+    warnings: [
+      "This import creates a GateLite mapping only.",
+      "GateLite will not write a duplicate file-provider router for an existing Traefik provider route.",
+      ...route.importWarnings
+    ]
   };
 }
 

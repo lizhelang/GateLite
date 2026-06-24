@@ -2,6 +2,7 @@ import type {
   CertificatePreview,
   CertificateWithBindings,
   DashboardPayload,
+  ImportRoutePreview,
   GateLiteHistoryEvent,
   ServiceGroup,
   TraefikRuntime,
@@ -108,6 +109,20 @@ export async function reorderWebServices(orderedIds: string[]): Promise<WebServi
   return request<WebService[]>("/api/web-services/reorder", {
     method: "POST",
     body: JSON.stringify({ orderedIds })
+  });
+}
+
+export async function previewImportDiscoveredRoute(routerName: string, groupId?: string): Promise<ImportRoutePreview> {
+  return request<ImportRoutePreview>("/api/discovered-routes/import-preview", {
+    method: "POST",
+    body: JSON.stringify({ routerName, groupId })
+  });
+}
+
+export async function importDiscoveredRoute(routerName: string, groupId?: string): Promise<WebServiceWithRuntime> {
+  return request<WebServiceWithRuntime>("/api/discovered-routes/import", {
+    method: "POST",
+    body: JSON.stringify({ routerName, groupId })
   });
 }
 

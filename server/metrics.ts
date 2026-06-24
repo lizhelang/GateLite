@@ -170,10 +170,14 @@ function buildServiceTrafficStats(
   const statsByServiceId = new Map<string, WebServiceTrafficStats>();
 
   for (const service of services) {
-    const routerName = traefikName("gatelite", service.id);
-    const routerKey = routerStats.has(`${routerName}@file`) ? `${routerName}@file` : routerName;
-    const traefikServiceName = traefikName("gatelite-service", service.id);
-    const traefikServiceKey = serviceOpenConnections.has(`${traefikServiceName}@file`) ? `${traefikServiceName}@file` : traefikServiceName;
+    const routerName = runtimeRouterNameForService(service);
+    const routerKey = routerStats.has(routerName) ? routerName : routerStats.has(`${routerName}@file`) ? `${routerName}@file` : routerName.replace(/@file$/, "");
+    const traefikServiceName = runtimeServiceNameForService(service);
+    const traefikServiceKey = serviceOpenConnections.has(traefikServiceName)
+      ? traefikServiceName
+      : serviceOpenConnections.has(`${traefikServiceName}@file`)
+        ? `${traefikServiceName}@file`
+        : traefikServiceName.replace(/@file$/, "");
     const stats = routerStats.get(routerKey) || {
       totalRequests: 0,
       requestBytes: 0,
@@ -215,14 +219,14 @@ function buildDomainSeries(services: WebService[], routerTotals: Map<string, num
   const series: DomainTrafficSeries[] = [];
 
   for (const service of services.filter((item) => item.enabled)) {
-    const router = `${traefikName("gatelite", service.id)}@file`;
-    const total = routerTotals.get(router) ?? routerTotals.get(traefikName("gatelite", service.id)) ?? 0;
+    const router = runtimeRouterNameForService(service);
+    const total = routerTotals.get(router) ?? routerTotals.get(`${router}@file`) ?? routerTotals.get(router.replace(/@file$/, "")) ?? 0;
     for (const domain of service.domains) {
       const samples = recordSample(domain, total, at);
       series.push({
         domain,
         router,
-        provider: "file",
+        provider: service.sourceProvider || (router.endsWith("@file") ? "file" : undefined),
         source: "prometheus",
         totalRequests: total,
         points: samplesToDeltas(samples)
@@ -231,6 +235,14 @@ function buildDomainSeries(services: WebService[], routerTotals: Map<string, num
   }
 
   return series.sort((a, b) => b.totalRequests - a.totalRequests || a.domain.localeCompare(b.domain)).slice(0, 8);
+}
+
+function runtimeRouterNameForService(service: WebService): string {
+  return service.managementMode === "mapped" && service.sourceRouterName ? service.sourceRouterName : `${traefikName("gatelite", service.id)}@file`;
+}
+
+function runtimeServiceNameForService(service: WebService): string {
+  return service.managementMode === "mapped" && service.sourceServiceName ? service.sourceServiceName : `${traefikName("gatelite-service", service.id)}@file`;
 }
 
 function recordSample(domain: string, total: number, at: string): TrafficSample[] {

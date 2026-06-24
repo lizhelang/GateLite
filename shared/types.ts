@@ -4,6 +4,7 @@ export type CertificateSource = "self-signed" | "upload" | "path" | "acme" | "sy
 export type CertificateStatus = "valid" | "expiring" | "expired" | "pending" | "invalid";
 export type RuntimeStatus = "online" | "offline" | "warning" | "unknown";
 export type RuntimeProtocol = "http" | "tcp" | "udp";
+export type WebServiceManagementMode = "generated" | "mapped";
 
 export interface ServiceGroup {
   id: string;
@@ -28,6 +29,11 @@ export interface WebService {
   id: string;
   name: string;
   enabled: boolean;
+  managementMode?: WebServiceManagementMode;
+  sourceRouterName?: string;
+  sourceProvider?: string;
+  sourceServiceName?: string;
+  importedAt?: string;
   matchMode?: WebServiceMatchMode;
   groupId: string;
   domains: string[];
@@ -112,6 +118,61 @@ export interface WebServicePreview {
   currentYaml: string;
   nextYaml: string;
   diff: ConfigDiffLine[];
+}
+
+export interface DiscoveredRouteBackend {
+  serviceName?: string;
+  provider?: string;
+  status?: RuntimeStatus;
+  servers: string[];
+  targetUrl?: string;
+}
+
+export interface DiscoveredRoute {
+  id: string;
+  routerName: string;
+  protocol: RuntimeProtocol;
+  provider?: string;
+  rule?: string;
+  domains: string[];
+  serviceName?: string;
+  entryPoints: string[];
+  middlewares: string[];
+  tls: boolean;
+  tlsResolver?: string;
+  tlsOptions?: string;
+  status: RuntimeStatus;
+  backend: DiscoveredRouteBackend;
+  managedServiceId?: string;
+  managedMode: "generated" | "mapped" | "unmanaged";
+  importable: boolean;
+  importWarnings: string[];
+  traffic?: WebServiceTrafficStats;
+}
+
+export interface RuntimeTlsBinding {
+  id: string;
+  routerName: string;
+  provider?: string;
+  domains: string[];
+  tlsResolver?: string;
+  tlsOptions?: string;
+  status: RuntimeStatus;
+  managedCertificateId?: string;
+  managedServiceId?: string;
+  importable: boolean;
+  importWarnings: string[];
+}
+
+export interface ImportRoutePreview {
+  valid: true;
+  action: "map";
+  route: DiscoveredRoute;
+  service: WebService;
+  currentYaml: string;
+  nextYaml: string;
+  diff: ConfigDiffLine[];
+  warnings: string[];
 }
 
 export interface CertificatePreview {
@@ -238,6 +299,8 @@ export interface DashboardPayload {
   groups: ServiceGroup[];
   webServices: WebServiceWithRuntime[];
   certificates: CertificateWithBindings[];
+  discoveredRoutes: DiscoveredRoute[];
+  runtimeTlsBindings: RuntimeTlsBinding[];
   traffic: TrafficOverview;
   history: GateLiteHistoryEvent[];
 }
