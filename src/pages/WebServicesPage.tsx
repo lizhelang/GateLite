@@ -101,7 +101,7 @@ export function WebServicesPage({ dashboard, onRefresh }: WebServicesPageProps) 
   const [createMode, setCreateMode] = useState<"rule" | "subrule" | "default">("rule");
   const [draftPreset, setDraftPreset] = useState<Partial<DraftService> | null>(null);
   const [showForm, setShowForm] = useState(false);
-  const [selectedId, setSelectedId] = useState("");
+  const [selectedRouteIds, setSelectedRouteIds] = useState<string[]>([]);
   const [activeRoot, setActiveRoot] = useState("__all");
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -114,7 +114,11 @@ export function WebServicesPage({ dashboard, onRefresh }: WebServicesPageProps) 
   const allRoutes = zones.flatMap((zone) => zone.routes);
   const routeCount = allRoutes.length;
   const activeRoutes = (activeRoot === "__all" ? allRoutes : zones.find((zone) => zone.root === activeRoot)?.routes || allRoutes).filter((route) => !groupsById.get(route.service.groupId)?.collapsed);
-  const selectedRoute = activeRoutes.find((route) => route.service.id === selectedId);
+  const selectedRoute = activeRoutes.find((route) => selectedRouteIds.includes(route.routeId));
+  const selectedServices = useMemo(() => {
+    const selectedServiceIds = new Set(activeRoutes.filter((route) => selectedRouteIds.includes(route.routeId)).map((route) => route.service.id));
+    return sortedServices.filter((service) => selectedServiceIds.has(service.id));
+  }, [activeRoutes, selectedRouteIds, sortedServices]);
 
   const openCreate = (mode: "rule" | "subrule" | "default" = "rule") => {
     setEditing(null);
@@ -179,8 +183,8 @@ export function WebServicesPage({ dashboard, onRefresh }: WebServicesPageProps) 
 
   const handleGroupToggle = async (group: ServiceGroup) => {
     setError(null);
-    if (!group.collapsed && sortedServices.some((service) => service.id === selectedId && service.groupId === group.id)) {
-      setSelectedId("");
+    if (!group.collapsed) {
+      setSelectedRouteIds((ids) => ids.filter((id) => !activeRoutes.some((route) => route.routeId === id && route.service.groupId === group.id)));
     }
     try {
       await updateGroup(group.id, { collapsed: !group.collapsed });
@@ -245,6 +249,33 @@ export function WebServicesPage({ dashboard, onRefresh }: WebServicesPageProps) 
     await onRefresh();
   };
 
+  const handleSelectRoute = (routeId: string, checked: boolean) => {
+    setSelectedRouteIds((ids) => {
+      if (checked) return ids.includes(routeId) ? ids : [...ids, routeId];
+      return ids.filter((id) => id !== routeId);
+    });
+  };
+
+  const handleSelectVisibleRoutes = (checked: boolean) => {
+    setSelectedRouteIds(checked ? activeRoutes.map((route) => route.routeId) : []);
+  };
+
+  const handleBulkToggle = async (enabled: boolean) => {
+    if (!selectedServices.length) return;
+    setError(null);
+    try {
+      for (const service of selectedServices) {
+        if (service.enabled !== enabled) {
+          await toggleWebService(service.id, enabled);
+        }
+      }
+      setSelectedRouteIds([]);
+      await onRefresh();
+    } catch (bulkError) {
+      setError(bulkError instanceof Error ? bulkError.message : t("Bulk update failed.", "批量更新失败。"));
+    }
+  };
+
   return (
     <section className="grid gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -296,12 +327,14 @@ export function WebServicesPage({ dashboard, onRefresh }: WebServicesPageProps) 
 
       <RouteDataTable
         routes={activeRoutes}
-        selectedId={selectedId}
+        selectedRouteIds={selectedRouteIds}
         draggingId={draggingId}
         onDragStart={setDraggingId}
         onDrop={handleDrop}
-        onSelect={setSelectedId}
+        onSelect={handleSelectRoute}
+        onSelectAll={handleSelectVisibleRoutes}
         onToggle={handleToggle}
+        onBulkToggle={handleBulkToggle}
         onDuplicate={openDuplicate}
         onEdit={openEdit}
         onDelete={handleDelete}
@@ -348,29 +381,34 @@ export function WebServicesPage({ dashboard, onRefresh }: WebServicesPageProps) 
 
 function RouteDataTable({
   routes,
-  selectedId,
+  selectedRouteIds,
   draggingId,
   onDragStart,
   onDrop,
   onSelect,
+  onSelectAll,
   onToggle,
+  onBulkToggle,
   onDuplicate,
   onEdit,
   onDelete
 }: {
   routes: DomainRoute[];
-  selectedId?: string;
+  selectedRouteIds: string[];
   draggingId: string | null;
   onDragStart: (id: string) => void;
   onDrop: (id: string) => void;
-  onSelect: (id: string) => void;
+  onSelect: (id: string, checked: boolean) => void;
+  onSelectAll: (checked: boolean) => void;
   onToggle: (service: WebServiceWithRuntime) => Promise<void>;
+  onBulkToggle: (enabled: boolean) => Promise<void>;
   onDuplicate: (route: DomainRoute) => void;
   onEdit: (service: WebServiceWithRuntime) => void;
   onDelete: (service: WebServiceWithRuntime) => Promise<void>;
 }) {
   const { t } = useLanguage();
-  const selectedCount = selectedId && routes.some((route) => route.service.id === selectedId) ? 1 : 0;
+  const selectedCount = routes.filter((route) => selectedRouteIds.includes(route.routeId)).length;
+  const allVisibleSelected = routes.length > 0 && selectedCount === routes.length;
 
   return (
     <Card className="overflow-hidden bg-card/70">
@@ -381,7 +419,7 @@ function RouteDataTable({
               <TableRow className="hover:bg-transparent">
                 <TableHead className="w-10" />
                 <TableHead className="w-10">
-                  <Checkbox aria-label={t("Select visible routes", "选择当前路由")} checked={selectedCount > 0} onCheckedChange={(checked) => onSelect(checked ? routes[0]?.service.id || "" : "")} />
+                  <Checkbox aria-label={t("Select visible routes", "选择当前路由")} checked={allVisibleSelected} onCheckedChange={(checked) => onSelectAll(Boolean(checked))} />
                 </TableHead>
                 <TableHead>{t("Rule / sub-rule", "规则 / 子规则")}</TableHead>
                 <TableHead>{t("Frontend domain", "前端域名")}</TableHead>
@@ -396,7 +434,7 @@ function RouteDataTable({
             <TableBody>
               {routes.map((route) => {
                 const service = route.service;
-                const selected = service.id === selectedId;
+                const selected = selectedRouteIds.includes(route.routeId);
                 const link = service.tls.mode === "none" ? `http://${route.primaryDomain}:${service.listenPort}` : `https://${route.primaryDomain}:${service.listenPort}`;
                 const backend = formatBackendTarget(service.targetUrl);
                 const traffic = service.traffic;
@@ -410,7 +448,7 @@ function RouteDataTable({
                     onDragStart={() => onDragStart(service.id)}
                     onDragOver={(event) => event.preventDefault()}
                     onDrop={() => void onDrop(service.id)}
-                    onClick={() => onSelect(service.id)}
+                    onClick={() => onSelect(route.routeId, !selected)}
                   >
                     <TableCell>
                       <Button variant="ghost" size="icon-xs" aria-label={t("Drag to reorder", "拖拽排序")}>
@@ -418,7 +456,7 @@ function RouteDataTable({
                       </Button>
                     </TableCell>
                     <TableCell>
-                      <Checkbox checked={selected} aria-label={t(`Select ${displayName}`, `选择 ${displayName}`)} onClick={(event) => event.stopPropagation()} onCheckedChange={(checked) => onSelect(checked ? service.id : "")} />
+                      <Checkbox checked={selected} aria-label={t(`Select ${displayName}`, `选择 ${displayName}`)} onClick={(event) => event.stopPropagation()} onCheckedChange={(checked) => onSelect(route.routeId, Boolean(checked))} />
                     </TableCell>
                     <TableCell>
                       <div className="grid min-w-0 gap-0.5">
@@ -506,6 +544,14 @@ function RouteDataTable({
         <div className="flex flex-wrap items-center justify-between gap-3 border-t px-4 py-3 text-sm text-muted-foreground">
           <span>{t(`${selectedCount} of ${routes.length} row(s) selected.`, `已选择 ${selectedCount} / ${routes.length} 行。`)}</span>
           <div className="flex items-center gap-3">
+            <Button type="button" variant="outline" size="sm" disabled={selectedCount === 0} onClick={() => void onBulkToggle(true)}>
+              <Power className="size-3.5" />
+              {t("Enable selected", "启用所选")}
+            </Button>
+            <Button type="button" variant="outline" size="sm" disabled={selectedCount === 0} onClick={() => void onBulkToggle(false)}>
+              <Power className="size-3.5" />
+              {t("Disable selected", "停用所选")}
+            </Button>
             <span>{t("Rows per page", "每页行数")} 10</span>
             <span>{t("Page 1 of 1", "第 1 / 1 页")}</span>
           </div>

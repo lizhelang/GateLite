@@ -45,6 +45,8 @@ GateLite MVP mapping:
 - Copy rule/sub-rule data -> prefilled `copy as new rule` form that keeps
   backend, TLS, group, and middleware settings while generating a safe
   `copy-` frontend domain.
+- Multi-select rows -> shadcn-style table selection with batch enable/disable
+  for visible Web service rules.
 
 ## SSL/TLS Core Behaviors
 
@@ -74,6 +76,8 @@ GateLite MVP mapping:
 - Copy certificate configuration -> prefilled `copy as new certificate` form
   that keeps domains and ACME/sync/path settings, with the copied item disabled
   until the user reviews and enables it.
+- Multi-select rows -> shadcn-style table selection with batch enable/disable
+  for visible certificate items.
 
 ## Parallax Storytelling Design Mapping
 

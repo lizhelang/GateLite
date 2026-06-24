@@ -63,7 +63,7 @@ export function CertificatesPage({ dashboard, onRefresh }: CertificatesPageProps
   const [editing, setEditing] = useState<CertificateWithBindings | null>(null);
   const [initialSource, setInitialSource] = useState<CertificateInput["source"]>("self-signed");
   const [draftPreset, setDraftPreset] = useState<Partial<DraftCertificate> | null>(null);
-  const [selectedId, setSelectedId] = useState("");
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [filter, setFilter] = useState<CertificateFilter>("all");
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -71,7 +71,8 @@ export function CertificatesPage({ dashboard, onRefresh }: CertificatesPageProps
 
   const certificates = useMemo(() => [...dashboard.certificates].sort((a, b) => a.order - b.order), [dashboard.certificates]);
   const filteredCertificates = useMemo(() => certificates.filter((certificate) => matchesFilter(certificate, filter)), [certificates, filter]);
-  const selected = certificates.find((certificate) => certificate.id === selectedId);
+  const selected = certificates.find((certificate) => selectedIds.includes(certificate.id));
+  const selectedCertificates = useMemo(() => certificates.filter((certificate) => selectedIds.includes(certificate.id)), [certificates, selectedIds]);
   const counts = useMemo(
     () => ({
       all: certificates.length,
@@ -169,6 +170,33 @@ export function CertificatesPage({ dashboard, onRefresh }: CertificatesPageProps
     window.location.href = `/api/certificates/${certificate.id}/download`;
   };
 
+  const handleSelectCertificate = (id: string, checked: boolean) => {
+    setSelectedIds((ids) => {
+      if (checked) return ids.includes(id) ? ids : [...ids, id];
+      return ids.filter((selectedId) => selectedId !== id);
+    });
+  };
+
+  const handleSelectVisibleCertificates = (checked: boolean) => {
+    setSelectedIds(checked ? filteredCertificates.map((certificate) => certificate.id) : []);
+  };
+
+  const handleBulkToggle = async (enabled: boolean) => {
+    if (!selectedCertificates.length) return;
+    setError(null);
+    try {
+      for (const certificate of selectedCertificates) {
+        if (certificate.enabled !== enabled) {
+          await toggleCertificate(certificate.id, enabled);
+        }
+      }
+      setSelectedIds([]);
+      await onRefresh();
+    } catch (bulkError) {
+      setError(bulkError instanceof Error ? bulkError.message : t("Bulk update failed.", "批量更新失败。"));
+    }
+  };
+
   return (
     <section className="grid gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -206,12 +234,14 @@ export function CertificatesPage({ dashboard, onRefresh }: CertificatesPageProps
       <CertificateDataTable
         certificates={filteredCertificates}
         selected={selected}
-        selectedId={selectedId}
+        selectedIds={selectedIds}
         draggingId={draggingId}
         onDragStart={setDraggingId}
         onDrop={handleDrop}
-        onSelect={setSelectedId}
+        onSelect={handleSelectCertificate}
+        onSelectAll={handleSelectVisibleCertificates}
         onToggle={handleToggle}
+        onBulkToggle={handleBulkToggle}
         onDuplicate={openDuplicate}
         onDownload={handleDownload}
         onEdit={openEdit}
@@ -255,12 +285,14 @@ export function CertificatesPage({ dashboard, onRefresh }: CertificatesPageProps
 function CertificateDataTable({
   certificates,
   selected,
-  selectedId,
+  selectedIds,
   draggingId,
   onDragStart,
   onDrop,
   onSelect,
+  onSelectAll,
   onToggle,
+  onBulkToggle,
   onDuplicate,
   onDownload,
   onEdit,
@@ -268,19 +300,22 @@ function CertificateDataTable({
 }: {
   certificates: CertificateWithBindings[];
   selected?: CertificateWithBindings;
-  selectedId: string;
+  selectedIds: string[];
   draggingId: string | null;
   onDragStart: (id: string) => void;
   onDrop: (id: string) => Promise<void>;
-  onSelect: (id: string) => void;
+  onSelect: (id: string, checked: boolean) => void;
+  onSelectAll: (checked: boolean) => void;
   onToggle: (certificate: CertificateWithBindings) => Promise<void>;
+  onBulkToggle: (enabled: boolean) => Promise<void>;
   onDuplicate: (certificate: CertificateWithBindings) => void;
   onDownload: (certificate: CertificateWithBindings) => void;
   onEdit: (certificate: CertificateWithBindings) => void;
   onDelete: (certificate: CertificateWithBindings) => Promise<void>;
 }) {
   const { t } = useLanguage();
-  const selectedCount = selectedId && certificates.some((certificate) => certificate.id === selectedId) ? 1 : 0;
+  const selectedCount = certificates.filter((certificate) => selectedIds.includes(certificate.id)).length;
+  const allVisibleSelected = certificates.length > 0 && selectedCount === certificates.length;
 
   return (
     <Card className="overflow-hidden bg-card/70">
@@ -291,7 +326,7 @@ function CertificateDataTable({
               <TableRow className="hover:bg-transparent">
                 <TableHead className="w-10" />
                 <TableHead className="w-10">
-                  <Checkbox aria-label={t("Select visible certificates", "选择当前证书")} checked={selectedCount > 0} onCheckedChange={(checked) => onSelect(checked ? certificates[0]?.id || "" : "")} />
+                  <Checkbox aria-label={t("Select visible certificates", "选择当前证书")} checked={allVisibleSelected} onCheckedChange={(checked) => onSelectAll(Boolean(checked))} />
                 </TableHead>
                 <TableHead>{t("Certificate", "证书")}</TableHead>
                 <TableHead>{t("Source", "来源")}</TableHead>
@@ -305,7 +340,7 @@ function CertificateDataTable({
             </TableHeader>
             <TableBody>
               {certificates.map((certificate) => {
-                const rowSelected = certificate.id === selectedId;
+                const rowSelected = selectedIds.includes(certificate.id);
                 return (
                   <TableRow
                     key={certificate.id}
@@ -314,7 +349,7 @@ function CertificateDataTable({
                     onDragStart={() => onDragStart(certificate.id)}
                     onDragOver={(event) => event.preventDefault()}
                     onDrop={() => void onDrop(certificate.id)}
-                    onClick={() => onSelect(certificate.id)}
+                    onClick={() => onSelect(certificate.id, !rowSelected)}
                   >
                     <TableCell>
                       <Button variant="ghost" size="icon-xs" aria-label={t("Drag to reorder", "拖拽排序")}>
@@ -322,7 +357,7 @@ function CertificateDataTable({
                       </Button>
                     </TableCell>
                     <TableCell>
-                      <Checkbox checked={rowSelected} aria-label={t(`Select ${certificate.name}`, `选择 ${certificate.name}`)} onClick={(event) => event.stopPropagation()} onCheckedChange={(checked) => onSelect(checked ? certificate.id : "")} />
+                      <Checkbox checked={rowSelected} aria-label={t(`Select ${certificate.name}`, `选择 ${certificate.name}`)} onClick={(event) => event.stopPropagation()} onCheckedChange={(checked) => onSelect(certificate.id, Boolean(checked))} />
                     </TableCell>
                     <TableCell>
                       <div className="grid min-w-0 gap-0.5">
@@ -408,6 +443,14 @@ function CertificateDataTable({
         <div className="flex flex-wrap items-center justify-between gap-3 border-t px-4 py-3 text-sm text-muted-foreground">
           <span>{t(`${selectedCount} of ${certificates.length} row(s) selected.`, `已选择 ${selectedCount} / ${certificates.length} 行。`)}</span>
           <div className="flex items-center gap-3">
+            <Button type="button" variant="outline" size="sm" disabled={selectedCount === 0} onClick={() => void onBulkToggle(true)}>
+              <Power className="size-3.5" />
+              {t("Enable selected", "启用所选")}
+            </Button>
+            <Button type="button" variant="outline" size="sm" disabled={selectedCount === 0} onClick={() => void onBulkToggle(false)}>
+              <Power className="size-3.5" />
+              {t("Disable selected", "停用所选")}
+            </Button>
             <span>{t("Rows per page", "每页行数")} 10</span>
             <span>{t("Page 1 of 1", "第 1 / 1 页")}</span>
           </div>
