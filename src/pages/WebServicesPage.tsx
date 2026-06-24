@@ -92,6 +92,11 @@ type DomainZone = {
   routes: DomainRoute[];
 };
 
+type GroupEditorState = {
+  mode: "create" | "rename";
+  group?: ServiceGroup;
+};
+
 const emptyDraft: DraftService = {
   name: "",
   enabled: true,
@@ -123,10 +128,12 @@ export function WebServicesPage({ dashboard, onRefresh }: WebServicesPageProps) 
   const [createMode, setCreateMode] = useState<"rule" | "subrule" | "default">("rule");
   const [draftPreset, setDraftPreset] = useState<Partial<DraftService> | null>(null);
   const [showForm, setShowForm] = useState(false);
+  const [groupEditor, setGroupEditor] = useState<GroupEditorState | null>(null);
   const [selectedRouteIds, setSelectedRouteIds] = useState<string[]>([]);
   const [activeRoot, setActiveRoot] = useState("__all");
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [groupSaving, setGroupSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const sortedServices = useMemo(() => [...dashboard.webServices].sort((a, b) => a.order - b.order), [dashboard.webServices]);
@@ -264,26 +271,34 @@ export function WebServicesPage({ dashboard, onRefresh }: WebServicesPageProps) 
   };
 
   const handleAddGroup = async () => {
-    const name = window.prompt(t("New group name", "新分组名称"));
-    if (!name?.trim()) return;
-    setError(null);
-    try {
-      await createGroup(name.trim());
-      await onRefresh();
-    } catch (groupError) {
-      setError(groupError instanceof Error ? groupError.message : t("Group create failed.", "分组创建失败。"));
-    }
+    setGroupEditor({ mode: "create" });
   };
 
   const handleRenameGroup = async (group: ServiceGroup) => {
-    const name = window.prompt(t("Rename group", "重命名分组"), group.name);
-    if (!name?.trim() || name.trim() === group.name) return;
+    setGroupEditor({ mode: "rename", group });
+  };
+
+  const handleSaveGroup = async (name: string) => {
+    const trimmedName = name.trim();
+    if (!groupEditor || !trimmedName) return;
+    if (groupEditor.mode === "rename" && groupEditor.group && trimmedName === groupEditor.group.name) {
+      setGroupEditor(null);
+      return;
+    }
+    setGroupSaving(true);
     setError(null);
     try {
-      await updateGroup(group.id, { name: name.trim() });
+      if (groupEditor.mode === "create") {
+        await createGroup(trimmedName);
+      } else if (groupEditor.group) {
+        await updateGroup(groupEditor.group.id, { name: trimmedName });
+      }
+      setGroupEditor(null);
       await onRefresh();
     } catch (groupError) {
-      setError(groupError instanceof Error ? groupError.message : t("Group rename failed.", "分组重命名失败。"));
+      setError(groupError instanceof Error ? groupError.message : groupEditor.mode === "create" ? t("Group create failed.", "分组创建失败。") : t("Group rename failed.", "分组重命名失败。"));
+    } finally {
+      setGroupSaving(false);
     }
   };
 
@@ -454,6 +469,15 @@ export function WebServicesPage({ dashboard, onRefresh }: WebServicesPageProps) 
         <Modal title={displayRouteName(detailsRoute, t)} subtitle={t("Reverse proxy rule details, generated Traefik match, runtime state, and traffic.", "反代规则详情、生成的 Traefik 匹配、运行状态和流量。")} onClose={() => setDetailsRoute(null)}>
           <RouteDetails route={detailsRoute} />
         </Modal>
+      ) : null}
+
+      {groupEditor ? (
+        <GroupEditor
+          editor={groupEditor}
+          saving={groupSaving}
+          onClose={() => setGroupEditor(null)}
+          onSubmit={handleSaveGroup}
+        />
       ) : null}
     </section>
   );
@@ -753,6 +777,53 @@ function connectionDetailText(traffic: WebServiceTrafficStats | undefined, t: (e
 
 function connectionScopeLabel(scope: WebServiceTrafficStats["openConnectionsScope"], t: (english: string, chinese: string) => string): string {
   return scope === "service" ? t("rule", "规则") : t("entrypoint", "入口点");
+}
+
+function GroupEditor({
+  editor,
+  saving,
+  onClose,
+  onSubmit
+}: {
+  editor: GroupEditorState;
+  saving: boolean;
+  onClose: () => void;
+  onSubmit: (name: string) => Promise<void>;
+}) {
+  const { t } = useLanguage();
+  const [name, setName] = useState(editor.group?.name || "");
+  const trimmedName = name.trim();
+  const isRenameUnchanged = editor.mode === "rename" && trimmedName === editor.group?.name;
+  const title = editor.mode === "create" ? t("New group", "新建分组") : t("Rename group", "重命名分组");
+  const subtitle =
+    editor.mode === "create"
+      ? t("Create a Web service group for organizing reverse proxy rules.", "创建 Web 服务分组，用于整理反代规则。")
+      : t("Rename this group without changing its rules or generated Traefik config.", "只重命名分组，不改变其中规则或生成的 Traefik 配置。");
+
+  const submit = async (event: FormEvent) => {
+    event.preventDefault();
+    await onSubmit(trimmedName);
+  };
+
+  return (
+    <Modal title={title} subtitle={subtitle} onClose={onClose}>
+      <form className="grid gap-4" onSubmit={(event) => void submit(event)}>
+        <Field label={t("Group name", "分组名称")}>
+          <Input value={name} onChange={(event) => setName(event.target.value)} autoFocus required />
+        </Field>
+        <Separator />
+        <footer className="flex justify-end gap-2">
+          <Button type="button" variant="outline" onClick={onClose}>
+            {t("Cancel", "取消")}
+          </Button>
+          <Button type="submit" disabled={saving || !trimmedName || isRenameUnchanged}>
+            <Save className="size-4" />
+            {saving ? t("Saving...", "保存中...") : t("Save", "保存")}
+          </Button>
+        </footer>
+      </form>
+    </Modal>
+  );
 }
 
 function DetailCell({ label, value, mono, className }: { label: string; value: string; mono?: boolean; className?: string }) {

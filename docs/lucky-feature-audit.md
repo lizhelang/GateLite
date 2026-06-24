@@ -46,6 +46,8 @@ GateLite MVP mapping:
 - Default rule / unmatched-domain fallback -> managed Traefik catch-all router
   using `PathPrefix(`/`)` with low priority.
 - Grouped display -> GateLite group metadata, independent of Traefik runtime.
+- Group create/rename -> shadcn-style modal form so grouping operations use
+  the same interaction pattern as rule and certificate forms.
 - Drag reorder -> GateLite metadata order and deterministic generated YAML order.
 - Copy rule/sub-rule data -> prefilled `copy as new rule` form that keeps
   backend, TLS, group, and middleware settings while generating a safe
