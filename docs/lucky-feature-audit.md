@@ -87,6 +87,9 @@ GateLite MVP mapping:
   file certificates, ACME/sync certificates used in file-certificate mode, and
   invalid/pending/expired file certificates before writing generated Traefik
   config.
+- Backend address input -> accepts Lucky-style bare `IP:port` / `host:port`
+  values from both UI and agent API, normalizing them to Traefik server URLs
+  before writing file-provider config.
 
 ## SSL/TLS Core Behaviors
 

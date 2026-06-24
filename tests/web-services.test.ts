@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { CertificateItem, GateLiteState, WebService } from "../shared/types";
 import { validateWebService, webServiceLabel } from "../server/web-services";
 import { BadRequestError } from "../server/errors";
+import { normalizeBackendTargetUrl, webServiceInputSchema } from "../server/schemas";
 
 const now = new Date().toISOString();
 
@@ -92,5 +93,40 @@ describe("validateWebService", () => {
 
   it("keeps blank rule names displayable by domain", () => {
     expect(webServiceLabel(webService({ name: "" }))).toBe("secure.localhost");
+  });
+});
+
+describe("webServiceInputSchema", () => {
+  it("accepts Lucky-style bare backend IP:port values and normalizes them for Traefik", () => {
+    const parsed = webServiceInputSchema.parse({
+      name: "",
+      enabled: true,
+      groupId: "local",
+      domains: ["plain.localhost"],
+      listenPort: 18080,
+      entryPoints: ["web"],
+      targetUrl: "192.168.31.26:8081",
+      middlewares: [],
+      tls: { mode: "none" }
+    });
+
+    expect(parsed.targetUrl).toBe("http://192.168.31.26:8081");
+    expect(normalizeBackendTargetUrl("whoami:80")).toBe("http://whoami:80");
+  });
+
+  it("preserves explicit HTTPS backend targets", () => {
+    const parsed = webServiceInputSchema.parse({
+      name: "",
+      enabled: true,
+      groupId: "local",
+      domains: ["secure-backend.localhost"],
+      listenPort: 18443,
+      entryPoints: ["websecure"],
+      targetUrl: "https://192.168.31.2:8006",
+      middlewares: [],
+      tls: { mode: "none" }
+    });
+
+    expect(parsed.targetUrl).toBe("https://192.168.31.2:8006");
   });
 });

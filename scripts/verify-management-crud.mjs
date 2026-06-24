@@ -124,7 +124,7 @@ async function verifyWebServiceValidation(groupId) {
       domains: [`invalid-group-${suffix}.localhost`],
       listenPort: 18080,
       entryPoints: ["web"],
-      targetUrl: "http://whoami:80",
+      targetUrl: "whoami:80",
       middlewares: [],
       tls: { mode: "none" }
     }),
@@ -345,6 +345,9 @@ async function createAndVerifyHttpService(groupId) {
   });
   if (service.name !== "") {
     throw new Error("Blank Web service rule name was not preserved.");
+  }
+  if (service.targetUrl !== "http://whoami:80") {
+    throw new Error(`Bare backend host:port was not normalized for Traefik, got ${service.targetUrl}.`);
   }
   await waitForHttpRoute(originalHttpHost, "http");
   const body = await routeText(httpRouteUrl, originalHttpHost);

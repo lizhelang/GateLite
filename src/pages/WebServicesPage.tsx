@@ -1053,7 +1053,7 @@ function ServiceForm({
       customRule: draft.matchMode === "custom" ? draft.customRule : undefined,
       listenPort: Number(draft.listenPort),
       entryPoints: splitList(draft.entryPointsText),
-      targetUrl: draft.targetUrl,
+      targetUrl: normalizeBackendTargetInput(draft.targetUrl),
       passHostHeader: draft.passHostHeader,
       middlewares: splitList(draft.middlewaresText),
       tls: {
@@ -1087,7 +1087,7 @@ function ServiceForm({
             </>
           ) : null}
           <Field className="md:col-span-2" label={t("Backend IP:port", "后端 IP:端口")}>
-            <Input value={draft.targetUrl} onChange={(event) => setDraft({ ...draft, targetUrl: event.target.value })} placeholder="http://192.168.31.26:8081" required />
+            <Input value={draft.targetUrl} onChange={(event) => setDraft({ ...draft, targetUrl: event.target.value })} placeholder="192.168.31.26:8081" required />
           </Field>
           <RoutePairPreview
             frontends={domainPreview}
@@ -1438,18 +1438,25 @@ function normalizeDomain(value: string): string {
   return value.trim().toLowerCase().replace(/^https?:\/\//, "").replace(/\/.*$/, "").replace(/^\.+|\.+$/g, "");
 }
 
+function normalizeBackendTargetInput(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed || /^[a-z][a-z0-9+.-]*:\/\//i.test(trimmed)) return trimmed;
+  return `http://${trimmed}`;
+}
+
 function formatBackendTarget(value: string): { hostPort: string; scheme: string } {
-  const authority = value.replace(/^[a-z][a-z0-9+.-]*:\/\//i, "").split(/[/?#]/)[0];
+  const normalized = normalizeBackendTargetInput(value);
+  const authority = normalized.replace(/^[a-z][a-z0-9+.-]*:\/\//i, "").split(/[/?#]/)[0];
   try {
-    const url = new URL(value);
+    const url = new URL(normalized);
     return {
       hostPort: authority || url.host,
-      scheme: url.protocol.replace(":", "") || value
+      scheme: url.protocol.replace(":", "") || "http"
     };
   } catch {
     return {
-      hostPort: authority || value.replace(/^https?:\/\//, ""),
-      scheme: value.startsWith("https://") ? "https" : value.startsWith("http://") ? "http" : "custom"
+      hostPort: authority || normalized.replace(/^[a-z][a-z0-9+.-]*:\/\//i, ""),
+      scheme: normalized.startsWith("https://") ? "https" : normalized.startsWith("http://") ? "http" : "custom"
     };
   }
 }

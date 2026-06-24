@@ -1,5 +1,29 @@
 import { z } from "zod";
 
+const backendSchemePattern = /^[a-z][a-z0-9+.-]*:\/\//i;
+const supportedBackendProtocols = new Set(["http:", "https:", "h2c:"]);
+
+export function normalizeBackendTargetUrl(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed) return "";
+  return backendSchemePattern.test(trimmed) ? trimmed : `http://${trimmed}`;
+}
+
+function isSupportedBackendTargetUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return Boolean(url.host) && supportedBackendProtocols.has(url.protocol);
+  } catch {
+    return false;
+  }
+}
+
+const backendTargetUrlSchema = z
+  .string()
+  .trim()
+  .transform(normalizeBackendTargetUrl)
+  .refine(isSupportedBackendTargetUrl, "Backend target must be an HTTP(S)/h2c host or IP:port.");
+
 export const webServiceInputSchema = z
   .object({
     name: z.string().trim().default(""),
@@ -10,7 +34,7 @@ export const webServiceInputSchema = z
     customRule: z.string().trim().optional(),
     listenPort: z.coerce.number().int().min(1).max(65535).default(18080),
     entryPoints: z.array(z.string().trim().min(1)).min(1).default(["web"]),
-    targetUrl: z.string().trim().url(),
+    targetUrl: backendTargetUrlSchema,
     passHostHeader: z.boolean().default(true),
     middlewares: z.array(z.string().trim()).default([]),
     priority: z.coerce.number().int().optional(),
