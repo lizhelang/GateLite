@@ -58,6 +58,12 @@ GateLite MVP mapping:
   Lucky mental model that Web 服务 means reverse proxy rules. Each row leads
   with frontend domain -> backend IP:port and then shows downstream/upstream
   bytes plus current connection count instead of a bulky service card.
+- Web service toolbar -> top-level creation is `New rule`; `New sub-rule`
+  appears only in the selected/main-domain table context, keeping sub-rules
+  scoped to an existing domain the way Lucky presents them.
+- Rule row density -> each reverse-proxy rule is a single shadcn-style data
+  table row with rule name, frontend domain, backend IP:port, downstream
+  traffic, upstream traffic, live connection count, and status.
 - Lucky-style traffic columns -> each Web service rule row shows downstream
   and upstream byte rates from Prometheus counters, with cumulative bytes kept
   as secondary context.

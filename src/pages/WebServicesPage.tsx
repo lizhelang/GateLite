@@ -102,7 +102,7 @@ const emptyDraft: DraftService = {
   enabled: true,
   matchMode: "host",
   groupId: "local",
-  domainRoot: "localhost",
+  domainRoot: "",
   subdomainsText: "",
   customRule: "",
   listenPort: 18080,
@@ -159,7 +159,7 @@ export function WebServicesPage({ dashboard, onRefresh }: WebServicesPageProps) 
         ? {
             groupId: activeRootTemplate.groupId,
             domainRoot: activeRoot,
-            subdomainsText: "@",
+            subdomainsText: "",
             listenPort: activeRootTemplate.listenPort,
             entryPointsText: activeRootTemplate.entryPoints.join(", "),
             passHostHeader: activeRootTemplate.passHostHeader ?? true,
@@ -380,49 +380,32 @@ export function WebServicesPage({ dashboard, onRefresh }: WebServicesPageProps) 
 
   return (
     <section className="grid gap-3">
-      <div className="grid gap-3 rounded-xl border bg-card/60 p-3">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="min-w-0">
-            <div className="text-xs text-muted-foreground">{t("Web services / reverse proxy", "Web 服务 / 反代服务")}</div>
-            <div className="mt-1 text-lg font-semibold">{t("Rules", "规则")}</div>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <Button type="button" variant="outline" onClick={handleAddGroup}>
-              <Layers className="size-4" />
-              {t("Groups", "分组")}
-            </Button>
-            <Button type="button" variant="outline" onClick={() => openCreateSubrule()} disabled={!canCreateSubrule} title={!canCreateSubrule ? t("Select a main domain first.", "先选择主域名。") : undefined}>
-              <Plus className="size-4" />
-              {t("New sub-rule", "新建子规则")}
-            </Button>
-            <Button type="button" variant="outline" onClick={() => openCreate("default")}>
-              <Plus className="size-4" />
-              {t("Default", "默认规则")}
-            </Button>
-            <Button type="button" onClick={() => openCreate("rule")}>
-              <Plus className="size-4" />
-              {t("New rule", "新建规则")}
-            </Button>
-          </div>
-        </div>
-        <div className="flex min-w-0 items-center gap-2">
-          <span className="shrink-0 text-xs text-muted-foreground">{t("Main domain", "主域名")}</span>
-          <div className="inline-flex max-w-full items-center gap-1 overflow-x-auto rounded-lg border bg-muted/45 p-1">
-            <Button type="button" variant={activeRoot === "__all" ? "outline" : "ghost"} size="sm" onClick={() => setActiveRoot("__all")}>
-              {t("All", "全部")}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="inline-flex max-w-full items-center gap-1 overflow-x-auto rounded-lg border bg-muted/45 p-1">
+          <Button type="button" variant={activeRoot === "__all" ? "outline" : "ghost"} size="sm" onClick={() => setActiveRoot("__all")}>
+            {t("All domains", "全部域名")}
+            <Badge variant="secondary" className="ml-1 rounded-full px-1.5 py-0 text-[10px]">
+              {routeCount}
+            </Badge>
+          </Button>
+          {zones.map((zone) => (
+            <Button key={zone.root} type="button" variant={activeRoot === zone.root ? "outline" : "ghost"} size="sm" onClick={() => setActiveRoot(zone.root)}>
+              {rootLabel(zone.root, t)}
               <Badge variant="secondary" className="ml-1 rounded-full px-1.5 py-0 text-[10px]">
-                {routeCount}
+                {zone.routes.length}
               </Badge>
             </Button>
-            {zones.map((zone) => (
-              <Button key={zone.root} type="button" variant={activeRoot === zone.root ? "outline" : "ghost"} size="sm" onClick={() => setActiveRoot(zone.root)}>
-                {rootLabel(zone.root, t)}
-                <Badge variant="secondary" className="ml-1 rounded-full px-1.5 py-0 text-[10px]">
-                  {zone.routes.length}
-                </Badge>
-              </Button>
-            ))}
-          </div>
+          ))}
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Button type="button" variant="outline" onClick={handleAddGroup}>
+            <Layers className="size-4" />
+            {t("Groups", "分组")}
+          </Button>
+          <Button type="button" onClick={() => openCreate("rule")}>
+            <Plus className="size-4" />
+            {t("New rule", "新建规则")}
+          </Button>
         </div>
       </div>
 
@@ -547,34 +530,32 @@ function RouteDataTable({
   return (
     <div className="overflow-hidden rounded-xl border bg-card/80">
       <div className="overflow-x-auto">
-        <Table className="min-w-[980px]">
+        <Table className="min-w-[680px]">
           <TableHeader className="bg-muted/65">
             <TableRow className="hover:bg-transparent">
-              <TableHead className="w-8" />
-              <TableHead className="w-9">
+              <TableHead className="w-6 px-1" />
+              <TableHead className="w-7 px-1">
                 <Checkbox aria-label={t("Select visible rules", "选择当前规则")} checked={allVisibleSelected} onCheckedChange={(checked) => onSelectAll(Boolean(checked))} />
               </TableHead>
-              <TableHead className="w-72">{t("Frontend domain", "前端域名")}</TableHead>
-              <TableHead className="w-72">{t("Backend IP:port", "后端 IP:端口")}</TableHead>
-              <TableHead className="w-28 text-right">
+              <TableHead className="min-w-[300px]">{t("Rule mapping", "规则映射")}</TableHead>
+              <TableHead className="w-20 text-right">
                 <span className="inline-flex items-center gap-1">
                   <Download className="size-3.5" />
-                  {t("Down traffic", "下行流量")}
+                  {t("Down", "下行")}
                 </span>
               </TableHead>
-              <TableHead className="w-28 text-right">
+              <TableHead className="w-20 text-right">
                 <span className="inline-flex items-center gap-1">
                   <Upload className="size-3.5" />
-                  {t("Up traffic", "上行流量")}
+                  {t("Up", "上行")}
                 </span>
               </TableHead>
-              <TableHead className="w-24 text-right">
+              <TableHead className="w-14 text-right">
                 <span className="inline-flex items-center gap-1">
-                  {t("Live conn.", "实时连接")}
+                  {t("Conn.", "连接")}
                 </span>
               </TableHead>
-              <TableHead className="w-28">{t("Status", "状态")}</TableHead>
-              <TableHead className="w-12 text-right" />
+              <TableHead className="w-8 px-1 text-right" />
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -582,7 +563,7 @@ function RouteDataTable({
               <Fragment key={section.root}>
                 {section.showHeader ? (
                   <TableRow key={`${section.root}:heading`} className="bg-muted/25 hover:bg-muted/25">
-                    <TableCell colSpan={9} className="h-9 px-3 py-1.5">
+                    <TableCell colSpan={7} className="h-9 px-3 py-1.5">
                       <div className="flex min-w-0 items-center justify-between gap-3">
                         <div className="flex min-w-0 items-center gap-2">
                           <span className="text-xs text-muted-foreground">{t("Main domain", "主域名")}</span>
@@ -594,7 +575,7 @@ function RouteDataTable({
                         {!["__default", "__custom"].includes(section.root) ? (
                           <Button type="button" variant="outline" size="xs" onClick={() => onCreateSubrule(section.root, domainTemplateService(section.routes))}>
                             <Plus className="size-3.5" />
-                            {t("Sub-rule", "子规则")}
+                            {t("New sub-rule", "新建子规则")}
                           </Button>
                         ) : null}
                       </div>
@@ -621,7 +602,7 @@ function RouteDataTable({
             ))}
             {routes.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={9} className="h-24 text-center text-sm text-muted-foreground">
+                <TableCell colSpan={7} className="h-24 text-center text-sm text-muted-foreground">
                   {t("No visible rules in this domain view. Expand groups or add a rule.", "这个域名视图里没有可见规则。可以展开分组或新增规则。")}
                 </TableCell>
               </TableRow>
@@ -682,50 +663,49 @@ function RouteTableRow({
   return (
     <TableRow
       data-state={selected ? "selected" : undefined}
-      className={`${dragging ? "outline outline-1 outline-cyan-300/70" : ""} h-11`}
+      className={`${dragging ? "outline outline-1 outline-cyan-300/70" : ""} h-12`}
       draggable
       onDragStart={() => onDragStart(service.id)}
       onDragOver={(event) => event.preventDefault()}
       onDrop={() => void onDrop(service.id)}
       onClick={() => onSelect(route.routeId, !selected)}
     >
-      <TableCell className="px-2">
+      <TableCell className="px-1">
         <Button variant="ghost" size="icon-xs" aria-label={t("Drag to reorder", "拖拽排序")}>
           <GripVertical className="size-3.5" />
         </Button>
       </TableCell>
-      <TableCell className="px-2">
+      <TableCell className="px-1">
         <Checkbox checked={selected} aria-label={t(`Select ${displayName}`, `选择 ${displayName}`)} onClick={(event) => event.stopPropagation()} onCheckedChange={(checked) => onSelect(route.routeId, Boolean(checked))} />
       </TableCell>
-      <TableCell>
-        <div className="grid min-w-0 gap-0.5">
-          <div className="flex min-w-0 items-center gap-2">
-            {frontend.href ? (
-              <a className="inline-flex min-w-0 items-center gap-1 font-mono text-sm font-medium text-cyan-100 hover:text-cyan-200" href={frontend.href} target="_blank" rel="noreferrer" onClick={(event) => event.stopPropagation()}>
-                <span className="truncate">{frontend.label}</span>
-                <ExternalLink className="size-3.5 shrink-0" />
-              </a>
-            ) : (
-              <span className="truncate font-mono text-sm font-medium text-cyan-100">{frontend.label}</span>
-            )}
+      <TableCell className="py-1.5">
+        <div className="grid min-w-0 gap-1">
+          <div className="flex min-w-0 items-center gap-1.5">
+            <span className="max-w-40 truncate text-sm font-medium">{displayName}</span>
             <Badge variant="outline" className="h-5 shrink-0 rounded-md px-1.5 text-[10px]">
               {routeKindLabel(route, isRootRule, t)}
             </Badge>
+            <StatusBadge status={service.runtime?.status || (service.enabled ? "unknown" : "offline")} label={service.enabled ? undefined : t("Disabled", "停用")} />
+            <Badge variant="outline" className="h-5 shrink-0 rounded-md px-1.5 text-[10px]">
+              {service.tls.mode === "none" ? "HTTP" : "TLS"}
+            </Badge>
           </div>
-          <div className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
-            <span className="truncate">{displayName}</span>
-            <span className="shrink-0">·</span>
-            <span className="shrink-0">{frontend.meta}</span>
+          <div className="flex min-w-0 items-center gap-1.5">
+            {frontend.href ? (
+              <a className="inline-flex min-w-0 items-center gap-1 rounded-md bg-sky-500/15 px-2 py-1 font-mono text-xs font-medium text-cyan-100 hover:text-cyan-200" href={frontend.href} target="_blank" rel="noreferrer" onClick={(event) => event.stopPropagation()}>
+                <span className="truncate">{frontend.label}</span>
+                <ExternalLink className="size-3 shrink-0" />
+              </a>
+            ) : (
+              <span className="min-w-0 truncate rounded-md bg-sky-500/15 px-2 py-1 font-mono text-xs font-medium text-cyan-100">{frontend.label}</span>
+            )}
+            <span className="hidden shrink-0 text-[10px] text-muted-foreground sm:inline">{frontend.meta}</span>
+            <ArrowRight className="size-3.5 shrink-0 text-muted-foreground" />
+            <span className="min-w-0 truncate rounded-md bg-muted px-2 py-1 font-mono text-xs text-foreground">{backend.hostPort || service.targetUrl}</span>
+            <Badge variant="outline" className="hidden h-5 shrink-0 rounded-md px-1.5 text-[10px] text-muted-foreground sm:inline-flex">
+              {backend.scheme}
+            </Badge>
           </div>
-        </div>
-      </TableCell>
-      <TableCell>
-        <div className="flex min-w-0 items-center gap-2">
-          <ArrowRight className="size-3.5 shrink-0 text-muted-foreground" />
-          <span className="min-w-0 truncate font-mono text-sm text-foreground">{backend.hostPort || service.targetUrl}</span>
-          <Badge variant="outline" className="h-5 shrink-0 rounded-md px-1.5 text-[10px] text-muted-foreground">
-            {backend.scheme}
-          </Badge>
         </div>
       </TableCell>
       <TableCell className="text-right">
@@ -737,15 +717,7 @@ function RouteTableRow({
       <TableCell className="text-right">
         <ConnectionValue traffic={traffic} />
       </TableCell>
-      <TableCell>
-        <div className="flex flex-wrap gap-1">
-          <StatusBadge status={service.runtime?.status || (service.enabled ? "unknown" : "offline")} label={service.enabled ? undefined : t("Disabled", "停用")} />
-          <Badge variant="outline" className="h-5 rounded-md px-1.5 text-[10px]">
-            {service.tls.mode === "none" ? "HTTP" : "TLS"}
-          </Badge>
-        </div>
-      </TableCell>
-      <TableCell>
+      <TableCell className="px-1">
         <div className="flex items-center justify-end gap-1" onClick={(event) => event.stopPropagation()}>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -786,7 +758,7 @@ function RouteTableRow({
 
 function groupRoutesForTable(routes: DomainRoute[], activeRoot: string): Array<{ root: string; routes: DomainRoute[]; showHeader: boolean }> {
   if (activeRoot !== "__all") {
-    return [{ root: activeRoot, routes, showHeader: false }];
+    return [{ root: activeRoot, routes, showHeader: routes.length > 0 }];
   }
   const groups = new Map<string, DomainRoute[]>();
   for (const route of routes) {
@@ -795,7 +767,7 @@ function groupRoutesForTable(routes: DomainRoute[], activeRoot: string): Array<{
   return Array.from(groups.entries()).map(([root, groupRoutes]) => ({
     root,
     routes: groupRoutes,
-    showHeader: routes.length > 1
+    showHeader: true
   }));
 }
 
@@ -809,25 +781,19 @@ function TrafficValue({ value, rate, source, tone }: { value: number; rate: numb
   }
   const toneClass = tone === "down" ? "text-cyan-100" : "text-amber-100";
   return (
-    <span className="grid gap-0.5 leading-tight">
-      <span className={`font-mono text-sm ${toneClass}`}>{formatBytesPerSecond(rate)}</span>
-      <span className="font-mono text-[10px] text-muted-foreground">{formatBytes(value)}</span>
+    <span className="grid justify-items-end gap-0 leading-tight">
+      <span className={`font-mono text-[13px] ${toneClass}`}>{formatBytes(value)}</span>
+      <span className="font-mono text-[10px] text-muted-foreground">{formatBytesPerSecond(rate)}</span>
     </span>
   );
 }
 
 function ConnectionValue({ traffic }: { traffic?: WebServiceTrafficStats }) {
-  const { t } = useLanguage();
   if (!traffic || traffic.source === "unavailable" || traffic.openConnectionsScope === "unavailable") {
     return <span className="font-mono text-sm text-muted-foreground">N/A</span>;
   }
 
-  return (
-    <span className="grid gap-0.5 leading-tight">
-      <span className="font-mono text-sm text-foreground">{traffic.openConnections}</span>
-      <span className="text-[10px] text-muted-foreground">{connectionScopeLabel(traffic.openConnectionsScope, t)}</span>
-    </span>
-  );
+  return <span className="font-mono text-sm text-foreground">{traffic.openConnections}</span>;
 }
 
 function RouteDetails({ route }: { route: DomainRoute }) {
@@ -1053,7 +1019,7 @@ function ServiceForm({
           matchMode,
           groupId: groups[0]?.id || "local",
           domainRoot: createRoot,
-          subdomainsText: mode === "rule" ? "@" : "",
+          subdomainsText: "",
           ...(draftPreset || {})
         };
   });
@@ -1118,12 +1084,14 @@ function ServiceForm({
         <div className="grid gap-3 rounded-lg border bg-background/35 p-3 md:grid-cols-2">
           {!isDefaultRule ? (
             <>
-              <Field label={mode === "subrule" ? t("Main domain", "主域名") : t("Main domain", "主域名")}>
+              <Field label={mode === "subrule" ? t("Main domain", "主域名") : t("Frontend main domain", "前端主域名")}>
                 <Input value={draft.domainRoot} onChange={(event) => setDraft({ ...draft, domainRoot: event.target.value })} placeholder="1804.surfacer.cc" disabled={mode === "subrule" && activeRoot !== "__all" && !service} />
               </Field>
-              <Field label={mode === "subrule" ? t("Frontend subdomain", "前端子域名") : t("Frontend domain", "前端域名")}>
-                <Input value={draft.subdomainsText} onChange={(event) => setDraft({ ...draft, subdomainsText: event.target.value })} placeholder={isCustomRule ? "optional display domain" : mode === "subrule" ? "qb / pve / immich" : "@ / www / app"} required={draft.matchMode === "host" && mode === "subrule" && !service} />
-              </Field>
+              {mode === "subrule" || service ? (
+                <Field label={mode === "subrule" ? t("Frontend subdomain", "前端子域名") : t("Domain label", "域名前缀")}>
+                  <Input value={draft.subdomainsText} onChange={(event) => setDraft({ ...draft, subdomainsText: event.target.value })} placeholder={isCustomRule ? "optional display domain" : mode === "subrule" ? "qb / pve / immich" : "@ / www / app"} required={draft.matchMode === "host" && mode === "subrule" && !service} />
+                </Field>
+              ) : null}
             </>
           ) : null}
           <Field className="md:col-span-2" label={t("Backend IP:port", "后端 IP:端口")}>
