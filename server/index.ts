@@ -2,10 +2,10 @@ import express from "express";
 import fs from "node:fs";
 import path from "node:path";
 import { z } from "zod";
-import type { CertificateWithBindings, DashboardPayload, WebService, WebServiceWithRuntime } from "../shared/types";
-import { webServicesBoundToCertificate } from "./bindings";
+import type { CertificateItem, CertificateWithBindings, DashboardPayload, WebService, WebServiceWithRuntime } from "../shared/types";
+import { certificateCoversDomain, resolverName, webServicesBoundToCertificate } from "./bindings";
 import { config } from "./config";
-import { createCertificateFromInput, refreshCertificateFromAction, updateCertificateFromInput } from "./certificates";
+import { createCertificateFromInput, refreshCertificateFromAction, updateCertificateFromInput, type CertificateInput } from "./certificates";
 import { createId, traefikName } from "./ids";
 import { getTrafficSnapshot } from "./metrics";
 import { certificateInputSchema, groupInputSchema, reorderSchema, webServiceInputSchema } from "./schemas";
@@ -171,7 +171,14 @@ app.put("/api/certificates/:id", (request, response) => {
   if (index === -1) return response.status(404).json({ error: "Certificate not found." });
 
   const current = state.certificates[index];
-  state.certificates[index] = updateCertificateFromInput(current, parsed);
+  const bindingConflict = boundCertificateUpdateConflict(current, parsed, state.webServices);
+  if (bindingConflict) return response.status(409).json({ error: bindingConflict });
+
+  const updated = updateCertificateFromInput(current, parsed);
+  const updatedBindingConflict = boundCertificateResultConflict(updated, state.webServices);
+  if (updatedBindingConflict) return response.status(409).json({ error: updatedBindingConflict });
+
+  state.certificates[index] = updated;
   const next = saveState(state, "certificate.update", `Updated certificate ${state.certificates[index].name}.`);
   response.json(next.certificates.find((certificate) => certificate.id === request.params.id));
 });
@@ -308,4 +315,62 @@ async function dashboardPayload(): Promise<DashboardPayload> {
 
 function normalizeDomains(domains: string[]): string[] {
   return Array.from(new Set(domains.map((domain) => domain.trim().toLowerCase()).filter(Boolean)));
+}
+
+function boundCertificateUpdateConflict(current: CertificateItem, input: Partial<CertificateInput>, services: WebService[]): string | undefined {
+  const boundServices = webServicesBoundToCertificate(current, services);
+  if (boundServices.length === 0) return undefined;
+  if (input.enabled === false) return "Certificate is bound to at least one Web service.";
+
+  const fileBoundServices = boundServices.filter((service) => service.tls.mode === "file-certificate" && service.tls.certificateId === current.id);
+  if (fileBoundServices.length > 0) {
+    if (input.source !== undefined && input.source !== current.source) {
+      return "Certificate is bound to at least one Web service. Unbind it before changing certificate source.";
+    }
+    if (input.certPem !== undefined || input.keyPem !== undefined || input.certPath !== undefined || input.keyPath !== undefined) {
+      return "Certificate is bound to at least one Web service. Unbind it before replacing certificate files.";
+    }
+    if (input.domains !== undefined) {
+      const nextDomains = normalizeDomains(input.domains);
+      const missingDomains = boundServiceDomains(fileBoundServices).filter((domain) => !certificateCoversDomain(nextDomains, domain));
+      if (missingDomains.length > 0) {
+        return `Certificate update would stop covering bound Web service domain(s): ${missingDomains.join(", ")}.`;
+      }
+    }
+  }
+
+  const resolverBoundServices = boundServices.filter((service) => service.tls.mode === "resolver");
+  if (resolverBoundServices.length > 0) {
+    if (input.source !== undefined && input.source !== "acme") {
+      return "ACME certificate is bound to at least one resolver Web service. Unbind it before changing certificate source.";
+    }
+    if (input.acme !== undefined) {
+      const nextResolver = resolverName(input.acme.resolver);
+      const requiredResolvers = Array.from(new Set(resolverBoundServices.map((service) => resolverName(service.tls.resolver))));
+      const missingResolvers = requiredResolvers.filter((requiredResolver) => requiredResolver !== nextResolver);
+      if (missingResolvers.length > 0) {
+        return `ACME resolver update would unbind Web service resolver(s): ${missingResolvers.join(", ")}.`;
+      }
+    }
+  }
+
+  return undefined;
+}
+
+function boundCertificateResultConflict(certificate: CertificateItem, services: WebService[]): string | undefined {
+  const fileBoundServices = services.filter((service) => service.tls.mode === "file-certificate" && service.tls.certificateId === certificate.id);
+  if (fileBoundServices.length === 0) return undefined;
+  if (!certificate.enabled) return "Certificate is bound to at least one Web service.";
+  if (certificate.source === "acme" || certificate.source === "sync") {
+    return "Certificate is bound to file-certificate Web services and must remain a local certificate source.";
+  }
+  const missingDomains = boundServiceDomains(fileBoundServices).filter((domain) => !certificateCoversDomain(certificate.domains, domain));
+  if (missingDomains.length > 0) {
+    return `Certificate update would stop covering bound Web service domain(s): ${missingDomains.join(", ")}.`;
+  }
+  return undefined;
+}
+
+function boundServiceDomains(services: WebService[]): string[] {
+  return Array.from(new Set(services.flatMap((service) => service.domains).map((domain) => domain.trim().toLowerCase()).filter(Boolean)));
 }

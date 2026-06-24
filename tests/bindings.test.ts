@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { CertificateItem, WebService } from "../shared/types";
-import { isWebServiceBoundToCertificate, webServicesBoundToCertificate } from "../server/bindings";
+import { certificateCoversDomain, isWebServiceBoundToCertificate, webServicesBoundToCertificate } from "../server/bindings";
 
 const now = new Date().toISOString();
 
@@ -77,5 +77,14 @@ describe("certificate bindings", () => {
     const unbound = webService({ id: "svc-unbound", tls: { mode: "resolver", resolver: "cloudflare" } });
 
     expect(webServicesBoundToCertificate(item, [bound, unbound]).map((service) => service.id)).toEqual(["svc-bound"]);
+  });
+
+  it("checks exact and single-label wildcard domain coverage", () => {
+    const domains = ["secure.localhost", "*.example.com"];
+
+    expect(certificateCoversDomain(domains, "secure.localhost")).toBe(true);
+    expect(certificateCoversDomain(domains, "app.example.com")).toBe(true);
+    expect(certificateCoversDomain(domains, "deep.app.example.com")).toBe(false);
+    expect(certificateCoversDomain(domains, "example.com")).toBe(false);
   });
 });

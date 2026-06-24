@@ -70,6 +70,7 @@ try {
   created.httpsHost = certificate.domains[0] || editedHttpsHost;
   await verifyCertificateBinding(certificate.id, httpsService.id, "HTTPS file certificate");
   await verifyBoundCertificateToggleProtection(certificate.id, "HTTPS file certificate");
+  await verifyBoundFileCertificateUpdateProtection(certificate.id, certificate.domains[0] || editedHttpsHost, "HTTPS file certificate");
   await createAndVerifyAcmeResolverBinding(group.id);
   await reorderAndVerifyServices([httpsService.id, httpService.id]);
 
@@ -289,6 +290,7 @@ async function createAndVerifyUploadedCertificateRoute(groupId) {
   created.uploadedServiceId = service.id;
   await verifyCertificateBinding(certificate.id, service.id, "uploaded PEM certificate");
   await verifyBoundCertificateToggleProtection(certificate.id, "uploaded PEM certificate");
+  await verifyBoundFileCertificateUpdateProtection(certificate.id, uploadedHttpsHost, "uploaded PEM certificate");
   console.log("[ok] Uploaded PEM certificate binds to a verified HTTPS route.");
 }
 
@@ -320,6 +322,7 @@ async function createAndVerifyPathCertificateRoute(groupId) {
   created.pathServiceId = service.id;
   await verifyCertificateBinding(certificate.id, service.id, "existing path certificate");
   await verifyBoundCertificateToggleProtection(certificate.id, "existing path certificate");
+  await verifyBoundFileCertificateUpdateProtection(certificate.id, pathHttpsHost, "existing path certificate", { certPath, keyPath });
   console.log("[ok] Existing path certificate binds to a verified HTTPS route.");
 }
 
@@ -550,8 +553,9 @@ async function createAndVerifyAcmeResolverBinding(groupId) {
     throw new Error(`Deleting an ACME certificate bound by resolver should return 409, got HTTP ${deleteResponse.status}.`);
   }
   await verifyBoundCertificateToggleProtection(certificate.id, "ACME resolver certificate");
+  await verifyBoundAcmeResolverUpdateProtection(certificate.id, acmeResolver);
 
-  console.log("[ok] ACME resolver certificate binding, disable protection, and delete protection work.");
+  console.log("[ok] ACME resolver certificate binding, update protection, disable protection, and delete protection work.");
 }
 
 async function verifyBoundCertificateToggleProtection(certificateId, label = "certificate") {
@@ -570,6 +574,79 @@ async function verifyBoundCertificateToggleProtection(certificateId, label = "ce
     throw new Error(`Bound ${label} should remain enabled after rejected disable toggle.`);
   }
   console.log(`[ok] Bound ${label} disable protection works.`);
+}
+
+async function verifyBoundFileCertificateUpdateProtection(certificateId, boundHost, label = "certificate", pathFiles) {
+  await expectCertificateUpdateConflict(
+    certificateId,
+    { enabled: false },
+    `Editing a bound ${label} to disabled should return HTTP 409`
+  );
+  await expectCertificateUpdateConflict(
+    certificateId,
+    { domains: [`wrong-${boundHost}`] },
+    `Editing a bound ${label} SANs away from ${boundHost} should return HTTP 409`
+  );
+
+  if (pathFiles) {
+    await expectCertificateUpdateConflict(
+      certificateId,
+      { certPath: pathFiles.certPath, keyPath: pathFiles.keyPath },
+      `Replacing bound ${label} path files should return HTTP 409`
+    );
+  } else {
+    const { certPem, keyPem } = createTemporaryPemBundle(`replace-${boundHost}`);
+    await expectCertificateUpdateConflict(
+      certificateId,
+      { certPem, keyPem },
+      `Replacing bound ${label} PEM files should return HTTP 409`
+    );
+  }
+
+  const certificate = await readCertificate(certificateId);
+  if (!certificate.enabled || !certificate.domains.includes(boundHost)) {
+    throw new Error(`Rejected ${label} update should leave the bound certificate enabled and covering ${boundHost}.`);
+  }
+  console.log(`[ok] Bound ${label} edit protection keeps active routes covered.`);
+}
+
+async function verifyBoundAcmeResolverUpdateProtection(certificateId, resolver) {
+  await expectCertificateUpdateConflict(
+    certificateId,
+    { acme: { resolver: `${resolver}-moved`, email: `moved-${suffix}@example.com`, dnsProvider: "cloudflare" } },
+    "Editing a bound ACME resolver should return HTTP 409"
+  );
+  await expectCertificateUpdateConflict(
+    certificateId,
+    { source: "sync", domains: [acmeHost], sync: { target: "https://peer.example.com/sync" } },
+    "Changing a bound ACME certificate source should return HTTP 409"
+  );
+
+  const certificate = await readCertificate(certificateId);
+  if (certificate.source !== "acme" || certificate.acme?.resolver !== resolver) {
+    throw new Error("Rejected ACME resolver update should preserve the bound resolver.");
+  }
+  console.log("[ok] Bound ACME resolver edit protection keeps resolver routes bound.");
+}
+
+async function expectCertificateUpdateConflict(certificateId, body, message) {
+  const response = await request(`${gateliteApiUrl}/api/certificates/${certificateId}`, {
+    method: "PUT",
+    body: JSON.stringify(body),
+    headers: { "Content-Type": "application/json" }
+  });
+  if (response.status !== 409 || (!response.body.includes("bound") && !response.body.includes("covering") && !response.body.includes("unbind"))) {
+    throw new Error(`${message}, got ${response.status}: ${response.body.slice(0, 300)}`);
+  }
+}
+
+async function readCertificate(certificateId) {
+  const certificates = await apiJson("/api/certificates");
+  const certificate = certificates.find((item) => item.id === certificateId);
+  if (!certificate) {
+    throw new Error(`Certificate ${certificateId} disappeared from certificate list.`);
+  }
+  return certificate;
 }
 
 async function reorderAndVerifyServices(serviceIds) {
