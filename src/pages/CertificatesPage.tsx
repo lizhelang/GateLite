@@ -1,4 +1,4 @@
-import { ArrowRight, CalendarClock, Copy, Download, FileKey2, GripVertical, KeyRound, Pencil, Plus, Power, Save, Trash2, Upload } from "lucide-react";
+import { ArrowRight, CalendarClock, Copy, Download, FileKey2, GripVertical, KeyRound, Pencil, Plus, Power, Trash2, Upload } from "lucide-react";
 import { FormEvent, useMemo, useState, type ReactNode } from "react";
 import type { CertificateWithBindings, DashboardPayload } from "../../shared/types";
 import { createCertificate, deleteCertificate, reorderCertificates, toggleCertificate, updateCertificate, type CertificateInput } from "../api";
@@ -6,7 +6,6 @@ import { Modal } from "../components/Modal";
 import { StatusBadge } from "../components/StatusBadge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -61,6 +60,7 @@ export function CertificatesPage({ dashboard, onRefresh }: CertificatesPageProps
   const { t } = useLanguage();
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<CertificateWithBindings | null>(null);
+  const [details, setDetails] = useState<CertificateWithBindings | null>(null);
   const [initialSource, setInitialSource] = useState<CertificateInput["source"]>("self-signed");
   const [draftPreset, setDraftPreset] = useState<Partial<DraftCertificate> | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -71,7 +71,6 @@ export function CertificatesPage({ dashboard, onRefresh }: CertificatesPageProps
 
   const certificates = useMemo(() => [...dashboard.certificates].sort((a, b) => a.order - b.order), [dashboard.certificates]);
   const filteredCertificates = useMemo(() => certificates.filter((certificate) => matchesFilter(certificate, filter)), [certificates, filter]);
-  const selected = certificates.find((certificate) => selectedIds.includes(certificate.id));
   const selectedCertificates = useMemo(() => certificates.filter((certificate) => selectedIds.includes(certificate.id)), [certificates, selectedIds]);
   const counts = useMemo(
     () => ({
@@ -233,7 +232,6 @@ export function CertificatesPage({ dashboard, onRefresh }: CertificatesPageProps
 
       <CertificateDataTable
         certificates={filteredCertificates}
-        selected={selected}
         selectedIds={selectedIds}
         draggingId={draggingId}
         onDragStart={setDraggingId}
@@ -244,6 +242,7 @@ export function CertificatesPage({ dashboard, onRefresh }: CertificatesPageProps
         onBulkToggle={handleBulkToggle}
         onDuplicate={openDuplicate}
         onDownload={handleDownload}
+        onDetails={setDetails}
         onEdit={openEdit}
         onDelete={handleDelete}
       />
@@ -278,13 +277,18 @@ export function CertificatesPage({ dashboard, onRefresh }: CertificatesPageProps
           }}
         />
       ) : null}
+
+      {details ? (
+        <Modal title={details.name} subtitle={t("Certificate metadata, SAN coverage, and bound reverse proxy rules.", "证书元数据、SAN 覆盖和已绑定反代规则。")} onClose={() => setDetails(null)}>
+          <CertificateDetails certificate={details} />
+        </Modal>
+      ) : null}
     </section>
   );
 }
 
 function CertificateDataTable({
   certificates,
-  selected,
   selectedIds,
   draggingId,
   onDragStart,
@@ -295,11 +299,11 @@ function CertificateDataTable({
   onBulkToggle,
   onDuplicate,
   onDownload,
+  onDetails,
   onEdit,
   onDelete
 }: {
   certificates: CertificateWithBindings[];
-  selected?: CertificateWithBindings;
   selectedIds: string[];
   draggingId: string | null;
   onDragStart: (id: string) => void;
@@ -310,6 +314,7 @@ function CertificateDataTable({
   onBulkToggle: (enabled: boolean) => Promise<void>;
   onDuplicate: (certificate: CertificateWithBindings) => void;
   onDownload: (certificate: CertificateWithBindings) => void;
+  onDetails: (certificate: CertificateWithBindings) => void;
   onEdit: (certificate: CertificateWithBindings) => void;
   onDelete: (certificate: CertificateWithBindings) => Promise<void>;
 }) {
@@ -318,146 +323,132 @@ function CertificateDataTable({
   const allVisibleSelected = certificates.length > 0 && selectedCount === certificates.length;
 
   return (
-    <Card className="overflow-hidden bg-card/70">
-      <CardContent className="p-0">
-        <div className="overflow-x-auto">
-          <Table className="min-w-[980px]">
-            <TableHeader className="bg-muted/45">
-              <TableRow className="hover:bg-transparent">
-                <TableHead className="w-10" />
-                <TableHead className="w-10">
-                  <Checkbox aria-label={t("Select visible certificates", "选择当前证书")} checked={allVisibleSelected} onCheckedChange={(checked) => onSelectAll(Boolean(checked))} />
-                </TableHead>
-                <TableHead>{t("Certificate", "证书")}</TableHead>
-                <TableHead>{t("Source", "来源")}</TableHead>
-                <TableHead>{t("Domains / SANs", "域名 / SAN")}</TableHead>
-                <TableHead>{t("Status", "状态")}</TableHead>
-                <TableHead>{t("Expires", "过期时间")}</TableHead>
-                <TableHead>{t("Bindings", "绑定")}</TableHead>
-                <TableHead>{t("Storage", "存储")}</TableHead>
-                <TableHead className="w-36 text-right">{t("Actions", "操作")}</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {certificates.map((certificate) => {
-                const rowSelected = selectedIds.includes(certificate.id);
-                return (
-                  <TableRow
-                    key={certificate.id}
-                    className={`${rowSelected ? "bg-muted/50" : ""} ${draggingId === certificate.id ? "outline outline-1 outline-cyan-300/70" : ""}`}
-                    draggable
-                    onDragStart={() => onDragStart(certificate.id)}
-                    onDragOver={(event) => event.preventDefault()}
-                    onDrop={() => void onDrop(certificate.id)}
-                    onClick={() => onSelect(certificate.id, !rowSelected)}
-                  >
-                    <TableCell>
-                      <Button variant="ghost" size="icon-xs" aria-label={t("Drag to reorder", "拖拽排序")}>
-                        <GripVertical className="size-3.5" />
+    <div className="overflow-hidden rounded-xl border bg-card/70">
+      <div className="overflow-x-auto">
+        <Table className="min-w-[1160px]">
+          <TableHeader className="bg-muted/50">
+            <TableRow className="hover:bg-transparent">
+              <TableHead className="w-8" />
+              <TableHead className="w-9">
+                <Checkbox aria-label={t("Select visible certificates", "选择当前证书")} checked={allVisibleSelected} onCheckedChange={(checked) => onSelectAll(Boolean(checked))} />
+              </TableHead>
+              <TableHead className="w-[16rem]">{t("Certificate", "证书")}</TableHead>
+              <TableHead className="w-[13rem]">{t("Source", "来源")}</TableHead>
+              <TableHead className="w-[18rem]">{t("Domains / SANs", "域名 / SAN")}</TableHead>
+              <TableHead className="w-[16rem]">{t("CA / issuer", "CA / 签发者")}</TableHead>
+              <TableHead className="w-[11rem]">{t("Validity", "有效期")}</TableHead>
+              <TableHead className="w-[11rem]">{t("Bindings", "绑定")}</TableHead>
+              <TableHead className="w-[11rem]">{t("Status", "状态")}</TableHead>
+              <TableHead className="w-40 text-right">{t("Actions", "操作")}</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {certificates.map((certificate) => {
+              const rowSelected = selectedIds.includes(certificate.id);
+              return (
+                <TableRow
+                  key={certificate.id}
+                  data-state={rowSelected ? "selected" : undefined}
+                  className={`${draggingId === certificate.id ? "outline outline-1 outline-cyan-300/70" : ""} h-14`}
+                  draggable
+                  onDragStart={() => onDragStart(certificate.id)}
+                  onDragOver={(event) => event.preventDefault()}
+                  onDrop={() => void onDrop(certificate.id)}
+                  onClick={() => onSelect(certificate.id, !rowSelected)}
+                >
+                  <TableCell className="px-2">
+                    <Button variant="ghost" size="icon-xs" aria-label={t("Drag to reorder", "拖拽排序")}>
+                      <GripVertical className="size-3.5" />
+                    </Button>
+                  </TableCell>
+                  <TableCell className="px-2">
+                    <Checkbox checked={rowSelected} aria-label={t(`Select ${certificate.name}`, `选择 ${certificate.name}`)} onClick={(event) => event.stopPropagation()} onCheckedChange={(checked) => onSelect(certificate.id, Boolean(checked))} />
+                  </TableCell>
+                  <TableCell>
+                    <div className="grid min-w-0 gap-1">
+                      <span className="truncate font-medium">{certificate.name}</span>
+                      <span className="truncate text-xs text-muted-foreground">{certificate.subject || t("No subject metadata", "无主体元数据")}</span>
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <div className="grid min-w-0 gap-1">
+                      <Badge variant="outline" className="w-fit rounded-md">{sourceLabel(certificate.source, t)}</Badge>
+                      <span className="truncate font-mono text-xs text-muted-foreground">{storagePrimary(certificate, t)}</span>
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <DomainList domains={certificate.domains} />
+                  </TableCell>
+                  <TableCell>
+                    <span className="block max-w-[15rem] truncate text-sm">{certificate.issuer || t("Unknown", "未知")}</span>
+                  </TableCell>
+                  <TableCell>
+                    <div className="grid gap-0.5 text-xs leading-tight">
+                      <span className="font-medium">{certificate.notAfter ? formatDate(certificate.notAfter) : t("Unknown", "未知")}</span>
+                      <span className="text-muted-foreground">{expiryText(certificate.notAfter, t)}</span>
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <div className="grid gap-0.5 text-xs leading-tight">
+                      <span className="font-mono text-foreground">{certificate.boundServices.length}</span>
+                      <span className="truncate text-muted-foreground">{bindingSummary(certificate, t)}</span>
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex flex-wrap gap-1">
+                      <StatusBadge status={certificate.status} />
+                      <StatusBadge status={certificate.enabled ? "enabled" : "disabled"} />
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex items-center justify-end gap-1" onClick={(event) => event.stopPropagation()}>
+                      <Button variant="outline" size="icon-xs" onClick={() => onDetails(certificate)} aria-label={t("View certificate details", "查看证书详情")}>
+                        <FileKey2 className="size-3.5" />
                       </Button>
-                    </TableCell>
-                    <TableCell>
-                      <Checkbox checked={rowSelected} aria-label={t(`Select ${certificate.name}`, `选择 ${certificate.name}`)} onClick={(event) => event.stopPropagation()} onCheckedChange={(checked) => onSelect(certificate.id, Boolean(checked))} />
-                    </TableCell>
-                    <TableCell>
-                      <div className="grid min-w-0 gap-0.5">
-                        <span className="truncate font-medium">{certificate.name}</span>
-                        <span className="truncate text-xs text-muted-foreground">{certificate.subject || certificate.issuer || t("No subject metadata", "无主体元数据")}</span>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant="outline">{sourceLabel(certificate.source, t)}</Badge>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex max-w-72 flex-wrap gap-1">
-                        {certificate.domains.length ? (
-                          <>
-                            {certificate.domains.slice(0, 2).map((domain) => (
-                              <span key={domain} className="rounded-md border bg-background/55 px-2 py-1 text-xs text-cyan-100">
-                                {domain}
-                              </span>
-                            ))}
-                            {certificate.domains.length > 2 ? <span className="rounded-md border bg-background/40 px-2 py-1 text-xs text-muted-foreground">+{certificate.domains.length - 2}</span> : null}
-                          </>
-                        ) : (
-                          <span className="text-xs text-muted-foreground">{t("No domains", "未记录域名")}</span>
-                        )}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex flex-wrap gap-1">
-                        <StatusBadge status={certificate.status} />
-                        <StatusBadge status={certificate.enabled ? "enabled" : "disabled"} />
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <div className="grid gap-0.5 text-xs leading-tight">
-                        <span className="font-medium">{certificate.notAfter ? formatDate(certificate.notAfter) : t("Unknown", "未知")}</span>
-                        <span className="text-muted-foreground">{expiryText(certificate.notAfter, t)}</span>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <div className="grid gap-0.5 text-xs leading-tight">
-                        <span className="font-mono text-foreground">{certificate.boundServices.length}</span>
-                        <span className="truncate text-muted-foreground">{bindingSummary(certificate, t)}</span>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <div className="grid max-w-52 gap-0.5 text-xs leading-tight">
-                        <span className="truncate font-mono text-foreground">{storagePrimary(certificate, t)}</span>
-                        <span className="truncate text-muted-foreground">{storageSecondary(certificate, t)}</span>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center justify-end gap-1" onClick={(event) => event.stopPropagation()}>
-                        <Button variant="outline" size="icon-xs" onClick={() => void onToggle(certificate)} aria-label={t("Toggle certificate", "切换证书启用状态")}>
-                          <Power className="size-3.5" />
-                        </Button>
-                        <Button variant="outline" size="icon-xs" onClick={() => onDuplicate(certificate)} aria-label={t("Copy as new certificate", "复制为新证书")}>
-                          <Copy className="size-3.5" />
-                        </Button>
-                        <Button variant="outline" size="icon-xs" onClick={() => onDownload(certificate)} disabled={!certificate.certPath} aria-label={t("Download PEM", "下载 PEM")}>
-                          <Download className="size-3.5" />
-                        </Button>
-                        <Button variant="outline" size="icon-xs" onClick={() => onEdit(certificate)} aria-label={t("Edit certificate", "编辑证书")}>
-                          <Pencil className="size-3.5" />
-                        </Button>
-                        <Button variant="destructive" size="icon-xs" onClick={() => void onDelete(certificate)} disabled={certificate.boundServices.length > 0} aria-label={t("Delete certificate", "删除证书")}>
-                          <Trash2 className="size-3.5" />
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                );
-              })}
-              {certificates.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={10} className="h-24 text-center text-sm text-muted-foreground">
-                    {t("No certificates in this view.", "这个视图里没有证书。")}
+                      <Button variant="outline" size="icon-xs" onClick={() => void onToggle(certificate)} aria-label={t("Toggle certificate", "切换证书启用状态")}>
+                        <Power className="size-3.5" />
+                      </Button>
+                      <Button variant="outline" size="icon-xs" onClick={() => onDuplicate(certificate)} aria-label={t("Copy as new certificate", "复制为新证书")}>
+                        <Copy className="size-3.5" />
+                      </Button>
+                      <Button variant="outline" size="icon-xs" onClick={() => onDownload(certificate)} disabled={!certificate.certPath} aria-label={t("Download PEM", "下载 PEM")}>
+                        <Download className="size-3.5" />
+                      </Button>
+                      <Button variant="outline" size="icon-xs" onClick={() => onEdit(certificate)} aria-label={t("Edit certificate", "编辑证书")}>
+                        <Pencil className="size-3.5" />
+                      </Button>
+                      <Button variant="destructive" size="icon-xs" onClick={() => void onDelete(certificate)} disabled={certificate.boundServices.length > 0} aria-label={t("Delete certificate", "删除证书")}>
+                        <Trash2 className="size-3.5" />
+                      </Button>
+                    </div>
                   </TableCell>
                 </TableRow>
-              ) : null}
-            </TableBody>
-          </Table>
+              );
+            })}
+            {certificates.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={10} className="h-24 text-center text-sm text-muted-foreground">
+                  {t("No certificates in this view.", "这个视图里没有证书。")}
+                </TableCell>
+              </TableRow>
+            ) : null}
+          </TableBody>
+        </Table>
+      </div>
+      <div className="flex flex-wrap items-center justify-between gap-3 border-t px-4 py-3 text-sm text-muted-foreground">
+        <span>{t(`${selectedCount} of ${certificates.length} row(s) selected.`, `已选择 ${selectedCount} / ${certificates.length} 行。`)}</span>
+        <div className="flex items-center gap-2">
+          <Button type="button" variant="outline" size="sm" disabled={selectedCount === 0} onClick={() => void onBulkToggle(true)}>
+            <Power className="size-3.5" />
+            {t("Enable", "启用")}
+          </Button>
+          <Button type="button" variant="outline" size="sm" disabled={selectedCount === 0} onClick={() => void onBulkToggle(false)}>
+            <Power className="size-3.5" />
+            {t("Disable", "停用")}
+          </Button>
         </div>
-        <div className="flex flex-wrap items-center justify-between gap-3 border-t px-4 py-3 text-sm text-muted-foreground">
-          <span>{t(`${selectedCount} of ${certificates.length} row(s) selected.`, `已选择 ${selectedCount} / ${certificates.length} 行。`)}</span>
-          <div className="flex items-center gap-3">
-            <Button type="button" variant="outline" size="sm" disabled={selectedCount === 0} onClick={() => void onBulkToggle(true)}>
-              <Power className="size-3.5" />
-              {t("Enable selected", "启用所选")}
-            </Button>
-            <Button type="button" variant="outline" size="sm" disabled={selectedCount === 0} onClick={() => void onBulkToggle(false)}>
-              <Power className="size-3.5" />
-              {t("Disable selected", "停用所选")}
-            </Button>
-            <span>{t("Rows per page", "每页行数")} 10</span>
-            <span>{t("Page 1 of 1", "第 1 / 1 页")}</span>
-          </div>
-        </div>
-        {selected ? <CertificateDetails certificate={selected} /> : null}
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 }
 
@@ -465,14 +456,14 @@ function CertificateDetails({ certificate }: { certificate: CertificateWithBindi
   const { t } = useLanguage();
   const bindingRows = buildCertificateBindingRows(certificate);
   return (
-    <div className="border-t bg-background/30">
-      <div className="grid gap-3 p-4 text-sm md:grid-cols-4">
+    <div className="grid gap-4">
+      <div className="grid gap-3 rounded-xl border bg-background/35 p-4 text-sm md:grid-cols-4">
         <DetailCell icon={<FileKey2 className="size-4" />} label={t("Issuer", "签发者")} value={certificate.issuer || t("Unknown", "未知")} />
         <DetailCell icon={<CalendarClock className="size-4" />} label={t("Validity", "有效期")} value={`${certificate.notBefore ? formatDate(certificate.notBefore) : t("Unknown", "未知")} ${t("to", "至")} ${certificate.notAfter ? formatDate(certificate.notAfter) : t("Unknown", "未知")}`} />
         <DetailCell label={t("Bound rules", "绑定规则")} value={bindingSummary(certificate, t)} />
         <DetailCell label={t("Status detail", "状态详情")} value={certificate.statusMessage || certificate.status} />
       </div>
-      <div className="border-t p-4">
+      <div>
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
           <div>
             <h3 className="text-sm font-medium">{t("Domain bindings", "域名绑定明细")}</h3>
@@ -533,6 +524,23 @@ function CertificateDetails({ certificate }: { certificate: CertificateWithBindi
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+function DomainList({ domains }: { domains: string[] }) {
+  const { t } = useLanguage();
+  if (!domains.length) {
+    return <span className="text-xs text-muted-foreground">{t("No domains", "未记录域名")}</span>;
+  }
+  return (
+    <div className="flex max-w-72 flex-wrap gap-1">
+      {domains.slice(0, 2).map((domain) => (
+        <span key={domain} className="rounded-md border bg-background/55 px-2 py-1 text-xs text-cyan-100">
+          {domain}
+        </span>
+      ))}
+      {domains.length > 2 ? <span className="rounded-md border bg-background/40 px-2 py-1 text-xs text-muted-foreground">+{domains.length - 2}</span> : null}
     </div>
   );
 }
@@ -798,13 +806,6 @@ function storagePrimary(certificate: CertificateWithBindings, t: (english: strin
   if (certificate.source === "sync") return certificate.sync?.target || t("Sync target", "同步目标");
   if (certificate.certPath) return tailPath(certificate.certPath);
   return t("Not readable", "不可读");
-}
-
-function storageSecondary(certificate: CertificateWithBindings, t: (english: string, chinese: string) => string): string {
-  if (certificate.source === "acme") return certificate.acme?.dnsProvider || t("Traefik runtime", "Traefik 运行时");
-  if (certificate.source === "sync") return certificate.sync?.lastSyncTime ? `${t("Last sync", "最近同步")} ${certificate.sync.lastSyncTime}` : t("Waiting for sync", "等待同步");
-  if (certificate.keyPath) return tailPath(certificate.keyPath);
-  return certificate.statusMessage || "";
 }
 
 function tailPath(value: string): string {

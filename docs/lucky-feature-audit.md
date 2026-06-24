@@ -86,6 +86,8 @@ GateLite MVP mapping:
   until the user reviews and enables it.
 - Multi-select rows -> shadcn-style table selection with batch enable/disable
   for visible certificate items.
+- Certificate detail view -> explicit row action opens a metadata and binding
+  dialog, keeping the primary certificate table dense and scannable.
 
 ## Parallax Storytelling Design Mapping
 
