@@ -311,7 +311,7 @@ export function CertificatesPage({ dashboard, onRefresh }: CertificatesPageProps
               if (editing) {
                 await updateCertificate(editing.id, input);
               } else {
-                await createCertificate(input);
+                await createCertificate(input as CertificateInput);
               }
               setShowForm(false);
               setDraftPreset(null);
@@ -653,7 +653,7 @@ function CertificateForm({
   draftPreset: Partial<DraftCertificate> | null;
   saving: boolean;
   onClose: () => void;
-  onSubmit: (input: CertificateInput) => Promise<void>;
+  onSubmit: (input: Partial<CertificateInput>) => Promise<void>;
 }) {
   const { t } = useLanguage();
   const [draft, setDraft] = useState<DraftCertificate>(() =>
@@ -667,7 +667,7 @@ function CertificateForm({
           keyPem: "",
           certPath: certificate.certPath || "",
           keyPath: certificate.keyPath || "",
-          days: 365,
+          days: certificateValidityDays(certificate),
           resolver: certificate.acme?.resolver || "letsencrypt",
           email: certificate.acme?.email || "",
           dnsProvider: certificate.acme?.dnsProvider || "cloudflare",
@@ -678,6 +678,8 @@ function CertificateForm({
   const [fileError, setFileError] = useState<string | null>(null);
   const uploadPemStarted = draft.source === "upload" && (draft.certPem.trim().length > 0 || draft.keyPem.trim().length > 0);
   const uploadPemRequired = draft.source === "upload" && (!certificate || certificate.source !== "upload" || uploadPemStarted);
+  const boundServiceCount = certificate?.boundServices.length || 0;
+  const bindingLocked = boundServiceCount > 0;
   const submitDisabled =
     saving ||
     (uploadPemRequired && (!draft.certPem.trim() || !draft.keyPem.trim())) ||
@@ -686,7 +688,23 @@ function CertificateForm({
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
-    await onSubmit({
+    if (bindingLocked && certificate) {
+      await onSubmit({
+        name: draft.name,
+        ...(draft.source === "acme"
+          ? {
+              acme: {
+                resolver: certificate.acme?.resolver || draft.resolver,
+                email: draft.email,
+                dnsProvider: draft.dnsProvider
+              }
+            }
+          : {})
+      });
+      return;
+    }
+
+    const input: CertificateInput = {
       name: draft.name,
       enabled: draft.enabled,
       source: draft.source,
@@ -695,7 +713,6 @@ function CertificateForm({
       keyPem: draft.keyPem || undefined,
       certPath: draft.certPath || undefined,
       keyPath: draft.keyPath || undefined,
-      days: draft.days,
       acme:
         draft.source === "acme"
           ? {
@@ -705,7 +722,13 @@ function CertificateForm({
             }
           : undefined,
       sync: draft.source === "sync" ? { target: draft.syncTarget } : undefined
-    });
+    };
+
+    if (draft.source === "self-signed" && (!certificate || certificate.source !== "self-signed" || draft.days !== certificateValidityDays(certificate))) {
+      input.days = draft.days;
+    }
+
+    await onSubmit(input);
   };
 
   const handlePemFile = async (event: ChangeEvent<HTMLInputElement>, field: "certPem" | "keyPem") => {
@@ -726,11 +749,19 @@ function CertificateForm({
   return (
     <Modal title={certificate ? t("Edit certificate", "编辑证书") : draft.source === "upload" ? t("Upload certificate", "上传证书") : t("New certificate", "新建证书")} subtitle={t("Register file, path, ACME, or sync certificates for Traefik TLS without writing YAML.", "无需手写 YAML，即可为 Traefik TLS 登记文件、路径、ACME 或同步证书。")} onClose={onClose}>
       <form className="grid gap-4 md:grid-cols-2" onSubmit={(event) => void submit(event)}>
+        {bindingLocked ? (
+          <div className="md:col-span-2 rounded-lg border border-amber-300/25 bg-amber-300/10 p-3 text-sm text-amber-100">
+            <div className="font-medium">{t("Bound certificate fields are protected", "已绑定证书的关键字段已保护")}</div>
+            <div className="mt-1 text-xs text-amber-100/75">
+              {t(`This certificate is used by ${boundServiceCount} Web service rule(s). Unbind those rules before changing source, domains, files, resolver, or enabled state.`, `这张证书正在被 ${boundServiceCount} 条 Web 服务规则使用。修改来源、域名、文件、解析器或启用状态前，请先解除这些规则绑定。`)}
+            </div>
+          </div>
+        ) : null}
         <Field label={t("Certificate name", "证书名称")}>
           <Input value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} required />
         </Field>
         <Field label={t("Source", "来源")}>
-          <select className={selectClass} value={draft.source} onChange={(event) => setDraft({ ...draft, source: event.target.value as DraftCertificate["source"] })}>
+          <select className={selectClass} value={draft.source} onChange={(event) => setDraft({ ...draft, source: event.target.value as DraftCertificate["source"] })} disabled={bindingLocked}>
             <option value="self-signed">{t("File: self-signed", "文件：本地自签")}</option>
             <option value="upload">{t("File: upload PEM", "文件：上传 PEM")}</option>
             <option value="path">{t("Existing path", "已有路径")}</option>
@@ -739,12 +770,12 @@ function CertificateForm({
           </select>
         </Field>
         <Field className="md:col-span-2" label={t("Domains / SANs", "域名 / SAN")}>
-          <Input value={draft.domainsText} onChange={(event) => setDraft({ ...draft, domainsText: event.target.value })} placeholder="secure.localhost, app.example.com" />
+          <Input value={draft.domainsText} onChange={(event) => setDraft({ ...draft, domainsText: event.target.value })} placeholder="secure.localhost, app.example.com" disabled={bindingLocked} />
         </Field>
 
         {draft.source === "self-signed" ? (
           <Field label={t("Valid days", "有效天数")}>
-            <Input type="number" min="1" max="3980" value={draft.days} onChange={(event) => setDraft({ ...draft, days: Number(event.target.value) })} />
+            <Input type="number" min="1" max="3980" value={draft.days} onChange={(event) => setDraft({ ...draft, days: Number(event.target.value) })} disabled={bindingLocked} />
           </Field>
         ) : null}
 
@@ -756,6 +787,7 @@ function CertificateForm({
                   type="file"
                   accept=".pem,.crt,.cer,.cert,text/plain,application/x-pem-file"
                   onChange={(event) => void handlePemFile(event, "certPem")}
+                  disabled={bindingLocked}
                   className="cursor-pointer text-xs file:mr-3 file:rounded-md file:border-0 file:bg-muted file:px-2 file:py-1 file:text-xs file:font-medium"
                 />
               </Field>
@@ -764,16 +796,17 @@ function CertificateForm({
                   type="file"
                   accept=".pem,.key,text/plain,application/x-pem-file"
                   onChange={(event) => void handlePemFile(event, "keyPem")}
+                  disabled={bindingLocked}
                   className="cursor-pointer text-xs file:mr-3 file:rounded-md file:border-0 file:bg-muted file:px-2 file:py-1 file:text-xs file:font-medium"
                 />
               </Field>
             </div>
             {fileError ? <p className="md:col-span-2 text-xs text-destructive">{fileError}</p> : null}
             <Field className="md:col-span-2" label={certificate?.source === "upload" ? t("Certificate PEM replacement", "替换证书 PEM") : t("Certificate PEM", "证书 PEM")}>
-              <Textarea value={draft.certPem} onChange={(event) => setDraft({ ...draft, certPem: event.target.value })} rows={4} placeholder="-----BEGIN CERTIFICATE-----" />
+              <Textarea value={draft.certPem} onChange={(event) => setDraft({ ...draft, certPem: event.target.value })} rows={4} placeholder="-----BEGIN CERTIFICATE-----" disabled={bindingLocked} />
             </Field>
             <Field className="md:col-span-2" label={certificate?.source === "upload" ? t("Private key PEM replacement", "替换私钥 PEM") : t("Private key PEM", "私钥 PEM")}>
-              <Textarea value={draft.keyPem} onChange={(event) => setDraft({ ...draft, keyPem: event.target.value })} rows={4} placeholder="-----BEGIN PRIVATE KEY-----" />
+              <Textarea value={draft.keyPem} onChange={(event) => setDraft({ ...draft, keyPem: event.target.value })} rows={4} placeholder="-----BEGIN PRIVATE KEY-----" disabled={bindingLocked} />
             </Field>
           </>
         ) : null}
@@ -781,10 +814,10 @@ function CertificateForm({
         {draft.source === "path" ? (
           <>
             <Field label={t("Certificate path", "证书路径")}>
-              <Input value={draft.certPath} onChange={(event) => setDraft({ ...draft, certPath: event.target.value })} placeholder="runtime/certs/fullchain.pem" />
+              <Input value={draft.certPath} onChange={(event) => setDraft({ ...draft, certPath: event.target.value })} placeholder="runtime/certs/fullchain.pem" disabled={bindingLocked} />
             </Field>
             <Field label={t("Private key path", "私钥路径")}>
-              <Input value={draft.keyPath} onChange={(event) => setDraft({ ...draft, keyPath: event.target.value })} placeholder="runtime/certs/privkey.pem" />
+              <Input value={draft.keyPath} onChange={(event) => setDraft({ ...draft, keyPath: event.target.value })} placeholder="runtime/certs/privkey.pem" disabled={bindingLocked} />
             </Field>
           </>
         ) : null}
@@ -792,7 +825,7 @@ function CertificateForm({
         {draft.source === "acme" ? (
           <>
             <Field label={t("Resolver name", "解析器名称")}>
-              <Input value={draft.resolver} onChange={(event) => setDraft({ ...draft, resolver: event.target.value })} />
+              <Input value={draft.resolver} onChange={(event) => setDraft({ ...draft, resolver: event.target.value })} disabled={bindingLocked} />
             </Field>
             <Field label={t("Email", "邮箱")}>
               <Input value={draft.email} onChange={(event) => setDraft({ ...draft, email: event.target.value })} placeholder="admin@example.com" />
@@ -805,12 +838,12 @@ function CertificateForm({
 
         {draft.source === "sync" ? (
           <Field className="md:col-span-2" label={t("Sync target", "同步目标")}>
-            <Input value={draft.syncTarget} onChange={(event) => setDraft({ ...draft, syncTarget: event.target.value })} placeholder="https://peer.example.com/api/ssl/sync" />
+            <Input value={draft.syncTarget} onChange={(event) => setDraft({ ...draft, syncTarget: event.target.value })} placeholder="https://peer.example.com/api/ssl/sync" disabled={bindingLocked} />
           </Field>
         ) : null}
 
         <div className="flex items-center gap-3 md:col-span-2">
-          <Switch checked={draft.enabled} onCheckedChange={(checked) => setDraft({ ...draft, enabled: checked })} />
+          <Switch checked={draft.enabled} onCheckedChange={(checked) => setDraft({ ...draft, enabled: checked })} disabled={bindingLocked} />
           <span className="text-sm">{t("Enabled", "启用")}</span>
         </div>
         <Separator className="md:col-span-2" />

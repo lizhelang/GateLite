@@ -138,6 +138,9 @@ GateLite MVP mapping:
   resolver changed, replace certificate files, or drop SAN coverage for bound
   domains, preventing active TLS routes from losing their generated certificate
   material.
+- Bound certificate edit UX -> the SSL/TLS edit dialog mirrors the server-side
+  protection by locking source, SAN, certificate file, resolver, sync target,
+  validity and enabled-state controls while still allowing safe metadata edits.
 
 ## Parallax Storytelling Design Mapping
 
