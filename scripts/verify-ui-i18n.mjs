@@ -45,7 +45,12 @@ async function verifyLanguage(browser, language) {
     await assertBody(page, language === "zh" ? /绑定/ : /Bindings/, `${language} certificate binding column`);
     await assertCertificateBindingExpansion(page, language);
 
-    console.log(`[ok] ${language} UI labels verified for Web services and SSL/TLS certificates.`);
+    await openView(page, language === "zh" ? /Traefik 运行时/ : /Traefik Runtime/);
+    await assertBody(page, language === "zh" ? /协议/ : /Protocol/, `${language} runtime protocol column`);
+    await assertBody(page, language === "zh" ? /TLS 运行时视图/ : /TLS runtime surface/, `${language} runtime TLS surface`);
+    await assertBody(page, language === "zh" ? /TLS 清单/ : /TLS inventory/, `${language} runtime TLS inventory`);
+
+    console.log(`[ok] ${language} UI labels verified for Web services, SSL/TLS certificates, and runtime parity.`);
   } finally {
     await page.close();
   }

@@ -14,6 +14,12 @@ as runtime truth and GateLite-managed files as desired configuration.
 | TLS | certificates, stores, options, resolver/source metadata where available |
 | Platform | providers, entrypoints, configuration errors/status |
 
+Current GateLite runtime payload normalizes HTTP/TCP/UDP routers and services
+with an explicit protocol field, normalizes HTTP/TCP middlewares, and extracts
+a TLS runtime summary from Traefik raw data plus TLS-enabled routers. If the
+Traefik dashboard API does not expose certificate, store, option, or resolver
+inventory, the UI keeps that absence visible instead of hiding it in raw JSON.
+
 ## Domain-Centric Projection
 
 Traefik is router-centric. GateLite should add a domain-centric projection for

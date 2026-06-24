@@ -55,6 +55,20 @@ async function verifyGateLiteApi() {
   if (certificates < 1) {
     throw new Error(`Expected at least 1 GateLite certificate, found ${certificates}.`);
   }
+  const routerProtocols = new Set((dashboard?.runtime?.routers || []).map((router) => router.protocol).filter(Boolean));
+  const serviceProtocols = new Set((dashboard?.runtime?.services || []).map((service) => service.protocol).filter(Boolean));
+  if (!routerProtocols.has("http") || !serviceProtocols.has("http")) {
+    throw new Error("GateLite runtime payload should expose protocol fields for Traefik routers and services.");
+  }
+  if (!Array.isArray(dashboard?.runtime?.middlewares)) {
+    throw new Error("GateLite runtime payload should expose normalized HTTP/TCP middlewares.");
+  }
+  if (!dashboard?.runtime?.tls || !Array.isArray(dashboard.runtime.tls.routers)) {
+    throw new Error("GateLite runtime payload should expose a TLS runtime summary.");
+  }
+  if (!dashboard.runtime.tls.routers.some((router) => router.tls === true)) {
+    throw new Error("Expected at least one TLS router in the GateLite runtime TLS summary.");
+  }
   console.log(`[ok] GateLite API connected: ${services} services, ${certificates} certificates.`);
 }
 

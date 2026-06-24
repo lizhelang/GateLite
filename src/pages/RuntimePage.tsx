@@ -1,6 +1,6 @@
-import { Activity, Boxes, Check, Copy, Download, FileCode2, Network, RefreshCw, RotateCcw, Server } from "lucide-react";
+import { Activity, Boxes, Check, Copy, Download, FileCode2, Network, RefreshCw, RotateCcw, Server, ShieldCheck } from "lucide-react";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import type { DashboardPayload, GateLiteHistoryEvent } from "../../shared/types";
+import type { DashboardPayload, GateLiteHistoryEvent, RuntimeProtocol, RuntimeRouter, RuntimeTlsItem } from "../../shared/types";
 import { getGeneratedConfig, rollbackHistoryEvent } from "../api";
 import { StatusBadge } from "../components/StatusBadge";
 import { Badge } from "@/components/ui/badge";
@@ -30,6 +30,7 @@ export function RuntimePage({ dashboard, onRefresh }: RuntimePageProps) {
   const providers = useMemo(() => readProviders(runtime.overview), [runtime.overview]);
   const features = useMemo(() => readFeatures(runtime.overview), [runtime.overview]);
   const protocolSummaries = useMemo(() => readProtocolSummaries(runtime.overview), [runtime.overview]);
+  const tlsInventory = useMemo(() => buildTlsInventory(runtime.tls), [runtime.tls]);
 
   const loadGeneratedConfig = async () => {
     setConfigLoading(true);
@@ -105,16 +106,17 @@ export function RuntimePage({ dashboard, onRefresh }: RuntimePageProps) {
         <RuntimeStat icon={<Boxes className="size-4" />} label={t("Routers", "路由")} value={String(runtime.routers.length)} />
         <RuntimeStat icon={<Server className="size-4" />} label={t("Services", "服务")} value={String(runtime.services.length)} />
         <RuntimeStat icon={<FileCode2 className="size-4" />} label={t("Middlewares", "中间件")} value={String(middlewares.length)} />
-        <RuntimeStat icon={<Activity className="size-4" />} label={t("Providers", "Provider")} value={String(providers.length)} />
+        <RuntimeStat icon={<ShieldCheck className="size-4" />} label="TLS" value={String(runtime.tls.routers.length)} />
       </div>
 
       <div className="grid gap-4 xl:grid-cols-2">
         <EntityTable
           title={t("Routers", "路由")}
           empty={t("No routers visible from Traefik yet.", "Traefik 中还没有可见路由。")}
-          columns={[t("Name", "名称"), t("Rule", "规则"), t("Status", "状态")]}
+          columns={[t("Name", "名称"), t("Protocol", "协议"), t("Rule", "规则"), t("Status", "状态")]}
           rows={runtime.routers.map((router) => [
             router.name,
+            <ProtocolBadge protocol={router.protocol} key={`${router.name}-protocol`} />,
             router.rule || t("No rule", "无规则"),
             <div className="flex flex-wrap gap-1" key={`${router.name}-status`}>
               <StatusBadge status={router.status} />
@@ -126,9 +128,10 @@ export function RuntimePage({ dashboard, onRefresh }: RuntimePageProps) {
         <EntityTable
           title={t("Services", "服务")}
           empty={t("No services visible from Traefik yet.", "Traefik 中还没有可见服务。")}
-          columns={[t("Name", "名称"), t("Servers", "Server"), t("Status", "状态")]}
+          columns={[t("Name", "名称"), t("Protocol", "协议"), t("Servers", "Server"), t("Status", "状态")]}
           rows={runtime.services.map((service) => [
             service.name,
+            <ProtocolBadge protocol={service.protocol} key={`${service.name}-protocol`} />,
             service.servers.join(", ") || t("No servers listed", "未列出 server"),
             <div className="flex flex-wrap gap-1" key={`${service.name}-status`}>
               <StatusBadge status={service.status} />
@@ -154,14 +157,47 @@ export function RuntimePage({ dashboard, onRefresh }: RuntimePageProps) {
         />
         <EntityTable
           title={t("Middlewares", "中间件")}
-          empty={t("No HTTP middlewares visible from Traefik yet.", "Traefik 中还没有可见 HTTP 中间件。")}
-          columns={[t("Name", "名称"), t("Usage", "使用情况"), t("Status", "状态")]}
+          empty={t("No HTTP/TCP middlewares visible from Traefik yet.", "Traefik 中还没有可见 HTTP/TCP 中间件。")}
+          columns={[t("Name", "名称"), t("Protocol", "协议"), t("Usage", "使用情况"), t("Status", "状态")]}
           rows={middlewares.map((middleware) => [
             middleware.name,
+            <ProtocolBadge protocol={middleware.protocol} key={`${middleware.name}-protocol`} />,
             `${middleware.type || t("unknown", "未知")} · ${t("used by", "被使用于")} ${middleware.usedBy.length ? middleware.usedBy.join(", ") : t("no routers", "无路由")}`,
             <div className="flex flex-wrap gap-1" key={`${middleware.name}-status`}>
               <StatusBadge status={middleware.status} />
               {middleware.provider ? <Badge variant="outline">{middleware.provider}</Badge> : null}
+            </div>
+          ])}
+        />
+      </div>
+
+      <div className="grid gap-4 xl:grid-cols-2">
+        <EntityTable
+          title={t("TLS runtime surface", "TLS 运行时视图")}
+          empty={t("No TLS routers are active in Traefik yet.", "Traefik 中还没有启用 TLS 的路由。")}
+          columns={[t("Router", "路由"), t("Protocol", "协议"), t("TLS settings", "TLS 设置"), t("Status", "状态")]}
+          rows={runtime.tls.routers.map((router) => [
+            router.name,
+            <ProtocolBadge protocol={router.protocol} key={`${router.name}-tls-protocol`} />,
+            tlsRouterText(router, t),
+            <div className="flex flex-wrap gap-1" key={`${router.name}-tls-status`}>
+              <StatusBadge status={router.status} />
+              {router.provider ? <Badge variant="outline">{router.provider}</Badge> : null}
+            </div>
+          ])}
+        />
+        <EntityTable
+          title={t("TLS inventory", "TLS 清单")}
+          empty={t("Traefik did not expose TLS certificates, options, stores, or resolvers through the dashboard API.", "Traefik dashboard API 当前没有暴露 TLS 证书、选项、存储或解析器清单。")}
+          columns={[t("Type", "类型"), t("Name", "名称"), t("Domains / detail", "域名 / 详情"), t("Status", "状态")]}
+          rows={tlsInventory.map((item) => [
+            item.type,
+            item.entry.name,
+            item.entry.domains.length ? item.entry.domains.join(", ") : item.entry.detail || t("Runtime reference", "运行时引用"),
+            <div className="flex flex-wrap gap-1" key={`${item.type}-${item.entry.name}`}>
+              <StatusBadge status={item.entry.status} />
+              {item.entry.provider ? <Badge variant="outline">{item.entry.provider}</Badge> : null}
+              <Badge variant="outline">{item.entry.source}</Badge>
             </div>
           ])}
         />
@@ -374,6 +410,39 @@ function InfoTile({ label, value, caption }: { label: string; value: string; cap
   );
 }
 
+function ProtocolBadge({ protocol }: { protocol: RuntimeProtocol }) {
+  const tone =
+    protocol === "http"
+      ? "border-cyan-300/35 bg-cyan-300/10 text-cyan-100"
+      : protocol === "tcp"
+        ? "border-amber-300/35 bg-amber-300/10 text-amber-100"
+        : "border-emerald-300/35 bg-emerald-300/10 text-emerald-100";
+  return (
+    <Badge variant="outline" className={`rounded-md font-mono text-[11px] uppercase ${tone}`}>
+      {protocol}
+    </Badge>
+  );
+}
+
+function tlsRouterText(router: RuntimeRouter, t: (english: string, chinese: string) => string): string {
+  const values = [
+    router.tlsResolver ? `${t("resolver", "解析器")}: ${router.tlsResolver}` : "",
+    router.tlsOptions ? `${t("options", "选项")}: ${router.tlsOptions}` : "",
+    router.tlsPassthrough ? t("passthrough", "透传") : "",
+    router.entryPoints.length ? `${t("entrypoints", "入口点")}: ${router.entryPoints.join(", ")}` : ""
+  ].filter(Boolean);
+  return values.length ? values.join(" · ") : t("TLS enabled", "已启用 TLS");
+}
+
+function buildTlsInventory(tls: DashboardPayload["runtime"]["tls"]): Array<{ type: string; entry: RuntimeTlsItem }> {
+  return [
+    ...tls.certificates.map((entry) => ({ type: "certificate", entry })),
+    ...tls.options.map((entry) => ({ type: "option", entry })),
+    ...tls.stores.map((entry) => ({ type: "store", entry })),
+    ...tls.resolvers.map((entry) => ({ type: "resolver", entry }))
+  ];
+}
+
 function summarizeGeneratedConfig(config: string) {
   return {
     routers: countIndentedKeys(config, "routers:"),
@@ -430,6 +499,7 @@ function normalizeMiddlewares(value: unknown[]) {
       const record = asRecord(item);
       return {
         name: readString(record.name) || "middleware",
+        protocol: readProtocol(record.protocol),
         provider: readString(record.provider),
         type: readString(record.type),
         status: normalizeRuntimeStatus(readString(record.status)),
@@ -484,6 +554,10 @@ function asRecord(value: unknown): RecordLike {
 
 function readString(value: unknown): string {
   return typeof value === "string" ? value : "";
+}
+
+function readProtocol(value: unknown): Exclude<RuntimeProtocol, "udp"> {
+  return value === "tcp" ? "tcp" : "http";
 }
 
 function readNumber(value: unknown): number {

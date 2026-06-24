@@ -3,6 +3,7 @@ export type WebServiceMatchMode = "host" | "custom" | "default";
 export type CertificateSource = "self-signed" | "upload" | "path" | "acme" | "sync";
 export type CertificateStatus = "valid" | "expiring" | "expired" | "pending" | "invalid";
 export type RuntimeStatus = "online" | "offline" | "warning" | "unknown";
+export type RuntimeProtocol = "http" | "tcp" | "udp";
 
 export interface ServiceGroup {
   id: string;
@@ -100,6 +101,7 @@ export interface GateLiteHistoryEvent {
 
 export interface RuntimeRouter {
   name: string;
+  protocol: RuntimeProtocol;
   provider?: string;
   rule?: string;
   service?: string;
@@ -107,16 +109,48 @@ export interface RuntimeRouter {
   middlewares: string[];
   domains: string[];
   tls: boolean;
+  tlsResolver?: string;
+  tlsOptions?: string;
+  tlsPassthrough?: boolean;
   status: RuntimeStatus;
   error?: string;
 }
 
 export interface RuntimeService {
   name: string;
+  protocol: RuntimeProtocol;
   provider?: string;
   status: RuntimeStatus;
   servers: string[];
   error?: string;
+}
+
+export interface RuntimeMiddleware {
+  name: string;
+  protocol: Exclude<RuntimeProtocol, "udp">;
+  provider?: string;
+  type?: string;
+  status: RuntimeStatus;
+  usedBy: string[];
+  error?: string;
+}
+
+export interface RuntimeTlsItem {
+  name: string;
+  provider?: string;
+  domains: string[];
+  detail?: string;
+  source: "traefik-api" | "router";
+  status: RuntimeStatus;
+}
+
+export interface RuntimeTlsSummary {
+  routers: RuntimeRouter[];
+  certificates: RuntimeTlsItem[];
+  options: RuntimeTlsItem[];
+  stores: RuntimeTlsItem[];
+  resolvers: RuntimeTlsItem[];
+  available: boolean;
 }
 
 export interface TraefikRuntime {
@@ -127,7 +161,8 @@ export interface TraefikRuntime {
   entryPoints: unknown[];
   routers: RuntimeRouter[];
   services: RuntimeService[];
-  middlewares: unknown[];
+  middlewares: RuntimeMiddleware[];
+  tls: RuntimeTlsSummary;
   rawData?: unknown;
   error?: string;
 }
