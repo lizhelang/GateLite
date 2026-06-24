@@ -1,4 +1,4 @@
-import { ArrowRight, CalendarClock, Download, FileKey2, GripVertical, KeyRound, Pencil, Plus, Power, Save, Trash2, Upload } from "lucide-react";
+import { ArrowRight, CalendarClock, Copy, Download, FileKey2, GripVertical, KeyRound, Pencil, Plus, Power, Save, Trash2, Upload } from "lucide-react";
 import { FormEvent, useMemo, useState, type ReactNode } from "react";
 import type { CertificateWithBindings, DashboardPayload } from "../../shared/types";
 import { createCertificate, deleteCertificate, reorderCertificates, toggleCertificate, updateCertificate, type CertificateInput } from "../api";
@@ -62,6 +62,7 @@ export function CertificatesPage({ dashboard, onRefresh }: CertificatesPageProps
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<CertificateWithBindings | null>(null);
   const [initialSource, setInitialSource] = useState<CertificateInput["source"]>("self-signed");
+  const [draftPreset, setDraftPreset] = useState<Partial<DraftCertificate> | null>(null);
   const [selectedId, setSelectedId] = useState("");
   const [filter, setFilter] = useState<CertificateFilter>("all");
   const [draggingId, setDraggingId] = useState<string | null>(null);
@@ -85,13 +86,37 @@ export function CertificatesPage({ dashboard, onRefresh }: CertificatesPageProps
 
   const openCreate = (source: CertificateInput["source"] = "self-signed") => {
     setEditing(null);
+    setDraftPreset(null);
     setInitialSource(source);
     setShowForm(true);
   };
 
   const openEdit = (certificate: CertificateWithBindings) => {
     setEditing(certificate);
+    setDraftPreset(null);
     setInitialSource(certificate.source);
+    setShowForm(true);
+  };
+
+  const openDuplicate = (certificate: CertificateWithBindings) => {
+    const source = copyCertificateSource(certificate);
+    setEditing(null);
+    setInitialSource(source);
+    setDraftPreset({
+      name: `${certificate.name} ${t("copy", "副本")}`,
+      enabled: false,
+      source,
+      domainsText: certificate.domains.join(", "),
+      certPem: "",
+      keyPem: "",
+      certPath: source === "path" ? certificate.certPath || "" : "",
+      keyPath: source === "path" ? certificate.keyPath || "" : "",
+      days: certificateValidityDays(certificate),
+      resolver: certificate.acme?.resolver || "letsencrypt",
+      email: certificate.acme?.email || "",
+      dnsProvider: certificate.acme?.dnsProvider || "cloudflare",
+      syncTarget: certificate.sync?.target || ""
+    });
     setShowForm(true);
   };
 
@@ -187,6 +212,7 @@ export function CertificatesPage({ dashboard, onRefresh }: CertificatesPageProps
         onDrop={handleDrop}
         onSelect={setSelectedId}
         onToggle={handleToggle}
+        onDuplicate={openDuplicate}
         onDownload={handleDownload}
         onEdit={openEdit}
         onDelete={handleDelete}
@@ -196,8 +222,12 @@ export function CertificatesPage({ dashboard, onRefresh }: CertificatesPageProps
         <CertificateForm
           certificate={editing}
           initialSource={initialSource}
+          draftPreset={draftPreset}
           saving={saving}
-          onClose={() => setShowForm(false)}
+          onClose={() => {
+            setShowForm(false);
+            setDraftPreset(null);
+          }}
           onSubmit={async (input) => {
             setSaving(true);
             setError(null);
@@ -208,6 +238,7 @@ export function CertificatesPage({ dashboard, onRefresh }: CertificatesPageProps
                 await createCertificate(input);
               }
               setShowForm(false);
+              setDraftPreset(null);
               await onRefresh();
             } catch (saveError) {
               setError(saveError instanceof Error ? saveError.message : t("Save failed.", "保存失败。"));
@@ -230,6 +261,7 @@ function CertificateDataTable({
   onDrop,
   onSelect,
   onToggle,
+  onDuplicate,
   onDownload,
   onEdit,
   onDelete
@@ -242,6 +274,7 @@ function CertificateDataTable({
   onDrop: (id: string) => Promise<void>;
   onSelect: (id: string) => void;
   onToggle: (certificate: CertificateWithBindings) => Promise<void>;
+  onDuplicate: (certificate: CertificateWithBindings) => void;
   onDownload: (certificate: CertificateWithBindings) => void;
   onEdit: (certificate: CertificateWithBindings) => void;
   onDelete: (certificate: CertificateWithBindings) => Promise<void>;
@@ -267,7 +300,7 @@ function CertificateDataTable({
                 <TableHead>{t("Expires", "过期时间")}</TableHead>
                 <TableHead>{t("Bindings", "绑定")}</TableHead>
                 <TableHead>{t("Storage", "存储")}</TableHead>
-                <TableHead className="w-28 text-right">{t("Actions", "操作")}</TableHead>
+                <TableHead className="w-36 text-right">{t("Actions", "操作")}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -344,6 +377,9 @@ function CertificateDataTable({
                       <div className="flex items-center justify-end gap-1" onClick={(event) => event.stopPropagation()}>
                         <Button variant="outline" size="icon-xs" onClick={() => void onToggle(certificate)} aria-label={t("Toggle certificate", "切换证书启用状态")}>
                           <Power className="size-3.5" />
+                        </Button>
+                        <Button variant="outline" size="icon-xs" onClick={() => onDuplicate(certificate)} aria-label={t("Copy as new certificate", "复制为新证书")}>
+                          <Copy className="size-3.5" />
                         </Button>
                         <Button variant="outline" size="icon-xs" onClick={() => onDownload(certificate)} disabled={!certificate.certPath} aria-label={t("Download PEM", "下载 PEM")}>
                           <Download className="size-3.5" />
@@ -473,12 +509,14 @@ function DetailCell({ icon, label, value }: { icon?: ReactNode; label: string; v
 function CertificateForm({
   certificate,
   initialSource,
+  draftPreset,
   saving,
   onClose,
   onSubmit
 }: {
   certificate: CertificateWithBindings | null;
   initialSource: CertificateInput["source"];
+  draftPreset: Partial<DraftCertificate> | null;
   saving: boolean;
   onClose: () => void;
   onSubmit: (input: CertificateInput) => Promise<void>;
@@ -501,7 +539,7 @@ function CertificateForm({
           dnsProvider: certificate.acme?.dnsProvider || "cloudflare",
           syncTarget: certificate.sync?.target || ""
         }
-      : { ...emptyDraft, source: initialSource }
+      : { ...emptyDraft, source: initialSource, ...(draftPreset || {}) }
   );
   const uploadPemStarted = draft.source === "upload" && (draft.certPem.trim().length > 0 || draft.keyPem.trim().length > 0);
   const uploadPemRequired = draft.source === "upload" && (!certificate || certificate.source !== "upload" || uploadPemStarted);
@@ -651,6 +689,17 @@ function sourceLabel(source: CertificateInput["source"], t: (english: string, ch
     sync: t("Sync", "同步")
   };
   return labels[source];
+}
+
+function copyCertificateSource(certificate: CertificateWithBindings): CertificateInput["source"] {
+  if (certificate.source === "upload") return "path";
+  return certificate.source;
+}
+
+function certificateValidityDays(certificate: CertificateWithBindings): number {
+  if (!certificate.notBefore || !certificate.notAfter) return 365;
+  const days = Math.round((new Date(certificate.notAfter).getTime() - new Date(certificate.notBefore).getTime()) / (24 * 60 * 60 * 1000));
+  return Number.isFinite(days) && days > 0 ? Math.min(days, 3980) : 365;
 }
 
 function bindingSummary(certificate: CertificateWithBindings, t: (english: string, chinese: string) => string): string {

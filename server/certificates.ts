@@ -101,7 +101,11 @@ export function createCertificateFromInput(input: CertificateInput): Certificate
   const now = new Date().toISOString();
 
   if (input.source === "self-signed") {
-    return createSelfSignedCertificate(input.name, domains, input.days);
+    const certificate = createSelfSignedCertificate(input.name, domains, input.days);
+    return {
+      ...certificate,
+      enabled: input.enabled ?? true
+    };
   }
 
   const id = createId("cert");

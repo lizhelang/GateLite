@@ -71,6 +71,9 @@ GateLite MVP mapping:
 - Binding view from Web services using a certificate ID.
 - PEM bundle download for locally readable certificate/key pairs.
 - Drag reorder for certificate list metadata and generated TLS certificate order.
+- Copy certificate configuration -> prefilled `copy as new certificate` form
+  that keeps domains and ACME/sync/path settings, with the copied item disabled
+  until the user reviews and enables it.
 
 ## Parallax Storytelling Design Mapping
 
