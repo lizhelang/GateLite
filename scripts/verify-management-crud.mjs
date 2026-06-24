@@ -17,8 +17,10 @@ const defaultFallbackHost = `unmatched-${suffix}.localhost`;
 const httpsHost = `crud-tls-${suffix}.localhost`;
 const editedHttpsHost = `crud-tls-edit-${suffix}.localhost`;
 const uploadedHttpsHost = `crud-upload-${suffix}.localhost`;
+const pathHttpsHost = `crud-path-${suffix}.localhost`;
 const acmeHost = `crud-acme-${suffix}.localhost`;
 const acmeResolver = `resolver-${suffix}`;
+const mountedCertDir = path.resolve(process.env.GATELITE_VERIFY_CERT_DIR || "runtime/certs");
 
 const created = {
   groupId: "",
@@ -31,6 +33,9 @@ const created = {
   httpsHost: "",
   uploadedCertificateId: "",
   uploadedServiceId: "",
+  pathCertificateId: "",
+  pathServiceId: "",
+  pathCertificateFiles: [],
   acmeServiceId: ""
 };
 
@@ -45,6 +50,7 @@ try {
   await reorderAndVerifyCertificates(certificate.id);
   await createRefreshAndDeleteSyncCertificate();
   await createAndVerifyUploadedCertificateRoute(group.id);
+  await createAndVerifyPathCertificateRoute(group.id);
 
   const httpService = await createAndVerifyHttpService(group.id);
   created.httpServiceId = httpService.id;
@@ -239,6 +245,36 @@ async function createAndVerifyUploadedCertificateRoute(groupId) {
   created.uploadedServiceId = service.id;
   await verifyCertificateBinding(certificate.id, service.id, "uploaded PEM certificate");
   console.log("[ok] Uploaded PEM certificate binds to a verified HTTPS route.");
+}
+
+async function createAndVerifyPathCertificateRoute(groupId) {
+  const { certPath, keyPath } = createTemporaryMountedCertificateFiles(pathHttpsHost);
+  created.pathCertificateFiles = [certPath, keyPath];
+
+  const certificate = await apiJson("/api/certificates", {
+    method: "POST",
+    body: {
+      name: `CRUD path TLS ${suffix}`,
+      enabled: true,
+      source: "path",
+      domains: [pathHttpsHost],
+      certPath,
+      keyPath
+    },
+    expectedStatus: 201
+  });
+  created.pathCertificateId = certificate.id;
+
+  if (certificate.source !== "path" || certificate.status !== "valid" || !certificate.domains.includes(pathHttpsHost)) {
+    throw new Error("Existing path certificate was not parsed as a valid certificate with the expected SAN.");
+  }
+  await verifyGeneratedConfigIncludes(`/certs/${path.basename(certPath)}`, "path certificate generated cert mount");
+  await verifyGeneratedConfigIncludes(`/certs/${path.basename(keyPath)}`, "path certificate generated key mount");
+
+  const service = await createAndVerifyHttpsService(groupId, certificate.id, pathHttpsHost);
+  created.pathServiceId = service.id;
+  await verifyCertificateBinding(certificate.id, service.id, "existing path certificate");
+  console.log("[ok] Existing path certificate binds to a verified HTTPS route.");
 }
 
 async function createAndVerifyHttpService(groupId) {
@@ -498,6 +534,13 @@ async function deleteAndVerifyResources() {
   await apiNoContent(`/api/certificates/${created.uploadedCertificateId}`, "DELETE");
   created.uploadedCertificateId = "";
 
+  await apiNoContent(`/api/web-services/${created.pathServiceId}`, "DELETE");
+  created.pathServiceId = "";
+  await waitForRouteUnavailable(pathHttpsHost, "https");
+  await apiNoContent(`/api/certificates/${created.pathCertificateId}`, "DELETE");
+  created.pathCertificateId = "";
+  removePathCertificateFiles();
+
   await apiNoContent(`/api/web-services/${created.httpsServiceId}`, "DELETE");
   created.httpsServiceId = "";
   await waitForRouteUnavailable(created.httpsHost || editedHttpsHost, "https");
@@ -519,15 +562,18 @@ async function deleteAndVerifyResources() {
 
 async function cleanup() {
   await ignoreNotFound(async () => created.acmeServiceId && apiNoContent(`/api/web-services/${created.acmeServiceId}`, "DELETE"));
+  await ignoreNotFound(async () => created.pathServiceId && apiNoContent(`/api/web-services/${created.pathServiceId}`, "DELETE"));
   await ignoreNotFound(async () => created.uploadedServiceId && apiNoContent(`/api/web-services/${created.uploadedServiceId}`, "DELETE"));
   await ignoreNotFound(async () => created.httpsServiceId && apiNoContent(`/api/web-services/${created.httpsServiceId}`, "DELETE"));
   await ignoreNotFound(async () => created.defaultServiceId && apiNoContent(`/api/web-services/${created.defaultServiceId}`, "DELETE"));
   await ignoreNotFound(async () => created.customServiceId && apiNoContent(`/api/web-services/${created.customServiceId}`, "DELETE"));
   await ignoreNotFound(async () => created.httpServiceId && apiNoContent(`/api/web-services/${created.httpServiceId}`, "DELETE"));
   await ignoreNotFound(async () => created.acmeCertificateId && apiNoContent(`/api/certificates/${created.acmeCertificateId}`, "DELETE"));
+  await ignoreNotFound(async () => created.pathCertificateId && apiNoContent(`/api/certificates/${created.pathCertificateId}`, "DELETE"));
   await ignoreNotFound(async () => created.uploadedCertificateId && apiNoContent(`/api/certificates/${created.uploadedCertificateId}`, "DELETE"));
   await ignoreNotFound(async () => created.certificateId && apiNoContent(`/api/certificates/${created.certificateId}`, "DELETE"));
   await ignoreNotFound(async () => created.groupId && apiJson(`/api/groups/${created.groupId}`, { method: "DELETE" }));
+  removePathCertificateFiles();
 }
 
 async function waitForHttpRoute(host, protocol) {
@@ -688,6 +734,46 @@ function createTemporaryPemBundle(host) {
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
+}
+
+function createTemporaryMountedCertificateFiles(host) {
+  fs.mkdirSync(mountedCertDir, { recursive: true });
+  const safeSuffix = suffix.replace(/[^a-z0-9-]/gi, "-");
+  const certPath = path.join(mountedCertDir, `crud-path-${safeSuffix}.crt`);
+  const keyPath = path.join(mountedCertDir, `crud-path-${safeSuffix}.key`);
+  execFileSync(
+    "openssl",
+    [
+      "req",
+      "-x509",
+      "-newkey",
+      "rsa:2048",
+      "-sha256",
+      "-nodes",
+      "-days",
+      "90",
+      "-subj",
+      `/CN=${host}`,
+      "-addext",
+      `subjectAltName=DNS:${host}`,
+      "-keyout",
+      keyPath,
+      "-out",
+      certPath
+    ],
+    { stdio: "ignore" }
+  );
+  fs.chmodSync(keyPath, 0o600);
+  return { certPath, keyPath };
+}
+
+function removePathCertificateFiles() {
+  for (const file of created.pathCertificateFiles) {
+    if (file) {
+      fs.rmSync(file, { force: true });
+    }
+  }
+  created.pathCertificateFiles = [];
 }
 
 function request(url, { method = "GET", body, headers = {}, allowSelfSigned = false } = {}) {

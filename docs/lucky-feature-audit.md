@@ -98,6 +98,10 @@ GateLite MVP mapping:
 - Uploaded PEM certificates are covered by the local CRUD verifier: a temporary
   PEM bundle is uploaded, bound to an HTTPS Web service, reached through
   Traefik, and then cleaned up.
+- Existing path certificates are covered by the local CRUD verifier using a
+  temporary PEM bundle written into the Docker-mounted certificate directory,
+  then registered by path, bound to HTTPS, reached through Traefik, and
+  cleaned up.
 - ACME resolver reference for Traefik-managed issuance.
 - Certificate status from `openssl x509` metadata where files are available.
 - Expiry status: valid, expiring, expired, pending, invalid.
