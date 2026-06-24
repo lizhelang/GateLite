@@ -12,14 +12,18 @@ const customHttpHost = `crud-custom-${suffix}.localhost`;
 const defaultFallbackHost = `unmatched-${suffix}.localhost`;
 const httpsHost = `crud-tls-${suffix}.localhost`;
 const editedHttpsHost = `crud-tls-edit-${suffix}.localhost`;
+const acmeHost = `crud-acme-${suffix}.localhost`;
+const acmeResolver = `resolver-${suffix}`;
 
 const created = {
   groupId: "",
   certificateId: "",
+  acmeCertificateId: "",
   httpServiceId: "",
   customServiceId: "",
   defaultServiceId: "",
-  httpsServiceId: ""
+  httpsServiceId: "",
+  acmeServiceId: ""
 };
 
 try {
@@ -46,7 +50,8 @@ try {
 
   const httpsService = await createAndVerifyHttpsService(group.id, certificate.id, certificate.domains[0] || editedHttpsHost);
   created.httpsServiceId = httpsService.id;
-  await verifyCertificateBinding(certificate.id, httpsService.id);
+  await verifyCertificateBinding(certificate.id, httpsService.id, "HTTPS file certificate");
+  await createAndVerifyAcmeResolverBinding(group.id);
   await reorderAndVerifyServices([httpsService.id, httpService.id]);
 
   await deleteAndVerifyResources();
@@ -338,16 +343,63 @@ async function createAndVerifyHttpsService(groupId, certificateId, host = httpsH
   return service;
 }
 
-async function verifyCertificateBinding(certificateId, serviceId) {
+async function verifyCertificateBinding(certificateId, serviceId, label = "certificate") {
   const certificates = await apiJson("/api/certificates");
   const certificate = certificates.find((item) => item.id === certificateId);
   if (!certificate) {
     throw new Error("Created certificate disappeared from certificate list.");
   }
   if (!certificate.boundServices.some((service) => service.id === serviceId)) {
-    throw new Error("Certificate binding list does not include the HTTPS Web service.");
+    throw new Error(`Certificate binding list does not include the ${label} Web service.`);
   }
-  console.log("[ok] Certificate binding list reflects the HTTPS Web service.");
+  console.log(`[ok] Certificate binding list reflects the ${label} Web service.`);
+}
+
+async function createAndVerifyAcmeResolverBinding(groupId) {
+  const certificate = await apiJson("/api/certificates", {
+    method: "POST",
+    body: {
+      name: `CRUD ACME ${suffix}`,
+      enabled: true,
+      source: "acme",
+      domains: [acmeHost],
+      acme: {
+        resolver: acmeResolver,
+        email: `admin-${suffix}@example.com`,
+        dnsProvider: "cloudflare"
+      }
+    },
+    expectedStatus: 201
+  });
+  created.acmeCertificateId = certificate.id;
+
+  const service = await apiJson("/api/web-services", {
+    method: "POST",
+    body: {
+      name: `CRUD ACME route ${suffix}`,
+      enabled: true,
+      groupId,
+      domains: [acmeHost],
+      listenPort: 18443,
+      entryPoints: ["websecure"],
+      targetUrl: "http://whoami:80",
+      middlewares: [],
+      tls: { mode: "resolver", resolver: acmeResolver },
+      notes: "Temporary ACME resolver route created by verify:crud."
+    },
+    expectedStatus: 201
+  });
+  created.acmeServiceId = service.id;
+
+  await verifyCertificateBinding(certificate.id, service.id, "ACME resolver");
+  await verifyGeneratedConfigIncludes(`certResolver: ${acmeResolver}`, "ACME resolver generated config");
+
+  const deleteResponse = await request(`${gateliteApiUrl}/api/certificates/${certificate.id}`, { method: "DELETE" });
+  if (deleteResponse.status !== 409) {
+    throw new Error(`Deleting an ACME certificate bound by resolver should return 409, got HTTP ${deleteResponse.status}.`);
+  }
+
+  console.log("[ok] ACME resolver certificate binding and delete protection work.");
 }
 
 async function reorderAndVerifyServices(serviceIds) {
@@ -366,6 +418,11 @@ async function reorderAndVerifyServices(serviceIds) {
 }
 
 async function deleteAndVerifyResources() {
+  await apiNoContent(`/api/web-services/${created.acmeServiceId}`, "DELETE");
+  created.acmeServiceId = "";
+  await apiNoContent(`/api/certificates/${created.acmeCertificateId}`, "DELETE");
+  created.acmeCertificateId = "";
+
   await apiNoContent(`/api/web-services/${created.httpsServiceId}`, "DELETE");
   created.httpsServiceId = "";
   await waitForRouteUnavailable(httpsHost, "https");
@@ -386,10 +443,12 @@ async function deleteAndVerifyResources() {
 }
 
 async function cleanup() {
+  await ignoreNotFound(async () => created.acmeServiceId && apiNoContent(`/api/web-services/${created.acmeServiceId}`, "DELETE"));
   await ignoreNotFound(async () => created.httpsServiceId && apiNoContent(`/api/web-services/${created.httpsServiceId}`, "DELETE"));
   await ignoreNotFound(async () => created.defaultServiceId && apiNoContent(`/api/web-services/${created.defaultServiceId}`, "DELETE"));
   await ignoreNotFound(async () => created.customServiceId && apiNoContent(`/api/web-services/${created.customServiceId}`, "DELETE"));
   await ignoreNotFound(async () => created.httpServiceId && apiNoContent(`/api/web-services/${created.httpServiceId}`, "DELETE"));
+  await ignoreNotFound(async () => created.acmeCertificateId && apiNoContent(`/api/certificates/${created.acmeCertificateId}`, "DELETE"));
   await ignoreNotFound(async () => created.certificateId && apiNoContent(`/api/certificates/${created.certificateId}`, "DELETE"));
   await ignoreNotFound(async () => created.groupId && apiJson(`/api/groups/${created.groupId}`, { method: "DELETE" }));
 }

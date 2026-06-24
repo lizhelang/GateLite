@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { z } from "zod";
 import type { CertificateWithBindings, DashboardPayload, WebService, WebServiceWithRuntime } from "../shared/types";
+import { webServicesBoundToCertificate } from "./bindings";
 import { config } from "./config";
 import { createCertificateFromInput, updateCertificateFromInput } from "./certificates";
 import { createId, traefikName } from "./ids";
@@ -225,7 +226,7 @@ app.delete("/api/certificates/:id", (request, response) => {
   const state = loadState();
   const certificate = state.certificates.find((item) => item.id === request.params.id);
   if (!certificate) return response.status(404).json({ error: "Certificate not found." });
-  const isBound = state.webServices.some((service) => service.tls.certificateId === certificate.id);
+  const isBound = webServicesBoundToCertificate(certificate, state.webServices).length > 0;
   if (isBound) return response.status(409).json({ error: "Certificate is bound to at least one Web service." });
   state.certificates = state.certificates.filter((item) => item.id !== request.params.id);
   saveState(state, "certificate.delete", `Deleted certificate ${certificate.name}.`);
@@ -276,7 +277,7 @@ async function dashboardPayload(): Promise<DashboardPayload> {
 
   const certificates: CertificateWithBindings[] = state.certificates.map((certificate) => ({
     ...certificate,
-    boundServices: state.webServices.filter((service) => service.tls.certificateId === certificate.id)
+    boundServices: webServicesBoundToCertificate(certificate, state.webServices)
   }));
 
   return {

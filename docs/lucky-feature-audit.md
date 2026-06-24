@@ -85,6 +85,7 @@ GateLite MVP mapping:
 - Certificate status from `openssl x509` metadata where files are available.
 - Expiry status: valid, expiring, expired, pending, invalid.
 - Binding view from Web services using a certificate ID.
+- ACME resolver binding view from Web services using the same resolver name.
 - PEM bundle download for locally readable certificate/key pairs.
 - Drag reorder for certificate list metadata and generated TLS certificate order.
 - Copy certificate configuration -> prefilled `copy as new certificate` form
