@@ -1,4 +1,4 @@
-import { CalendarClock, Download, FileKey2, GripVertical, KeyRound, Pencil, Plus, Power, Save, Trash2, Upload } from "lucide-react";
+import { ArrowRight, CalendarClock, Download, FileKey2, GripVertical, KeyRound, Pencil, Plus, Power, Save, Trash2, Upload } from "lucide-react";
 import { FormEvent, useMemo, useState, type ReactNode } from "react";
 import type { CertificateWithBindings, DashboardPayload } from "../../shared/types";
 import { createCertificate, deleteCertificate, reorderCertificates, toggleCertificate, updateCertificate, type CertificateInput } from "../api";
@@ -384,12 +384,76 @@ function CertificateDataTable({
 
 function CertificateDetails({ certificate }: { certificate: CertificateWithBindings }) {
   const { t } = useLanguage();
+  const bindingRows = buildCertificateBindingRows(certificate);
   return (
-    <div className="grid gap-3 border-t bg-background/30 p-4 text-sm md:grid-cols-4">
-      <DetailCell icon={<FileKey2 className="size-4" />} label={t("Issuer", "签发者")} value={certificate.issuer || t("Unknown", "未知")} />
-      <DetailCell icon={<CalendarClock className="size-4" />} label={t("Validity", "有效期")} value={`${certificate.notBefore ? formatDate(certificate.notBefore) : t("Unknown", "未知")} ${t("to", "至")} ${certificate.notAfter ? formatDate(certificate.notAfter) : t("Unknown", "未知")}`} />
-      <DetailCell label={t("Bound rules", "绑定规则")} value={bindingSummary(certificate, t)} />
-      <DetailCell label={t("Status detail", "状态详情")} value={certificate.statusMessage || certificate.status} />
+    <div className="border-t bg-background/30">
+      <div className="grid gap-3 p-4 text-sm md:grid-cols-4">
+        <DetailCell icon={<FileKey2 className="size-4" />} label={t("Issuer", "签发者")} value={certificate.issuer || t("Unknown", "未知")} />
+        <DetailCell icon={<CalendarClock className="size-4" />} label={t("Validity", "有效期")} value={`${certificate.notBefore ? formatDate(certificate.notBefore) : t("Unknown", "未知")} ${t("to", "至")} ${certificate.notAfter ? formatDate(certificate.notAfter) : t("Unknown", "未知")}`} />
+        <DetailCell label={t("Bound rules", "绑定规则")} value={bindingSummary(certificate, t)} />
+        <DetailCell label={t("Status detail", "状态详情")} value={certificate.statusMessage || certificate.status} />
+      </div>
+      <div className="border-t p-4">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h3 className="text-sm font-medium">{t("Domain bindings", "域名绑定明细")}</h3>
+            <p className="text-xs text-muted-foreground">{t("Each bound Web service domain is checked against this certificate's SAN list.", "逐行检查已绑定 Web 服务域名是否被当前证书 SAN 覆盖。")}</p>
+          </div>
+          <Badge variant="outline" className="rounded-md">
+            {t(`${bindingRows.length} domain rows`, `${bindingRows.length} 个域名行`)}
+          </Badge>
+        </div>
+        {bindingRows.length ? (
+          <div className="overflow-x-auto rounded-lg border">
+            <Table className="min-w-[760px]">
+              <TableHeader className="bg-muted/45">
+                <TableRow className="hover:bg-transparent">
+                  <TableHead>{t("Frontend domain", "前端域名")}</TableHead>
+                  <TableHead>{t("Backend IP:port", "后端 IP:端口")}</TableHead>
+                  <TableHead>{t("Rule", "规则")}</TableHead>
+                  <TableHead>{t("Coverage", "覆盖")}</TableHead>
+                  <TableHead>TLS</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {bindingRows.map((row) => (
+                  <TableRow key={row.id}>
+                    <TableCell>
+                      <span className="rounded-md border bg-background/55 px-2 py-1 font-mono text-xs text-cyan-100">{row.domain}</span>
+                    </TableCell>
+                    <TableCell>
+                      <div className="grid max-w-64 grid-cols-[1rem_minmax(0,1fr)] items-center gap-1 text-xs leading-tight">
+                        <ArrowRight className="size-3.5 text-muted-foreground" />
+                        <span className="truncate font-mono text-foreground">{row.backend.hostPort}</span>
+                        <span />
+                        <span className="truncate text-muted-foreground">{row.backend.scheme}</span>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="grid gap-0.5 text-xs">
+                        <span className="font-medium">{row.serviceName}</span>
+                        <span className="text-muted-foreground">{row.entryPoints}</span>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="outline" className={row.covered ? "border-emerald-400/40 bg-emerald-400/10 text-emerald-200" : "border-amber-400/40 bg-amber-400/10 text-amber-200"}>
+                        {row.covered ? t("covered", "已覆盖") : t("not covered", "未覆盖")}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="outline">{row.tlsMode}</Badge>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        ) : (
+          <div className="rounded-lg border bg-background/35 p-4 text-sm text-muted-foreground">
+            {t("No Web service is currently bound to this certificate.", "当前没有 Web 服务绑定到这张证书。")}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -590,6 +654,49 @@ function sourceLabel(source: CertificateInput["source"], t: (english: string, ch
 function bindingSummary(certificate: CertificateWithBindings, t: (english: string, chinese: string) => string): string {
   if (!certificate.boundServices.length) return t("Not bound", "未绑定");
   return certificate.boundServices.map((service) => service.domains[0] || service.name).join(", ");
+}
+
+function buildCertificateBindingRows(certificate: CertificateWithBindings) {
+  return certificate.boundServices.flatMap((service) => {
+    const domains = service.matchMode === "default" ? ["*"] : service.domains.length ? service.domains : [service.name || service.id];
+    return domains.map((domain, index) => ({
+      id: `${service.id}:${index}:${domain}`,
+      domain,
+      backend: formatBackendTarget(service.targetUrl),
+      serviceName: service.name.trim() || domain,
+      entryPoints: service.entryPoints.join(", "),
+      tlsMode: service.tls.mode === "file-certificate" ? "file" : service.tls.mode,
+      covered: domain === "*" ? false : isDomainCovered(domain, certificate.domains)
+    }));
+  });
+}
+
+function isDomainCovered(domain: string, certificateDomains: string[]): boolean {
+  const normalizedDomain = domain.toLowerCase();
+  return certificateDomains.some((candidate) => {
+    const normalizedCandidate = candidate.toLowerCase();
+    if (normalizedCandidate === normalizedDomain) return true;
+    if (!normalizedCandidate.startsWith("*.")) return false;
+    const suffix = normalizedCandidate.slice(1);
+    const remainder = normalizedDomain.slice(0, -suffix.length);
+    return normalizedDomain.endsWith(suffix) && remainder.length > 0 && !remainder.includes(".");
+  });
+}
+
+function formatBackendTarget(value: string): { hostPort: string; scheme: string } {
+  const authority = value.replace(/^[a-z][a-z0-9+.-]*:\/\//i, "").split(/[/?#]/)[0];
+  try {
+    const url = new URL(value);
+    return {
+      hostPort: authority || url.host,
+      scheme: url.protocol.replace(":", "") || value
+    };
+  } catch {
+    return {
+      hostPort: authority || value.replace(/^https?:\/\//, ""),
+      scheme: value.startsWith("https://") ? "https" : value.startsWith("http://") ? "http" : "custom"
+    };
+  }
 }
 
 function storagePrimary(certificate: CertificateWithBindings, t: (english: string, chinese: string) => string): string {
