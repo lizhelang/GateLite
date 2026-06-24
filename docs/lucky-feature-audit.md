@@ -155,6 +155,10 @@ GateLite MVP mapping:
 - Binding view from Web services using a certificate ID.
 - ACME resolver binding view from Web services using the same resolver name.
 - PEM bundle download for locally readable certificate/key pairs.
+- Browser PEM upload path -> the UI verifier now selects real `.crt` and
+  `.key` files through the SSL/TLS upload form, checks that the PEM text is
+  loaded into the form, saves the certificate through the browser, verifies the
+  row appears, and removes the temporary test certificate.
 - Drag reorder for certificate list metadata and generated TLS certificate order.
 - Copy certificate configuration -> prefilled `copy as new certificate` form
   that keeps domains and ACME/sync/path settings, with the copied item disabled

@@ -1,3 +1,7 @@
+import { execFileSync } from "node:child_process";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { chromium } from "playwright";
 
 const appUrl = process.env.GATELITE_UI_URL || "http://localhost:5173";
@@ -45,6 +49,7 @@ async function verifyLanguage(browser, language) {
     await assertBody(page, language === "zh" ? /域名 \/ SAN/ : /Domains \/ SANs/, `${language} certificate SAN column`);
     await assertBody(page, language === "zh" ? /绑定/ : /Bindings/, `${language} certificate binding column`);
     await verifyCertificatePreview(page, language);
+    await verifyCertificateUploadFromFiles(page, language);
     await assertCertificateBindingExpansion(page, language);
 
     await openView(page, language === "zh" ? /Traefik 运行时/ : /Traefik Runtime/);
@@ -108,6 +113,86 @@ async function verifyCertificatePreview(page, language) {
   await page.getByRole("button", { name: language === "zh" ? /^取消$/ : /^Cancel$/ }).click();
 }
 
+async function verifyCertificateUploadFromFiles(page, language) {
+  const domain = `ui-upload-${language}-${Date.now()}.localhost`;
+  const name = `UI upload ${language} ${Date.now()}`;
+  const pem = createTemporaryPemBundle(domain);
+  try {
+    await page.getByRole("button", { name: language === "zh" ? /添加证书/ : /Add certificate/ }).click();
+    await page.getByRole("menuitem", { name: language === "zh" ? /上传 PEM/ : /Upload PEM/ }).click();
+    await page.getByLabel(language === "zh" ? /^证书名称$/ : /^Certificate name$/).fill(name);
+    await page.getByLabel(language === "zh" ? /^域名 \/ SAN$/ : /^Domains \/ SANs$/).fill(domain);
+    await page.getByLabel(language === "zh" ? /^证书文件$/ : /^Certificate file$/).setInputFiles(pem.certPath);
+    await page.getByLabel(language === "zh" ? /^私钥文件$/ : /^Private key file$/).setInputFiles(pem.keyPath);
+    await assertTextareaContains(page, language === "zh" ? /^证书 PEM/ : /^Certificate PEM/, "BEGIN CERTIFICATE", `${language} uploaded certificate PEM textarea`);
+    await assertTextareaContains(page, language === "zh" ? /^私钥 PEM/ : /^Private key PEM/, "BEGIN PRIVATE KEY", `${language} uploaded private key PEM textarea`);
+    await page.getByRole("button", { name: language === "zh" ? /^保存$/ : /^Save$/ }).click();
+    await page.getByText(name).waitFor({ timeout: 5000 });
+    await assertBody(page, new RegExp(escapeRegex(domain)), `${language} uploaded certificate list row`);
+  } finally {
+    await cleanupCertificateByName(page, name);
+    fs.rmSync(pem.dir, { recursive: true, force: true });
+  }
+}
+
+function createTemporaryPemBundle(domain) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "gatelite-ui-cert-"));
+  const certPath = path.join(dir, `${domain}.crt`);
+  const keyPath = path.join(dir, `${domain}.key`);
+  execFileSync(
+    "openssl",
+    [
+      "req",
+      "-x509",
+      "-newkey",
+      "rsa:2048",
+      "-sha256",
+      "-nodes",
+      "-days",
+      "3",
+      "-subj",
+      `/CN=${domain}`,
+      "-addext",
+      `subjectAltName=DNS:${domain}`,
+      "-keyout",
+      keyPath,
+      "-out",
+      certPath
+    ],
+    { stdio: "ignore" }
+  );
+  return { dir, certPath, keyPath };
+}
+
+async function cleanupCertificateByName(page, name) {
+  const certificate = await page.evaluate(async (certificateName) => {
+    const response = await fetch("/api/dashboard");
+    if (!response.ok) return;
+    const dashboard = await response.json();
+    const certificate = dashboard.certificates?.find((item) => item.name === certificateName);
+    if (!certificate) return;
+    await fetch(`/api/certificates/${certificate.id}`, { method: "DELETE" });
+    return {
+      source: certificate.source,
+      certPath: certificate.certPath,
+      keyPath: certificate.keyPath
+    };
+  }, name);
+  if (certificate?.source === "upload") {
+    removeGeneratedCertificateFile(certificate.certPath);
+    removeGeneratedCertificateFile(certificate.keyPath);
+  }
+}
+
+function removeGeneratedCertificateFile(filePath) {
+  if (!filePath) return;
+  const certDir = path.resolve(process.env.GATELITE_CERT_DIR || path.join(process.cwd(), "runtime/certs"));
+  const resolved = path.resolve(filePath);
+  const relative = path.relative(certDir, resolved);
+  if (relative.startsWith("..") || path.isAbsolute(relative)) return;
+  fs.rmSync(resolved, { force: true });
+}
+
 async function readReadableCertificatePaths(page) {
   return page.evaluate(async () => {
     const response = await fetch("/api/dashboard");
@@ -148,6 +233,13 @@ async function assertBody(page, pattern, label) {
 async function assertVisibleButton(page, namePattern, label) {
   const count = await page.getByRole("button", { name: namePattern }).count();
   if (count < 1) {
+    throw new Error(`Missing ${label}.`);
+  }
+}
+
+async function assertTextareaContains(page, labelPattern, expected, label) {
+  const value = await page.locator("label").filter({ hasText: labelPattern }).locator("textarea").first().inputValue();
+  if (!value.includes(expected)) {
     throw new Error(`Missing ${label}.`);
   }
 }
