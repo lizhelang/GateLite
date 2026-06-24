@@ -7,6 +7,7 @@ export interface AppConfig {
   dynamicFile: string;
   certDir: string;
   certMountPath: string;
+  seedDemo: boolean;
 }
 
 const root = process.cwd();
@@ -17,6 +18,6 @@ export const config: AppConfig = {
   stateFile: path.resolve(root, process.env.GATELITE_STATE_FILE || "runtime/gatelite-state.json"),
   dynamicFile: path.resolve(root, process.env.GATELITE_DYNAMIC_FILE || "runtime/traefik/gatelite.yml"),
   certDir: path.resolve(root, process.env.GATELITE_CERT_DIR || "runtime/certs"),
-  certMountPath: process.env.GATELITE_CERT_MOUNT_PATH || "/certs"
+  certMountPath: process.env.GATELITE_CERT_MOUNT_PATH || "/certs",
+  seedDemo: process.env.GATELITE_SEED_DEMO !== "false"
 };
-

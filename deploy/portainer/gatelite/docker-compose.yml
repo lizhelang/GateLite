@@ -1,0 +1,49 @@
+name: gatelite
+
+services:
+  app:
+    image: ${GATELITE_IMAGE:-gatelite:local}
+    container_name: gatelite
+    restart: unless-stopped
+    environment:
+      PORT: "3001"
+      TRAEFIK_API_URL: http://traefik:8080
+      GATELITE_SEED_DEMO: "false"
+      GATELITE_STATE_FILE: /app/runtime/gatelite-state.json
+      GATELITE_DYNAMIC_FILE: /dynamic/gatelite.yml
+      GATELITE_CERT_DIR: /certs
+      GATELITE_CERT_MOUNT_PATH: /certs
+    volumes:
+      - gatelite_data:/app/runtime
+      - /data/compose/1/dynamic:/dynamic
+      - /data/compose/1/certs:/certs
+    networks:
+      - proxy
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=proxy
+      - traefik.http.routers.gatelite.rule=Host(`${GATELITE_HOST:-gatelite.1804.surfacer.cc}`)
+      - traefik.http.routers.gatelite.entrypoints=websecure
+      - traefik.http.routers.gatelite.tls=true
+      - traefik.http.services.gatelite.loadbalancer.server.port=3001
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"fetch('http://127.0.0.1:3001/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "5"
+    mem_limit: 768m
+    cpus: 1
+
+networks:
+  proxy:
+    external: true
+    name: proxy
+
+volumes:
+  gatelite_data:

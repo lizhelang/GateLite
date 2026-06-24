@@ -98,6 +98,27 @@ export function ensureState(): void {
   }
 
   const now = new Date().toISOString();
+  if (!config.seedDemo) {
+    const initial: GateLiteState = {
+      version: 1,
+      groups: [{ id: "default", name: "Default", collapsed: false, order: 1 }],
+      webServices: [],
+      certificates: [],
+      history: [
+        {
+          id: "evt-initial",
+          at: now,
+          action: "state.init",
+          summary: "Initialized an empty GateLite state for production."
+        }
+      ]
+    };
+
+    fs.writeFileSync(config.stateFile, JSON.stringify(initial, null, 2), "utf8");
+    writeTraefikDynamicConfig(initial);
+    return;
+  }
+
   const certificate = createSelfSignedCertificate("Local dev certificate", ["secure.localhost", "whoami.localhost"], 365);
   certificate.id = "cert-local-dev";
   certificate.order = 1;
