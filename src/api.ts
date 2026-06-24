@@ -218,13 +218,27 @@ export async function deleteCertificate(id: string): Promise<void> {
 }
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const response = await fetch(path, {
-    ...init,
-    headers: {
-      "Content-Type": "application/json",
-      ...(init.headers || {})
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), 15000);
+  let response: Response;
+
+  try {
+    response = await fetch(path, {
+      ...init,
+      signal: controller.signal,
+      headers: {
+        "Content-Type": "application/json",
+        ...(init.headers || {})
+      }
+    });
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") {
+      throw new Error("Request timed out. Please refresh and try again.");
     }
-  });
+    throw error;
+  } finally {
+    window.clearTimeout(timeout);
+  }
 
   if (response.status === 204) return undefined as T;
 
