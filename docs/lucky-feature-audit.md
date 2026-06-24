@@ -202,5 +202,6 @@ GateLite adapts this to an operational tool by using:
 
 - `npm run verify:ui-i18n` uses Playwright against the running local frontend to
   force Chinese and English language modes through `localStorage`, then checks
-  the Web services and SSL/TLS certificate navigation labels, key actions,
-  table columns, and inline certificate binding expansion.
+  the Web services and SSL/TLS certificate navigation labels, dense table
+  columns, row-level details/edit actions, Web service rule/sub-rule preview
+  flows, browser PEM upload, and inline certificate binding expansion.
