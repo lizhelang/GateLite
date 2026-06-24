@@ -1,5 +1,5 @@
 export type TlsMode = "none" | "file-certificate" | "resolver";
-export type WebServiceMatchMode = "host" | "default";
+export type WebServiceMatchMode = "host" | "custom" | "default";
 export type CertificateSource = "self-signed" | "upload" | "path" | "acme" | "sync";
 export type CertificateStatus = "valid" | "expiring" | "expired" | "pending" | "invalid";
 export type RuntimeStatus = "online" | "offline" | "warning" | "unknown";
@@ -24,6 +24,7 @@ export interface WebService {
   matchMode?: WebServiceMatchMode;
   groupId: string;
   domains: string[];
+  customRule?: string;
   listenPort: number;
   entryPoints: string[];
   targetUrl: string;

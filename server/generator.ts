@@ -72,6 +72,7 @@ function sortedEnabledServices(webServices: WebService[]): WebService[] {
 
 function routerRule(service: WebService): string {
   if (service.matchMode === "default") return "PathPrefix(`/`)";
+  if (service.matchMode === "custom") return service.customRule?.trim() || "";
   return service.domains.map((domain) => `Host(\`${domain}\`)`).join(" || ");
 }
 

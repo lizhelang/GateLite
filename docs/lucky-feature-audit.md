@@ -34,6 +34,9 @@ GateLite MVP mapping:
 
 - Main rule -> managed Traefik HTTP router plus load-balancer service.
 - Blank rule name -> accepted in state/API, with domain fallback in the UI.
+- Simple/custom mode -> Host rules for normal use, default fallback rules for
+  unmatched domains, and custom Traefik rule text for advanced `Host(...) &&
+  PathPrefix(...)` style routing.
 - Domain list -> `Host(...)` rule projection.
 - Listening port -> local host port hint for the configured Traefik entrypoint.
 - Backend address -> Traefik service server URL.

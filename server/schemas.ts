@@ -4,9 +4,10 @@ export const webServiceInputSchema = z
   .object({
     name: z.string().trim().default(""),
     enabled: z.boolean().default(true),
-    matchMode: z.enum(["host", "default"]).default("host"),
+    matchMode: z.enum(["host", "custom", "default"]).default("host"),
     groupId: z.string().trim().default("local"),
     domains: z.array(z.string().trim()).default([]),
+    customRule: z.string().trim().optional(),
     listenPort: z.coerce.number().int().min(1).max(65535).default(18080),
     entryPoints: z.array(z.string().trim().min(1)).min(1).default(["web"]),
     targetUrl: z.string().trim().url(),
@@ -22,11 +23,18 @@ export const webServiceInputSchema = z
     notes: z.string().optional()
   })
   .superRefine((service, context) => {
-    if (service.matchMode !== "default" && !service.domains.some((domain) => domain.trim())) {
+    if (service.matchMode === "host" && !service.domains.some((domain) => domain.trim())) {
       context.addIssue({
         code: z.ZodIssueCode.custom,
         message: "At least one frontend domain is required for host rules.",
         path: ["domains"]
+      });
+    }
+    if (service.matchMode === "custom" && !service.customRule?.trim()) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "A Traefik rule is required for custom rules.",
+        path: ["customRule"]
       });
     }
   });

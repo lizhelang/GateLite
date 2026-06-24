@@ -8,6 +8,7 @@ const httpsRouteUrl = process.env.GATELITE_VERIFY_HTTPS_URL || "https://127.0.0.
 const suffix = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
 const originalHttpHost = `crud-${suffix}.localhost`;
 const editedHttpHost = `crud-edit-${suffix}.localhost`;
+const customHttpHost = `crud-custom-${suffix}.localhost`;
 const defaultFallbackHost = `unmatched-${suffix}.localhost`;
 const httpsHost = `crud-tls-${suffix}.localhost`;
 const editedHttpsHost = `crud-tls-edit-${suffix}.localhost`;
@@ -16,6 +17,7 @@ const created = {
   groupId: "",
   certificateId: "",
   httpServiceId: "",
+  customServiceId: "",
   defaultServiceId: "",
   httpsServiceId: ""
 };
@@ -35,6 +37,8 @@ try {
 
   await updateAndVerifyHttpService(httpService, group.id);
   await toggleAndVerifyHttpService(httpService.id);
+  const customService = await createAndVerifyCustomHttpService(group.id);
+  created.customServiceId = customService.id;
   const defaultService = await createAndVerifyDefaultHttpService(group.id);
   created.defaultServiceId = defaultService.id;
   await deleteAndVerifyDefaultHttpService(defaultService.id);
@@ -240,6 +244,37 @@ async function toggleAndVerifyHttpService(serviceId) {
   console.log("[ok] Web service enable/disable toggles add and remove the Traefik route.");
 }
 
+async function createAndVerifyCustomHttpService(groupId) {
+  const customRule = `Host(\`${customHttpHost}\`) && PathPrefix(\`/agent\`)`;
+  const service = await apiJson("/api/web-services", {
+    method: "POST",
+    body: {
+      name: `CRUD custom ${suffix}`,
+      enabled: true,
+      matchMode: "custom",
+      customRule,
+      groupId,
+      domains: [customHttpHost],
+      listenPort: 18080,
+      entryPoints: ["web"],
+      targetUrl: "http://whoami:80",
+      middlewares: [],
+      tls: { mode: "none" },
+      notes: "Temporary custom Traefik rule created by verify:crud."
+    },
+    expectedStatus: 201
+  });
+  if (service.matchMode !== "custom" || service.customRule !== customRule) {
+    throw new Error("Custom Web service rule was not persisted.");
+  }
+  await waitForCustomHttpRoute(customHttpHost, customRule);
+  const body = await routeText(httpRouteUrl, customHttpHost, { path: "/agent/check" });
+  assertIncludes(body, `Host: ${customHttpHost}`, customHttpHost);
+  assertIncludes(body, "GET /agent/check HTTP/1.1", customHttpHost);
+  console.log("[ok] Web service custom Traefik rule applies a Host plus PathPrefix route.");
+  return service;
+}
+
 async function createAndVerifyDefaultHttpService(groupId) {
   const service = await apiJson("/api/web-services", {
     method: "POST",
@@ -336,6 +371,10 @@ async function deleteAndVerifyResources() {
   created.httpServiceId = "";
   await waitForRouteUnavailable(editedHttpHost, "http");
 
+  await apiNoContent(`/api/web-services/${created.customServiceId}`, "DELETE");
+  created.customServiceId = "";
+  await waitForRouteUnavailable(customHttpHost, "http");
+
   await apiNoContent(`/api/certificates/${created.certificateId}`, "DELETE");
   created.certificateId = "";
   await apiJson(`/api/groups/${created.groupId}`, { method: "DELETE" });
@@ -346,6 +385,7 @@ async function deleteAndVerifyResources() {
 async function cleanup() {
   await ignoreNotFound(async () => created.httpsServiceId && apiNoContent(`/api/web-services/${created.httpsServiceId}`, "DELETE"));
   await ignoreNotFound(async () => created.defaultServiceId && apiNoContent(`/api/web-services/${created.defaultServiceId}`, "DELETE"));
+  await ignoreNotFound(async () => created.customServiceId && apiNoContent(`/api/web-services/${created.customServiceId}`, "DELETE"));
   await ignoreNotFound(async () => created.httpServiceId && apiNoContent(`/api/web-services/${created.httpServiceId}`, "DELETE"));
   await ignoreNotFound(async () => created.certificateId && apiNoContent(`/api/certificates/${created.certificateId}`, "DELETE"));
   await ignoreNotFound(async () => created.groupId && apiJson(`/api/groups/${created.groupId}`, { method: "DELETE" }));
@@ -361,6 +401,17 @@ async function waitForHttpRoute(host, protocol) {
     const body = await routeText(url, host, { allowSelfSigned: protocol === "https" });
     assertIncludes(body, `Host: ${host}`, host);
   }, `${protocol.toUpperCase()} route ${host}`);
+}
+
+async function waitForCustomHttpRoute(host, expectedRule) {
+  await retry(async () => {
+    const routers = await requestJson(`${traefikApiUrl}/api/http/routers`);
+    if (!routers.some((router) => router.rule === expectedRule && router.status === "enabled")) {
+      throw new Error(`Custom HTTP router for ${host} is not enabled yet.`);
+    }
+    const body = await routeText(httpRouteUrl, host, { path: "/agent/check" });
+    assertIncludes(body, `Host: ${host}`, host);
+  }, `custom HTTP route ${host}`);
 }
 
 async function waitForDefaultRoute() {
@@ -423,7 +474,8 @@ async function requestJson(url) {
 }
 
 async function routeText(url, host, options = {}) {
-  const response = await request(url, {
+  const targetUrl = withRequestPath(url, options.path);
+  const response = await request(targetUrl, {
     headers: { Host: host },
     allowSelfSigned: options.allowSelfSigned
   });
@@ -434,13 +486,21 @@ async function routeText(url, host, options = {}) {
 }
 
 async function expectRouteFailure(url, host, options = {}) {
-  const response = await request(url, {
+  const targetUrl = withRequestPath(url, options.path);
+  const response = await request(targetUrl, {
     headers: { Host: host },
     allowSelfSigned: options.allowSelfSigned
   });
   if (response.status !== 404) {
     throw new Error(`${url} (${host}) should be unavailable with 404, got HTTP ${response.status}.`);
   }
+}
+
+function withRequestPath(url, requestPath) {
+  if (!requestPath) return url;
+  const target = new URL(url);
+  target.pathname = requestPath;
+  return target.toString();
 }
 
 function isGateLiteDefaultRouter(router) {

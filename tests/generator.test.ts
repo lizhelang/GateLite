@@ -128,6 +128,39 @@ describe("generateTraefikDynamicConfig", () => {
     expect(generated).not.toContain("Host(`");
   });
 
+  it("renders custom Traefik rules without requiring host-only projection", () => {
+    const state: GateLiteState = {
+      version: 1,
+      groups: [],
+      certificates: [],
+      webServices: [
+        {
+          id: "svc-custom",
+          name: "Custom",
+          enabled: true,
+          matchMode: "custom",
+          customRule: "Host(`custom.localhost`) && PathPrefix(`/api`)",
+          groupId: "local",
+          domains: ["custom.localhost"],
+          listenPort: 18080,
+          entryPoints: ["web"],
+          targetUrl: "http://whoami:80",
+          middlewares: [],
+          tls: { mode: "none" },
+          order: 1,
+          createdAt: "2026-06-23T00:00:00.000Z",
+          updatedAt: "2026-06-23T00:00:00.000Z"
+        }
+      ],
+      history: []
+    };
+
+    const generated = generateTraefikDynamicConfig(state).yaml;
+
+    expect(generated).toContain("Host(`custom.localhost`) && PathPrefix(`/api`)");
+    expect(generated).toContain("http://whoami:80");
+  });
+
   it("omits disabled certificates from the active Traefik config", () => {
     const state: GateLiteState = {
       version: 1,

@@ -47,10 +47,11 @@ interface WebServicesPageProps {
 type DraftService = {
   name: string;
   enabled: boolean;
-  matchMode: "host" | "default";
+  matchMode: "host" | "custom" | "default";
   groupId: string;
   domainRoot: string;
   subdomainsText: string;
+  customRule: string;
   listenPort: number;
   entryPointsText: string;
   targetUrl: string;
@@ -83,6 +84,7 @@ const emptyDraft: DraftService = {
   groupId: "local",
   domainRoot: "localhost",
   subdomainsText: "",
+  customRule: "",
   listenPort: 18080,
   entryPointsText: "web",
   targetUrl: "http://whoami:80",
@@ -138,15 +140,20 @@ export function WebServicesPage({ dashboard, onRefresh }: WebServicesPageProps) 
     if (route.isDefault) return;
     const domains = domainsToDraft([route.primaryDomain]);
     const label = domainToLabel(route.primaryDomain, domains.domainRoot);
+    const copiedLabel = copyDomainLabel(label);
+    const copiedDomain = composeDomains(domains.domainRoot, copiedLabel)[0] || "";
+    const customRule = route.service.matchMode === "custom" ? copyCustomRule(route.service.customRule || "", route.primaryDomain, copiedDomain) : "";
     setEditing(null);
     setCreateMode(label === "@" ? "rule" : "subrule");
     setDraftPreset({
       name: `${displayRouteName(route, t)} ${t("copy", "副本")}`,
-      enabled: true,
-      matchMode: "host",
+      enabled: route.service.matchMode === "custom" ? Boolean(customRule) : true,
+      matchMode: route.service.matchMode === "custom" ? "custom" : "host",
       groupId: route.service.groupId,
       domainRoot: domains.domainRoot,
-      subdomainsText: copyDomainLabel(label),
+      subdomainsText: copiedLabel,
+      customRule: route.service.customRule || "",
+      ...(customRule ? { customRule } : {}),
       listenPort: route.service.listenPort,
       entryPointsText: route.service.entryPoints.join(", "),
       targetUrl: route.service.targetUrl,
@@ -439,6 +446,7 @@ function RouteDataTable({
                 const backend = formatBackendTarget(service.targetUrl);
                 const traffic = service.traffic;
                 const isRootRule = route.labels.some((label) => label === "@");
+                const canOpenFrontend = isOpenableDomain(route.primaryDomain);
                 const displayName = displayRouteName(route, t);
                 return (
                   <TableRow
@@ -463,7 +471,7 @@ function RouteDataTable({
                         <span className="truncate font-medium">{displayName}</span>
                         <span className="flex min-w-0 items-center gap-1 truncate text-xs text-muted-foreground">
                           <Badge variant="outline" className="h-5 rounded-md px-1.5 text-[10px]">
-                            {route.isDefault ? t("Default", "默认") : isRootRule ? t("Rule", "规则") : t("Sub-rule", "子规则")}
+                            {routeKindLabel(route, isRootRule, t)}
                           </Badge>
                           <span className="truncate">{rootLabel(route.root, t)}</span>
                         </span>
@@ -474,13 +482,17 @@ function RouteDataTable({
                         <span className="inline-flex max-w-72 items-center truncate rounded-md border bg-background/55 px-2 py-1 text-xs text-amber-100">
                           {t("Unmatched domains", "未匹配域名")}
                         </span>
-                      ) : (
+                      ) : canOpenFrontend ? (
                         <>
                           <a className="inline-flex max-w-72 items-center gap-1 truncate rounded-md border bg-background/55 px-2 py-1 text-xs text-cyan-100 hover:bg-muted" href={link} target="_blank" rel="noreferrer" onClick={(event) => event.stopPropagation()}>
                             <span className="truncate">{route.primaryDomain}</span>
                             <ExternalLink className="size-3 shrink-0" />
                           </a>
                         </>
+                      ) : (
+                        <span className="inline-flex max-w-72 items-center truncate rounded-md border bg-background/55 px-2 py-1 text-xs text-cyan-100">
+                          {t("Custom rule", "自定义规则")}
+                        </span>
                       )}
                     </TableCell>
                     <TableCell>
@@ -574,7 +586,7 @@ function RouteDetails({ route }: { route: DomainRoute }) {
         <DetailCell label={t("Frontend", "前端")} value={route.isDefault ? t("Unmatched domains", "未匹配域名") : route.primaryDomain} />
         <DetailCell label={t("Backend", "后端")} value={`${backend.scheme}://${backend.hostPort}`} />
         <DetailCell label={t("Runtime", "运行时")} value={`${service.runtime?.name || "unmatched"} · ${service.runtime?.status || (service.enabled ? "unknown" : "disabled")}`} />
-        <DetailCell label={t("Traefik rule", "Traefik 规则")} value={service.runtime?.rule || (route.isDefault ? "PathPrefix(/)" : service.domains.map((domain) => `Host(${domain})`).join(" || "))} />
+        <DetailCell label={t("Traefik rule", "Traefik 规则")} value={service.runtime?.rule || fallbackRuleText(service)} />
         <DetailCell label={t("Entrypoints", "入口点")} value={service.entryPoints.join(", ")} />
         <DetailCell label={t("Traffic source", "流量来源")} value={traffic?.source || "unavailable"} />
         <DetailCell label={t("Requests", "请求数")} value={`${traffic?.totalRequests || 0}`} />
@@ -664,6 +676,7 @@ function ServiceForm({
           groupId: service.groupId,
           domainRoot: domains.domainRoot,
           subdomainsText: domains.subdomainsText,
+          customRule: service.customRule || "",
           listenPort: service.listenPort,
           entryPointsText: service.entryPoints.join(", "),
           targetUrl: service.targetUrl,
@@ -683,19 +696,26 @@ function ServiceForm({
         };
   });
   const isDefaultRule = draft.matchMode === "default";
+  const isCustomRule = draft.matchMode === "custom";
   const domainPreview = isDefaultRule ? [] : composeDomains(draft.domainRoot, draft.subdomainsText);
   const title = service
     ? isDefaultRule
       ? t("Edit default rule", "编辑默认规则")
+      : isCustomRule
+      ? t("Edit custom rule", "编辑自定义规则")
       : t("Edit sub-rule", "编辑子规则")
     : mode === "default"
       ? t("New default rule", "新建默认规则")
+      : isCustomRule
+      ? t("New custom rule", "新建自定义规则")
       : mode === "subrule"
       ? t("New sub-rule", "新建子规则")
       : t("New reverse proxy rule", "新建反代规则");
   const subtitle =
     isDefaultRule
       ? t("Catch unmatched domains on the selected entrypoint and forward them to one backend.", "接住指定入口点上未匹配的域名，并转发到一个后端。")
+      : isCustomRule
+      ? t("Use a custom Traefik rule while still managing backend, TLS, middleware, and generated YAML.", "使用自定义 Traefik 规则，同时继续管理后端、TLS、中间件和生成的 YAML。")
       : mode === "subrule"
       ? t("Add one frontend domain under the selected rule and point it to a backend IP:port.", "在当前规则下添加一个前端域名，并指向后端 IP:端口。")
       : t("Create a reverse proxy rule: frontend domain, listen port, backend IP:port, and TLS mode.", "创建反代规则：前端域名、监听端口、后端 IP:端口和 TLS 模式。");
@@ -708,6 +728,7 @@ function ServiceForm({
       matchMode: draft.matchMode,
       groupId: draft.groupId,
       domains: domainPreview,
+      customRule: draft.matchMode === "custom" ? draft.customRule : undefined,
       listenPort: Number(draft.listenPort),
       entryPoints: splitList(draft.entryPointsText),
       targetUrl: draft.targetUrl,
@@ -730,6 +751,7 @@ function ServiceForm({
         <Field label={t("Rule type", "规则类型")}>
           <select className={selectClass} value={draft.matchMode} onChange={(event) => setDraft({ ...draft, matchMode: event.target.value as DraftService["matchMode"] })}>
             <option value="host">{t("Host rule", "域名规则")}</option>
+            <option value="custom">{t("Custom Traefik rule", "自定义 Traefik 规则")}</option>
             <option value="default">{t("Default fallback", "默认规则")}</option>
           </select>
         </Field>
@@ -748,9 +770,14 @@ function ServiceForm({
               <Input value={draft.domainRoot} onChange={(event) => setDraft({ ...draft, domainRoot: event.target.value })} placeholder="1804.surfacer.cc" disabled={mode === "subrule" && activeRoot !== "__all" && !service} />
             </Field>
             <Field label={t("Frontend domain", "前端域名")}>
-              <Input value={draft.subdomainsText} onChange={(event) => setDraft({ ...draft, subdomainsText: event.target.value })} placeholder={mode === "subrule" ? "qb" : "@"} required={mode === "subrule" && !service} />
+              <Input value={draft.subdomainsText} onChange={(event) => setDraft({ ...draft, subdomainsText: event.target.value })} placeholder={isCustomRule ? "optional display domain" : mode === "subrule" ? "qb" : "@"} required={draft.matchMode === "host" && mode === "subrule" && !service} />
             </Field>
           </>
+        ) : null}
+        {isCustomRule ? (
+          <Field className="md:col-span-2" label={t("Traefik rule", "Traefik 规则")}>
+            <Textarea value={draft.customRule} onChange={(event) => setDraft({ ...draft, customRule: event.target.value })} rows={3} placeholder="Host(`app.localhost`) && PathPrefix(`/api`)" required />
+          </Field>
         ) : null}
         <Field className="md:col-span-2" label={t("Backend IP:port", "后端 IP:端口")}>
           <Input value={draft.targetUrl} onChange={(event) => setDraft({ ...draft, targetUrl: event.target.value })} placeholder="http://192.168.31.26:8081" required />
@@ -805,7 +832,7 @@ function ServiceForm({
           <Button type="button" variant="outline" onClick={onClose}>
             {t("Cancel", "取消")}
           </Button>
-          <Button type="submit" disabled={saving || (!isDefaultRule && domainPreview.length === 0) || !draft.targetUrl.trim() || (!isDefaultRule && mode === "subrule" && !service && !draft.subdomainsText.trim())}>
+          <Button type="submit" disabled={saving || (draft.matchMode === "host" && domainPreview.length === 0) || (isCustomRule && !draft.customRule.trim()) || !draft.targetUrl.trim() || (draft.matchMode === "host" && mode === "subrule" && !service && !draft.subdomainsText.trim())}>
             <Save className="size-4" />
             {saving ? t("Saving...", "保存中...") : t("Save", "保存")}
           </Button>
@@ -880,7 +907,20 @@ function buildDomainZones(services: WebServiceWithRuntime[], groupsById: Map<str
       continue;
     }
 
-    const domains = service.domains.length ? service.domains : [service.name.toLowerCase().replace(/\s+/g, "-") || service.id];
+    const domains = service.domains.length ? service.domains : service.matchMode === "custom" ? extractHostDomains(service.customRule || "") : [service.name.toLowerCase().replace(/\s+/g, "-") || service.id];
+    if (domains.length === 0) {
+      const route: DomainRoute = {
+        routeId: `${service.id}:custom`,
+        service,
+        root: "__custom",
+        primaryDomain: service.customRule?.trim() || service.name || service.id,
+        labels: ["custom"],
+        groupName: groupsById.get(service.groupId)?.name || "Ungrouped",
+        isDefault: false
+      };
+      zones.set(route.root, [...(zones.get(route.root) || []), route]);
+      continue;
+    }
     for (const [index, domain] of domains.entries()) {
       const primaryDomain = domain;
       const root = inferRootDomain(primaryDomain);
@@ -908,7 +948,42 @@ function displayRouteName(route: Pick<DomainRoute, "service" | "primaryDomain" |
 }
 
 function rootLabel(root: string, t: (english: string, chinese: string) => string): string {
+  if (root === "__custom") return t("Custom", "自定义");
   return root === "__default" ? t("Default", "默认") : root;
+}
+
+function routeKindLabel(route: DomainRoute, isRootRule: boolean, t: (english: string, chinese: string) => string): string {
+  if (route.isDefault) return t("Default", "默认");
+  if (route.service.matchMode === "custom") return t("Custom", "自定义");
+  return isRootRule ? t("Rule", "规则") : t("Sub-rule", "子规则");
+}
+
+function fallbackRuleText(service: WebServiceWithRuntime): string {
+  if (service.matchMode === "default") return "PathPrefix(`/`)";
+  if (service.matchMode === "custom") return service.customRule || "";
+  return service.domains.map((domain) => `Host(${domain})`).join(" || ");
+}
+
+function isOpenableDomain(value: string): boolean {
+  return /^[a-z0-9.-]+$/i.test(value) && !value.includes("..") && !value.startsWith(".") && !value.endsWith(".");
+}
+
+function extractHostDomains(rule: string): string[] {
+  const domains = new Set<string>();
+  const hostCallPattern = /\bHost(?:SNI)?\(([^)]*)\)/g;
+  for (const match of rule.matchAll(hostCallPattern)) {
+    const args = match[1] || "";
+    for (const arg of args.split(",")) {
+      const domain = normalizeDomain(arg.replace(/^[`'"]|[`'"]$/g, ""));
+      if (domain) domains.add(domain);
+    }
+  }
+  return Array.from(domains);
+}
+
+function copyCustomRule(rule: string, sourceDomain: string, copiedDomain: string): string {
+  if (!rule.trim() || !isOpenableDomain(sourceDomain) || !isOpenableDomain(copiedDomain)) return "";
+  return rule.split(sourceDomain).join(copiedDomain);
 }
 
 function copyDomainLabel(label: string): string {
