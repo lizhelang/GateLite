@@ -61,12 +61,15 @@ GateLite MVP mapping:
   with frontend domain -> backend IP:port and then shows downstream/upstream
   bytes plus current connection count instead of a bulky service card.
 - Web service toolbar -> top-level creation is always a blank `New rule` for
-  a new main-domain rule; `New sub-rule` appears only in the selected/main-
-  domain table context, keeping sub-rules scoped to an existing domain the way
-  Lucky presents them.
+  a new main-domain rule; `New sub-rule` appears directly in the toolbar after
+  the user selects a concrete main domain, and also in that domain's table
+  header. This keeps sub-rules scoped to an existing domain the way Lucky
+  presents them.
 - Rule row density -> each reverse-proxy rule is a single shadcn-style data
   table row with rule name, frontend domain, backend IP:port, downstream
-  traffic, upstream traffic, live connection count, and status.
+  traffic, upstream traffic, live connection count, and status. The frontend
+  cell leads with the domain name, while protocol/port are secondary; the
+  backend cell leads with host:port.
 - Lucky-style traffic columns -> each Web service rule row shows downstream
   and upstream byte rates from Prometheus counters, with cumulative bytes kept
   as secondary context.
@@ -79,7 +82,9 @@ GateLite MVP mapping:
   domain's table header. It pre-fills the main domain and inherits TLS,
   entrypoints, middleware, and group settings only when that domain has an
   explicit `@` rule, avoiding accidental inheritance from an arbitrary sibling
-  sub-rule.
+  sub-rule. The form opens on a lightweight `frontend domain -> backend
+  IP:port` mapping first, with Traefik-specific controls folded into advanced
+  settings.
 - Web service detail view -> explicit row action opens a compact rule detail
   dialog with frontend/backend mapping, generated Traefik rule, runtime status,
   TLS, Host header behavior, traffic, and notes.

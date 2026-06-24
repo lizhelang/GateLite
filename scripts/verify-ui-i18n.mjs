@@ -28,11 +28,15 @@ async function verifyLanguage(browser, language) {
 
     await openView(page, language === "zh" ? /Web 服务/ : /Web Services/);
     await assertBody(page, language === "zh" ? /新建规则/ : /New rule/, `${language} Web service create action`);
+    await assertBody(page, language === "zh" ? /新建子规则/ : /New sub-rule/, `${language} Web service sub-rule action`);
+    await assertBody(page, language === "zh" ? /规则名称/ : /Rule name/, `${language} Web service rule-name column`);
     await assertBody(page, language === "zh" ? /前端域名/ : /Frontend domain/, `${language} Web service frontend column`);
     await assertBody(page, language === "zh" ? /后端 IP:端口/ : /Backend IP:port/, `${language} Web service backend column`);
     await assertBody(page, language === "zh" ? /下行/ : /\bDown\b/, `${language} Web service downstream column`);
     await assertBody(page, language === "zh" ? /上行/ : /\bUp\b/, `${language} Web service upstream column`);
     await assertBody(page, language === "zh" ? /连接/ : /Conn\./, `${language} Web service connection column`);
+    await assertBody(page, /whoami\.localhost/, `${language} Web service frontend domain row`);
+    await assertBody(page, /whoami:80/, `${language} Web service backend host-port row`);
     await assertVisibleButton(page, language === "zh" ? /拖拽分组/ : /Drag group/, `${language} Web service group drag handle`);
 
     await openView(page, language === "zh" ? /SSL\/TLS 证书/ : /SSL\/TLS/);
