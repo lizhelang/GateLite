@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import type { CertificateItem, CertificateStatus } from "../shared/types";
 import { config } from "./config";
+import { BadRequestError } from "./errors";
 import { createId } from "./ids";
 
 interface ParsedCertificate {
@@ -114,7 +115,7 @@ export function createCertificateFromInput(input: CertificateInput): Certificate
 
   if (input.source === "upload") {
     if (!input.certPem || !input.keyPem) {
-      throw new Error("Certificate and private key PEM are required for upload mode.");
+      throw new BadRequestError("Certificate and private key PEM are required for upload mode.");
     }
     fs.mkdirSync(config.certDir, { recursive: true });
     certPath = path.join(config.certDir, `${id}.crt`);
@@ -188,7 +189,7 @@ export function updateCertificateFromInput(current: CertificateItem, input: Part
     const shouldWritePem = input.certPem !== undefined || input.keyPem !== undefined || (!certPath && !keyPath);
     if (shouldWritePem) {
       if (!input.certPem || !input.keyPem) {
-        throw new Error("Certificate and private key PEM are required when replacing an uploaded certificate.");
+        throw new BadRequestError("Certificate and private key PEM are required when replacing an uploaded certificate.");
       }
       fs.mkdirSync(config.certDir, { recursive: true });
       certPath = path.join(config.certDir, `${current.id}.crt`);
@@ -301,7 +302,7 @@ function statusMessageForUnreadableSource(source: CertificateInput["source"]): s
 
 function resolveReadablePathCertificate(certPath: string | undefined, keyPath: string | undefined): { certPath: string; keyPath: string } {
   if (!certPath || !keyPath) {
-    throw new Error("Certificate and private key paths are required for existing path mode.");
+    throw new BadRequestError("Certificate and private key paths are required for existing path mode.");
   }
 
   const resolvedCertPath = path.resolve(certPath);
@@ -319,15 +320,19 @@ function assertPathIsMountedCertificateFile(filePath: string, label: string): vo
   const certDir = path.resolve(config.certDir);
   const relative = path.relative(certDir, filePath);
   if (relative.startsWith("..") || path.isAbsolute(relative)) {
-    throw new Error(`${label} must be inside ${certDir} so the Docker Traefik container can read it as ${config.certMountPath}.`);
+    throw new BadRequestError(`${label} must be inside ${certDir} so the Docker Traefik container can read it as ${config.certMountPath}.`);
   }
   if (!fs.existsSync(filePath)) {
-    throw new Error(`${label} does not exist: ${filePath}`);
+    throw new BadRequestError(`${label} does not exist: ${filePath}`);
   }
   if (!fs.statSync(filePath).isFile()) {
-    throw new Error(`${label} is not a file: ${filePath}`);
+    throw new BadRequestError(`${label} is not a file: ${filePath}`);
   }
-  fs.accessSync(filePath, fs.constants.R_OK);
+  try {
+    fs.accessSync(filePath, fs.constants.R_OK);
+  } catch {
+    throw new BadRequestError(`${label} is not readable: ${filePath}`);
+  }
 }
 
 function readLineValue(output: string, prefix: string): string | undefined {

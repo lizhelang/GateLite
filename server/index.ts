@@ -11,6 +11,8 @@ import { getTrafficSnapshot } from "./metrics";
 import { certificateInputSchema, groupInputSchema, reorderSchema, webServiceInputSchema } from "./schemas";
 import { ensureState, loadState, saveState } from "./store";
 import { getTraefikRuntime } from "./traefik";
+import { validateWebService, webServiceLabel } from "./web-services";
+import { BadRequestError } from "./errors";
 
 ensureState();
 
@@ -55,7 +57,7 @@ app.post("/api/web-services", (request, response) => {
     createdAt: now,
     updatedAt: now
   };
-  validateWebService(service);
+  validateWebService(service, state);
   state.webServices.push(service);
   const next = saveState(state, "web-service.create", `Created Web service ${webServiceLabel(service)}.`);
   response.status(201).json(next.webServices.find((item) => item.id === service.id));
@@ -73,7 +75,7 @@ app.put("/api/web-services/:id", (request, response) => {
     middlewares: parsed.middlewares.filter(Boolean),
     updatedAt: new Date().toISOString()
   };
-  validateWebService(updated);
+  validateWebService(updated, state);
   state.webServices[index] = updated;
   const next = saveState(state, "web-service.update", `Updated Web service ${webServiceLabel(updated)}.`);
   response.json(next.webServices.find((service) => service.id === updated.id));
@@ -259,6 +261,9 @@ app.use((error: unknown, _request: express.Request, response: express.Response, 
   if (error instanceof z.ZodError) {
     return response.status(400).json({ error: "Validation failed.", issues: error.issues });
   }
+  if (error instanceof BadRequestError) {
+    return response.status(error.statusCode).json({ error: error.message });
+  }
   console.error(error);
   return response.status(500).json({ error: error instanceof Error ? error.message : "Unexpected server error." });
 });
@@ -298,22 +303,6 @@ async function dashboardPayload(): Promise<DashboardPayload> {
   };
 }
 
-function validateWebService(service: WebService): void {
-  if (service.matchMode !== "default" && service.domains.length === 0) {
-    throw new Error("At least one frontend domain is required for host rules.");
-  }
-  if (service.tls.mode === "file-certificate" && !service.tls.certificateId) {
-    throw new Error("A certificate is required when TLS mode is file-certificate.");
-  }
-  if (service.tls.mode !== "none" && !service.entryPoints.includes("websecure")) {
-    throw new Error("TLS services must include the websecure entrypoint.");
-  }
-}
-
 function normalizeDomains(domains: string[]): string[] {
   return Array.from(new Set(domains.map((domain) => domain.trim().toLowerCase()).filter(Boolean)));
-}
-
-function webServiceLabel(service: WebService): string {
-  return service.name.trim() || service.domains[0] || service.id;
 }

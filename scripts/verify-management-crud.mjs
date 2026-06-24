@@ -43,6 +43,7 @@ try {
   await assertGateLiteConnected();
   const group = await createAndVerifyGroup();
   created.groupId = group.id;
+  await verifyWebServiceValidation(group.id);
 
   const certificate = await createAndVerifyCertificate();
   created.certificateId = certificate.id;
@@ -109,6 +110,48 @@ async function createAndVerifyGroup() {
   }
   console.log("[ok] Group create, rename, collapse, and expand operations work.");
   return renamed;
+}
+
+async function verifyWebServiceValidation(groupId) {
+  const missingGroup = await request(`${gateliteApiUrl}/api/web-services`, {
+    method: "POST",
+    body: JSON.stringify({
+      name: `CRUD invalid group ${suffix}`,
+      enabled: true,
+      groupId: `missing-${suffix}`,
+      domains: [`invalid-group-${suffix}.localhost`],
+      listenPort: 18080,
+      entryPoints: ["web"],
+      targetUrl: "http://whoami:80",
+      middlewares: [],
+      tls: { mode: "none" }
+    }),
+    headers: { "Content-Type": "application/json" }
+  });
+  if (missingGroup.status !== 400 || !missingGroup.body.includes("Web service group does not exist")) {
+    throw new Error(`Missing Web service group should return HTTP 400, got ${missingGroup.status}: ${missingGroup.body.slice(0, 300)}`);
+  }
+
+  const missingCertificate = await request(`${gateliteApiUrl}/api/web-services`, {
+    method: "POST",
+    body: JSON.stringify({
+      name: `CRUD invalid certificate ${suffix}`,
+      enabled: true,
+      groupId,
+      domains: [`invalid-cert-${suffix}.localhost`],
+      listenPort: 18443,
+      entryPoints: ["websecure"],
+      targetUrl: "http://whoami:80",
+      middlewares: [],
+      tls: { mode: "file-certificate", certificateId: `missing-${suffix}` }
+    }),
+    headers: { "Content-Type": "application/json" }
+  });
+  if (missingCertificate.status !== 400 || !missingCertificate.body.includes("Certificate does not exist")) {
+    throw new Error(`Missing Web service certificate should return HTTP 400, got ${missingCertificate.status}: ${missingCertificate.body.slice(0, 300)}`);
+  }
+
+  console.log("[ok] Web service validation rejects missing groups and certificate references.");
 }
 
 async function createAndVerifyCertificate() {

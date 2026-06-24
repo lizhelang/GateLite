@@ -75,6 +75,10 @@ GateLite MVP mapping:
   TLS, Host header behavior, traffic, and notes.
 - Access log / service log entry points -> per-rule Traefik router
   observability switches for access logs, Prometheus metrics, and tracing.
+- Web service save validation -> rejects missing groups, missing/disabled
+  file certificates, ACME/sync certificates used in file-certificate mode, and
+  invalid/pending/expired file certificates before writing generated Traefik
+  config.
 
 ## SSL/TLS Core Behaviors
 
