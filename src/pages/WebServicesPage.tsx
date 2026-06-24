@@ -424,22 +424,36 @@ export function WebServicesPage({ dashboard, onRefresh }: WebServicesPageProps) 
 
   return (
     <section className="grid gap-3">
+      {error ? <div className="rounded-xl border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">{error}</div> : null}
+
+      <DiscoveredRouteTable
+        routes={dashboard.discoveredRoutes}
+        importingRouterName={importingRouterName}
+        onPreviewImport={handlePreviewImport}
+      />
+
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="inline-flex max-w-full items-center gap-1 overflow-x-auto rounded-lg border bg-muted/45 p-1">
-          <Button type="button" variant={activeRoot === "__all" ? "outline" : "ghost"} size="sm" onClick={() => setActiveRoot("__all")}>
-            {t("All domains", "全部域名")}
-            <Badge variant="secondary" className="ml-1 rounded-full px-1.5 py-0 text-[10px]">
-              {routeCount}
-            </Badge>
-          </Button>
-          {zones.map((zone) => (
-            <Button key={zone.root} type="button" variant={activeRoot === zone.root ? "outline" : "ghost"} size="sm" onClick={() => setActiveRoot(zone.root)}>
-              {rootLabel(zone.root, t)}
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
+          <div className="min-w-0">
+            <div className="text-xs text-muted-foreground">{t("GateLite managed mappings", "GateLite 托管映射")}</div>
+            <h2 className="truncate text-base font-semibold">{t("Mapped and generated rules", "已映射和自建规则")}</h2>
+          </div>
+          <div className="inline-flex max-w-full items-center gap-1 overflow-x-auto rounded-lg border bg-muted/45 p-1">
+            <Button type="button" variant={activeRoot === "__all" ? "outline" : "ghost"} size="sm" onClick={() => setActiveRoot("__all")}>
+              {t("All", "全部")}
               <Badge variant="secondary" className="ml-1 rounded-full px-1.5 py-0 text-[10px]">
-                {zone.routes.length}
+                {routeCount}
               </Badge>
             </Button>
-          ))}
+            {zones.map((zone) => (
+              <Button key={zone.root} type="button" variant={activeRoot === zone.root ? "outline" : "ghost"} size="sm" onClick={() => setActiveRoot(zone.root)}>
+                {rootLabel(zone.root, t)}
+                <Badge variant="secondary" className="ml-1 rounded-full px-1.5 py-0 text-[10px]">
+                  {zone.routes.length}
+                </Badge>
+              </Button>
+            ))}
+          </div>
         </div>
         <div className="flex flex-wrap gap-2">
           <Button type="button" variant="outline" onClick={handleAddGroup}>
@@ -468,14 +482,6 @@ export function WebServicesPage({ dashboard, onRefresh }: WebServicesPageProps) 
         onToggle={handleGroupToggle}
         onRename={handleRenameGroup}
         onDelete={handleDeleteGroup}
-      />
-
-      {error ? <div className="rounded-xl border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">{error}</div> : null}
-
-      <DiscoveredRouteTable
-        routes={dashboard.discoveredRoutes}
-        importingRouterName={importingRouterName}
-        onPreviewImport={handlePreviewImport}
       />
 
       <RouteDataTable
