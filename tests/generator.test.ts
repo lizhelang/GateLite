@@ -95,6 +95,39 @@ describe("generateTraefikDynamicConfig", () => {
     expect(generateTraefikDynamicConfig(state).yaml).not.toContain("disabled.localhost");
   });
 
+  it("renders default fallback services as low-priority catch-all routers", () => {
+    const state: GateLiteState = {
+      version: 1,
+      groups: [],
+      certificates: [],
+      webServices: [
+        {
+          id: "svc-default",
+          name: "Default",
+          enabled: true,
+          matchMode: "default",
+          groupId: "local",
+          domains: [],
+          listenPort: 18080,
+          entryPoints: ["web"],
+          targetUrl: "http://whoami:80",
+          middlewares: [],
+          tls: { mode: "none" },
+          order: 1,
+          createdAt: "2026-06-23T00:00:00.000Z",
+          updatedAt: "2026-06-23T00:00:00.000Z"
+        }
+      ],
+      history: []
+    };
+
+    const generated = generateTraefikDynamicConfig(state).yaml;
+
+    expect(generated).toContain("PathPrefix(`/`)");
+    expect(generated).toContain("priority: 1");
+    expect(generated).not.toContain("Host(`");
+  });
+
   it("omits disabled certificates from the active Traefik config", () => {
     const state: GateLiteState = {
       version: 1,

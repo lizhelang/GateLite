@@ -18,12 +18,16 @@ export function saveState(state: GateLiteState, action = "state.save", summary =
   const next: GateLiteState = {
     ...state,
     groups: normalizeGroupOrders(state.groups),
-    webServices: normalizeServiceOrders(state.webServices).map((service) => ({
-      ...service,
-      domains: normalizeStringList(service.domains),
-      entryPoints: normalizeStringList(service.entryPoints),
-      middlewares: normalizeStringList(service.middlewares)
-    })),
+    webServices: normalizeServiceOrders(state.webServices).map((service) => {
+      const matchMode = service.matchMode || "host";
+      return {
+        ...service,
+        matchMode,
+        domains: matchMode === "default" ? [] : normalizeStringList(service.domains),
+        entryPoints: normalizeStringList(service.entryPoints),
+        middlewares: normalizeStringList(service.middlewares)
+      };
+    }),
     certificates: normalizeCertificateOrders(state.certificates).map(refreshCertificateMetadata),
     history: [
       {
@@ -141,4 +145,3 @@ function normalizeCertificateOrders(certificates: CertificateItem[]): Certificat
 function normalizeStringList(values: string[]): string[] {
   return Array.from(new Set(values.map((value) => value.trim()).filter(Boolean)));
 }
-

@@ -46,6 +46,7 @@ interface WebServicesPageProps {
 type DraftService = {
   name: string;
   enabled: boolean;
+  matchMode: "host" | "default";
   groupId: string;
   domainRoot: string;
   subdomainsText: string;
@@ -65,6 +66,7 @@ type DomainRoute = {
   primaryDomain: string;
   labels: string[];
   groupName: string;
+  isDefault: boolean;
 };
 
 type DomainZone = {
@@ -75,6 +77,7 @@ type DomainZone = {
 const emptyDraft: DraftService = {
   name: "",
   enabled: true,
+  matchMode: "host",
   groupId: "local",
   domainRoot: "localhost",
   subdomainsText: "",
@@ -93,7 +96,7 @@ const selectClass = "h-8 w-full rounded-lg border border-input bg-background px-
 export function WebServicesPage({ dashboard, onRefresh }: WebServicesPageProps) {
   const { t } = useLanguage();
   const [editing, setEditing] = useState<WebServiceWithRuntime | null>(null);
-  const [createMode, setCreateMode] = useState<"rule" | "subrule">("rule");
+  const [createMode, setCreateMode] = useState<"rule" | "subrule" | "default">("rule");
   const [showForm, setShowForm] = useState(false);
   const [selectedId, setSelectedId] = useState("");
   const [activeRoot, setActiveRoot] = useState("__all");
@@ -110,7 +113,7 @@ export function WebServicesPage({ dashboard, onRefresh }: WebServicesPageProps) 
   const activeRoutes = (activeRoot === "__all" ? allRoutes : zones.find((zone) => zone.root === activeRoot)?.routes || allRoutes).filter((route) => !groupsById.get(route.service.groupId)?.collapsed);
   const selectedRoute = activeRoutes.find((route) => route.service.id === selectedId);
 
-  const openCreate = (mode: "rule" | "subrule" = "rule") => {
+  const openCreate = (mode: "rule" | "subrule" | "default" = "rule") => {
     setEditing(null);
     setCreateMode(mode);
     setShowForm(true);
@@ -118,7 +121,7 @@ export function WebServicesPage({ dashboard, onRefresh }: WebServicesPageProps) 
 
   const openEdit = (service: WebServiceWithRuntime) => {
     setEditing(service);
-    setCreateMode("subrule");
+    setCreateMode(service.matchMode === "default" ? "default" : "subrule");
     setShowForm(true);
   };
 
@@ -224,7 +227,7 @@ export function WebServicesPage({ dashboard, onRefresh }: WebServicesPageProps) 
           </Button>
           {zones.map((zone) => (
             <Button key={zone.root} type="button" variant={activeRoot === zone.root ? "outline" : "ghost"} size="sm" onClick={() => setActiveRoot(zone.root)}>
-              {zone.root}
+              {rootLabel(zone.root, t)}
               <Badge variant="secondary" className="ml-1 rounded-full px-1.5 py-0 text-[10px]">
                 {zone.routes.length}
               </Badge>
@@ -236,9 +239,13 @@ export function WebServicesPage({ dashboard, onRefresh }: WebServicesPageProps) 
             <Layers className="size-4" />
             {t("Groups", "分组")}
           </Button>
-          <Button type="button" variant="outline" onClick={() => openCreate("subrule")} disabled={activeRoot === "__all"} title={activeRoot === "__all" ? t("Select a root domain before adding a sub-rule.", "先选择一个根域名，再添加子规则。") : undefined}>
+          <Button type="button" variant="outline" onClick={() => openCreate("subrule")} disabled={activeRoot === "__all" || activeRoot === "__default"} title={activeRoot === "__all" || activeRoot === "__default" ? t("Select a root domain before adding a sub-rule.", "先选择一个根域名，再添加子规则。") : undefined}>
             <Plus className="size-4" />
             {t("New sub-rule", "新建子规则")}
+          </Button>
+          <Button type="button" variant="outline" onClick={() => openCreate("default")}>
+            <Plus className="size-4" />
+            {t("Default rule", "默认规则")}
           </Button>
           <Button type="button" onClick={() => openCreate("rule")}>
             <Plus className="size-4" />
@@ -356,7 +363,7 @@ function RouteDataTable({
                 const backend = formatBackendTarget(service.targetUrl);
                 const traffic = service.traffic;
                 const isRootRule = route.labels.some((label) => label === "@");
-                const displayName = displayServiceName(route);
+                const displayName = displayRouteName(route, t);
                 return (
                   <TableRow
                     key={service.id}
@@ -380,18 +387,26 @@ function RouteDataTable({
                         <span className="truncate font-medium">{displayName}</span>
                         <span className="flex min-w-0 items-center gap-1 truncate text-xs text-muted-foreground">
                           <Badge variant="outline" className="h-5 rounded-md px-1.5 text-[10px]">
-                            {isRootRule ? t("Rule", "规则") : t("Sub-rule", "子规则")}
+                            {route.isDefault ? t("Default", "默认") : isRootRule ? t("Rule", "规则") : t("Sub-rule", "子规则")}
                           </Badge>
-                          <span className="truncate">{route.root}</span>
+                          <span className="truncate">{rootLabel(route.root, t)}</span>
                         </span>
                       </div>
                     </TableCell>
                     <TableCell>
-                      <a className="inline-flex max-w-72 items-center gap-1 truncate rounded-md border bg-background/55 px-2 py-1 text-xs text-cyan-100 hover:bg-muted" href={link} target="_blank" rel="noreferrer" onClick={(event) => event.stopPropagation()}>
-                        <span className="truncate">{route.primaryDomain}</span>
-                        <ExternalLink className="size-3 shrink-0" />
-                      </a>
-                      {service.domains.length > 1 ? <span className="ml-2 text-xs text-muted-foreground">+{service.domains.length - 1}</span> : null}
+                      {route.isDefault ? (
+                        <span className="inline-flex max-w-72 items-center truncate rounded-md border bg-background/55 px-2 py-1 text-xs text-amber-100">
+                          {t("Unmatched domains", "未匹配域名")}
+                        </span>
+                      ) : (
+                        <>
+                          <a className="inline-flex max-w-72 items-center gap-1 truncate rounded-md border bg-background/55 px-2 py-1 text-xs text-cyan-100 hover:bg-muted" href={link} target="_blank" rel="noreferrer" onClick={(event) => event.stopPropagation()}>
+                            <span className="truncate">{route.primaryDomain}</span>
+                            <ExternalLink className="size-3 shrink-0" />
+                          </a>
+                          {service.domains.length > 1 ? <span className="ml-2 text-xs text-muted-foreground">+{service.domains.length - 1}</span> : null}
+                        </>
+                      )}
                     </TableCell>
                     <TableCell>
                       <div className="grid max-w-64 grid-cols-[1rem_minmax(0,1fr)] items-center gap-1 text-xs leading-tight">
@@ -465,12 +480,12 @@ function RouteDetails({ route }: { route: DomainRoute }) {
   const service = route.service;
   const traffic = service.traffic;
   const backend = formatBackendTarget(service.targetUrl);
-  const displayName = displayServiceName(route);
+  const displayName = displayRouteName(route, t);
   return (
     <Card className="overflow-hidden bg-card/70">
       <CardContent className="grid gap-3 p-4 text-sm md:grid-cols-4">
         <DetailCell label={t("Selected rule", "选中规则")} value={displayName} />
-        <DetailCell label={t("Frontend", "前端")} value={service.domains.join(", ")} />
+        <DetailCell label={t("Frontend", "前端")} value={route.isDefault ? t("Unmatched domains", "未匹配域名") : service.domains.join(", ")} />
         <DetailCell label={t("Backend", "后端")} value={`${backend.scheme}://${backend.hostPort}`} />
         <DetailCell label={t("Runtime", "运行时")} value={`${service.runtime?.name || "unmatched"} · ${service.runtime?.status || (service.enabled ? "unknown" : "disabled")}`} />
         <DetailCell label={t("Traefik rule", "Traefik 规则")} value={service.runtime?.rule || service.domains.map((domain) => `Host(${domain})`).join(" || ")} />
@@ -540,7 +555,7 @@ function ServiceForm({
   onSubmit
 }: {
   service: WebServiceWithRuntime | null;
-  mode: "rule" | "subrule";
+  mode: "rule" | "subrule" | "default";
   activeRoot: string;
   groups: ServiceGroup[];
   certificates: DashboardPayload["certificates"];
@@ -550,12 +565,14 @@ function ServiceForm({
 }) {
   const { t } = useLanguage();
   const [draft, setDraft] = useState<DraftService>(() => {
-    const createRoot = mode === "subrule" && activeRoot !== "__all" ? activeRoot : emptyDraft.domainRoot;
+    const createRoot = mode === "subrule" && activeRoot !== "__all" && activeRoot !== "__default" ? activeRoot : emptyDraft.domainRoot;
     const domains = service ? domainsToDraft(service.domains) : { domainRoot: createRoot, subdomainsText: "" };
+    const matchMode = service?.matchMode || (mode === "default" ? "default" : "host");
     return service
       ? {
           name: service.name,
           enabled: service.enabled,
+          matchMode,
           groupId: service.groupId,
           domainRoot: domains.domainRoot,
           subdomainsText: domains.subdomainsText,
@@ -568,16 +585,23 @@ function ServiceForm({
           resolver: service.tls.resolver || "letsencrypt",
           notes: service.notes || ""
         }
-      : { ...emptyDraft, groupId: groups[0]?.id || "local", domainRoot: createRoot, subdomainsText: mode === "rule" ? "@" : "" };
+      : { ...emptyDraft, matchMode, groupId: groups[0]?.id || "local", domainRoot: createRoot, subdomainsText: mode === "rule" ? "@" : "" };
   });
-  const domainPreview = composeDomains(draft.domainRoot, draft.subdomainsText);
+  const isDefaultRule = draft.matchMode === "default";
+  const domainPreview = isDefaultRule ? [] : composeDomains(draft.domainRoot, draft.subdomainsText);
   const title = service
-    ? t("Edit sub-rule", "编辑子规则")
-    : mode === "subrule"
+    ? isDefaultRule
+      ? t("Edit default rule", "编辑默认规则")
+      : t("Edit sub-rule", "编辑子规则")
+    : mode === "default"
+      ? t("New default rule", "新建默认规则")
+      : mode === "subrule"
       ? t("New sub-rule", "新建子规则")
       : t("New reverse proxy rule", "新建反代规则");
   const subtitle =
-    mode === "subrule"
+    isDefaultRule
+      ? t("Catch unmatched domains on the selected entrypoint and forward them to one backend.", "接住指定入口点上未匹配的域名，并转发到一个后端。")
+      : mode === "subrule"
       ? t("Add one frontend domain under the selected rule and point it to a backend IP:port.", "在当前规则下添加一个前端域名，并指向后端 IP:端口。")
       : t("Create a reverse proxy rule: frontend domain, listen port, backend IP:port, and TLS mode.", "创建反代规则：前端域名、监听端口、后端 IP:端口和 TLS 模式。");
 
@@ -586,6 +610,7 @@ function ServiceForm({
     await onSubmit({
       name: draft.name,
       enabled: draft.enabled,
+      matchMode: draft.matchMode,
       groupId: draft.groupId,
       domains: domainPreview,
       listenPort: Number(draft.listenPort),
@@ -607,6 +632,12 @@ function ServiceForm({
         <Field label={t("Rule name", "规则名称")}>
           <Input value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} placeholder={t("Optional, domain is used when blank", "可留空，留空时使用域名显示")} />
         </Field>
+        <Field label={t("Rule type", "规则类型")}>
+          <select className={selectClass} value={draft.matchMode} onChange={(event) => setDraft({ ...draft, matchMode: event.target.value as DraftService["matchMode"] })}>
+            <option value="host">{t("Host rule", "域名规则")}</option>
+            <option value="default">{t("Default fallback", "默认规则")}</option>
+          </select>
+        </Field>
         <Field label={t("Group", "分组")}>
           <select className={selectClass} value={draft.groupId} onChange={(event) => setDraft({ ...draft, groupId: event.target.value })}>
             {groups.map((group) => (
@@ -616,15 +647,19 @@ function ServiceForm({
             ))}
           </select>
         </Field>
-        <Field label={t("Root domain", "根域名")}>
-          <Input value={draft.domainRoot} onChange={(event) => setDraft({ ...draft, domainRoot: event.target.value })} placeholder="1804.surfacer.cc" disabled={mode === "subrule" && activeRoot !== "__all" && !service} />
-        </Field>
-        <Field label={t("Frontend address", "前端地址")}>
-          <Input value={draft.subdomainsText} onChange={(event) => setDraft({ ...draft, subdomainsText: event.target.value })} placeholder={mode === "subrule" ? "qb, mp, 8081.jb" : "@"} required={mode === "subrule" && !service} />
-        </Field>
+        {!isDefaultRule ? (
+          <>
+            <Field label={t("Root domain", "根域名")}>
+              <Input value={draft.domainRoot} onChange={(event) => setDraft({ ...draft, domainRoot: event.target.value })} placeholder="1804.surfacer.cc" disabled={mode === "subrule" && activeRoot !== "__all" && !service} />
+            </Field>
+            <Field label={t("Frontend address", "前端地址")}>
+              <Input value={draft.subdomainsText} onChange={(event) => setDraft({ ...draft, subdomainsText: event.target.value })} placeholder={mode === "subrule" ? "qb, mp, 8081.jb" : "@"} required={mode === "subrule" && !service} />
+            </Field>
+          </>
+        ) : null}
         <div className="md:col-span-2 rounded-lg border bg-background/40 px-3 py-2 text-xs text-muted-foreground">
           <span>{t("Preview", "预览")} </span>
-          <span className="text-foreground">{domainPreview.length ? domainPreview.join(", ") : t("No domain yet", "还没有域名")}</span>
+          <span className="text-foreground">{isDefaultRule ? t("Unmatched domains on selected entrypoints", "指定入口点上的未匹配域名") : domainPreview.length ? domainPreview.join(", ") : t("No domain yet", "还没有域名")}</span>
         </div>
         <Field label={t("Listen port", "监听端口")}>
           <Input type="number" min="1" max="65535" value={draft.listenPort} onChange={(event) => setDraft({ ...draft, listenPort: Number(event.target.value) })} />
@@ -674,7 +709,7 @@ function ServiceForm({
           <Button type="button" variant="outline" onClick={onClose}>
             {t("Cancel", "取消")}
           </Button>
-          <Button type="submit" disabled={saving || domainPreview.length === 0 || !draft.targetUrl.trim() || (mode === "subrule" && !service && !draft.subdomainsText.trim())}>
+          <Button type="submit" disabled={saving || (!isDefaultRule && domainPreview.length === 0) || !draft.targetUrl.trim() || (!isDefaultRule && mode === "subrule" && !service && !draft.subdomainsText.trim())}>
             <Save className="size-4" />
             {saving ? t("Saving...", "保存中...") : t("Save", "保存")}
           </Button>
@@ -696,15 +731,17 @@ function Field({ label, children, className }: { label: string; children: ReactN
 function buildDomainZones(services: WebServiceWithRuntime[], groupsById: Map<string, ServiceGroup>): DomainZone[] {
   const zones = new Map<string, DomainRoute[]>();
   for (const service of services) {
-    const primaryDomain = service.domains[0] || service.name.toLowerCase().replace(/\s+/g, "-") || service.id;
-    const root = inferRootDomain(primaryDomain);
-    const labels = service.domains.map((domain) => domainToLabel(domain, root));
+    const isDefault = service.matchMode === "default";
+    const primaryDomain = isDefault ? "default rule" : service.domains[0] || service.name.toLowerCase().replace(/\s+/g, "-") || service.id;
+    const root = isDefault ? "__default" : inferRootDomain(primaryDomain);
+    const labels = isDefault ? ["*"] : service.domains.map((domain) => domainToLabel(domain, root));
     const route: DomainRoute = {
       service,
       root,
       primaryDomain,
       labels,
-      groupName: groupsById.get(service.groupId)?.name || "Ungrouped"
+      groupName: groupsById.get(service.groupId)?.name || "Ungrouped",
+      isDefault
     };
     zones.set(root, [...(zones.get(root) || []), route]);
   }
@@ -713,6 +750,14 @@ function buildDomainZones(services: WebServiceWithRuntime[], groupsById: Map<str
 
 function displayServiceName(route: Pick<DomainRoute, "service" | "primaryDomain">): string {
   return route.service.name.trim() || route.primaryDomain;
+}
+
+function displayRouteName(route: Pick<DomainRoute, "service" | "primaryDomain" | "isDefault">, t: (english: string, chinese: string) => string): string {
+  return route.service.name.trim() || (route.isDefault ? t("Default fallback", "默认规则") : route.primaryDomain);
+}
+
+function rootLabel(root: string, t: (english: string, chinese: string) => string): string {
+  return root === "__default" ? t("Default", "默认") : root;
 }
 
 function countServicesByGroup(services: WebServiceWithRuntime[]): Map<string, number> {

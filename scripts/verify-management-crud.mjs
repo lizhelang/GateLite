@@ -8,12 +8,14 @@ const httpsRouteUrl = process.env.GATELITE_VERIFY_HTTPS_URL || "https://127.0.0.
 const suffix = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
 const originalHttpHost = `crud-${suffix}.localhost`;
 const editedHttpHost = `crud-edit-${suffix}.localhost`;
+const defaultFallbackHost = `unmatched-${suffix}.localhost`;
 const httpsHost = `crud-tls-${suffix}.localhost`;
 
 const created = {
   groupId: "",
   certificateId: "",
   httpServiceId: "",
+  defaultServiceId: "",
   httpsServiceId: ""
 };
 
@@ -32,6 +34,10 @@ try {
 
   await updateAndVerifyHttpService(httpService, group.id);
   await toggleAndVerifyHttpService(httpService.id);
+  const defaultService = await createAndVerifyDefaultHttpService(group.id);
+  created.defaultServiceId = defaultService.id;
+  await deleteAndVerifyDefaultHttpService(defaultService.id);
+  created.defaultServiceId = "";
 
   const httpsService = await createAndVerifyHttpsService(group.id, certificate.id);
   created.httpsServiceId = httpsService.id;
@@ -220,6 +226,41 @@ async function toggleAndVerifyHttpService(serviceId) {
   console.log("[ok] Web service enable/disable toggles add and remove the Traefik route.");
 }
 
+async function createAndVerifyDefaultHttpService(groupId) {
+  const service = await apiJson("/api/web-services", {
+    method: "POST",
+    body: {
+      name: `CRUD default ${suffix}`,
+      enabled: true,
+      matchMode: "default",
+      groupId,
+      domains: [],
+      listenPort: 18080,
+      entryPoints: ["web"],
+      targetUrl: "http://whoami:80",
+      middlewares: [],
+      tls: { mode: "none" },
+      notes: "Temporary default fallback route created by verify:crud."
+    },
+    expectedStatus: 201
+  });
+  if (service.matchMode !== "default" || service.domains.length !== 0) {
+    throw new Error("Default Web service rule was not persisted as a domainless fallback.");
+  }
+  await waitForDefaultRoute();
+  const body = await routeText(httpRouteUrl, defaultFallbackHost);
+  assertIncludes(body, `Host: ${defaultFallbackHost}`, defaultFallbackHost);
+  assertIncludes(body, "X-Forwarded-Proto: http", defaultFallbackHost);
+  console.log("[ok] Default Web service fallback catches unmatched HTTP hosts.");
+  return service;
+}
+
+async function deleteAndVerifyDefaultHttpService(serviceId) {
+  await apiNoContent(`/api/web-services/${serviceId}`, "DELETE");
+  await waitForDefaultRouteUnavailable();
+  console.log("[ok] Default Web service fallback is removed when deleted.");
+}
+
 async function createAndVerifyHttpsService(groupId, certificateId) {
   const service = await apiJson("/api/web-services", {
     method: "POST",
@@ -290,6 +331,7 @@ async function deleteAndVerifyResources() {
 
 async function cleanup() {
   await ignoreNotFound(async () => created.httpsServiceId && apiNoContent(`/api/web-services/${created.httpsServiceId}`, "DELETE"));
+  await ignoreNotFound(async () => created.defaultServiceId && apiNoContent(`/api/web-services/${created.defaultServiceId}`, "DELETE"));
   await ignoreNotFound(async () => created.httpServiceId && apiNoContent(`/api/web-services/${created.httpServiceId}`, "DELETE"));
   await ignoreNotFound(async () => created.certificateId && apiNoContent(`/api/certificates/${created.certificateId}`, "DELETE"));
   await ignoreNotFound(async () => created.groupId && apiJson(`/api/groups/${created.groupId}`, { method: "DELETE" }));
@@ -305,6 +347,27 @@ async function waitForHttpRoute(host, protocol) {
     const body = await routeText(url, host, { allowSelfSigned: protocol === "https" });
     assertIncludes(body, `Host: ${host}`, host);
   }, `${protocol.toUpperCase()} route ${host}`);
+}
+
+async function waitForDefaultRoute() {
+  await retry(async () => {
+    const routers = await requestJson(`${traefikApiUrl}/api/http/routers`);
+    if (!routers.some((router) => isGateLiteDefaultRouter(router))) {
+      throw new Error("Default fallback router is not enabled yet.");
+    }
+    const body = await routeText(httpRouteUrl, defaultFallbackHost);
+    assertIncludes(body, `Host: ${defaultFallbackHost}`, defaultFallbackHost);
+  }, `default fallback route ${defaultFallbackHost}`);
+}
+
+async function waitForDefaultRouteUnavailable() {
+  await retry(async () => {
+    const routers = await requestJson(`${traefikApiUrl}/api/http/routers`);
+    if (routers.some((router) => isGateLiteDefaultRouter(router))) {
+      throw new Error("Default fallback router is still enabled.");
+    }
+    await expectRouteFailure(httpRouteUrl, defaultFallbackHost);
+  }, `default fallback route removal ${defaultFallbackHost}`);
 }
 
 async function waitForRouteUnavailable(host, protocol) {
@@ -364,6 +427,10 @@ async function expectRouteFailure(url, host, options = {}) {
   if (response.status !== 404) {
     throw new Error(`${url} (${host}) should be unavailable with 404, got HTTP ${response.status}.`);
   }
+}
+
+function isGateLiteDefaultRouter(router) {
+  return router.name?.startsWith("gatelite-") && router.rule === "PathPrefix(`/`)" && router.status === "enabled";
 }
 
 function request(url, { method = "GET", body, headers = {}, allowSelfSigned = false } = {}) {

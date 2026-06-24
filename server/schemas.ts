@@ -1,24 +1,35 @@
 import { z } from "zod";
 
-export const webServiceInputSchema = z.object({
-  name: z.string().trim().default(""),
-  enabled: z.boolean().default(true),
-  groupId: z.string().trim().default("local"),
-  domains: z.array(z.string().trim().min(1)).min(1),
-  listenPort: z.coerce.number().int().min(1).max(65535).default(18080),
-  entryPoints: z.array(z.string().trim().min(1)).min(1).default(["web"]),
-  targetUrl: z.string().trim().url(),
-  middlewares: z.array(z.string().trim()).default([]),
-  priority: z.coerce.number().int().optional(),
-  tls: z
-    .object({
-      mode: z.enum(["none", "file-certificate", "resolver"]).default("none"),
-      certificateId: z.string().optional(),
-      resolver: z.string().optional()
-    })
-    .default({ mode: "none" }),
-  notes: z.string().optional()
-});
+export const webServiceInputSchema = z
+  .object({
+    name: z.string().trim().default(""),
+    enabled: z.boolean().default(true),
+    matchMode: z.enum(["host", "default"]).default("host"),
+    groupId: z.string().trim().default("local"),
+    domains: z.array(z.string().trim()).default([]),
+    listenPort: z.coerce.number().int().min(1).max(65535).default(18080),
+    entryPoints: z.array(z.string().trim().min(1)).min(1).default(["web"]),
+    targetUrl: z.string().trim().url(),
+    middlewares: z.array(z.string().trim()).default([]),
+    priority: z.coerce.number().int().optional(),
+    tls: z
+      .object({
+        mode: z.enum(["none", "file-certificate", "resolver"]).default("none"),
+        certificateId: z.string().optional(),
+        resolver: z.string().optional()
+      })
+      .default({ mode: "none" }),
+    notes: z.string().optional()
+  })
+  .superRefine((service, context) => {
+    if (service.matchMode !== "default" && !service.domains.some((domain) => domain.trim())) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "At least one frontend domain is required for host rules.",
+        path: ["domains"]
+      });
+    }
+  });
 
 export const certificateInputSchema = z.object({
   name: z.string().trim().min(1),

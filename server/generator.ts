@@ -17,7 +17,7 @@ export function generateTraefikDynamicConfig(state: GateLiteState): GeneratedCon
   for (const service of sortedEnabledServices(state.webServices)) {
     const routerName = traefikName("gatelite", service.id);
     const serviceName = traefikName("gatelite-service", service.id);
-    const rule = service.domains.map((domain) => `Host(\`${domain}\`)`).join(" || ");
+    const rule = routerRule(service);
     if (!rule || !service.targetUrl) continue;
 
     routers[routerName] = {
@@ -25,7 +25,7 @@ export function generateTraefikDynamicConfig(state: GateLiteState): GeneratedCon
       service: serviceName,
       entryPoints: service.entryPoints,
       ...(service.middlewares.length ? { middlewares: service.middlewares } : {}),
-      ...(service.priority ? { priority: service.priority } : {}),
+      ...(service.priority !== undefined ? { priority: service.priority } : service.matchMode === "default" ? { priority: 1 } : {}),
       ...routerTlsConfig(service)
     };
 
@@ -70,6 +70,11 @@ function sortedEnabledServices(webServices: WebService[]): WebService[] {
   return [...webServices].filter((service) => service.enabled).sort((a, b) => a.order - b.order);
 }
 
+function routerRule(service: WebService): string {
+  if (service.matchMode === "default") return "PathPrefix(`/`)";
+  return service.domains.map((domain) => `Host(\`${domain}\`)`).join(" || ");
+}
+
 function routerTlsConfig(service: WebService): Record<string, unknown> {
   if (service.tls.mode === "none") return {};
   if (service.tls.mode === "resolver") {
@@ -89,4 +94,3 @@ function certificateToTraefik(certificate: CertificateItem): { certFile: string;
     keyFile: path.posix.join(config.certMountPath, path.basename(certificate.keyPath))
   };
 }
-

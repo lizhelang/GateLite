@@ -294,6 +294,9 @@ async function dashboardPayload(): Promise<DashboardPayload> {
 }
 
 function validateWebService(service: WebService): void {
+  if (service.matchMode !== "default" && service.domains.length === 0) {
+    throw new Error("At least one frontend domain is required for host rules.");
+  }
   if (service.tls.mode === "file-certificate" && !service.tls.certificateId) {
     throw new Error("A certificate is required when TLS mode is file-certificate.");
   }

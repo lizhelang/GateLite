@@ -38,6 +38,8 @@ GateLite MVP mapping:
 - Listening port -> local host port hint for the configured Traefik entrypoint.
 - Backend address -> Traefik service server URL.
 - TLS/SNI -> file certificate or cert-resolver mode.
+- Default rule / unmatched-domain fallback -> managed Traefik catch-all router
+  using `PathPrefix(`/`)` with low priority.
 - Grouped display -> GateLite group metadata, independent of Traefik runtime.
 - Drag reorder -> GateLite metadata order and deterministic generated YAML order.
 
