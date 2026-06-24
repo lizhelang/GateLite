@@ -61,6 +61,7 @@ type DraftService = {
 };
 
 type DomainRoute = {
+  routeId: string;
   service: WebServiceWithRuntime;
   root: string;
   primaryDomain: string;
@@ -108,8 +109,8 @@ export function WebServicesPage({ dashboard, onRefresh }: WebServicesPageProps) 
   const groupsById = useMemo(() => new Map(dashboard.groups.map((group) => [group.id, group])), [dashboard.groups]);
   const serviceCountByGroup = useMemo(() => countServicesByGroup(sortedServices), [sortedServices]);
   const zones = useMemo(() => buildDomainZones(sortedServices, groupsById), [groupsById, sortedServices]);
-  const routeCount = sortedServices.length;
   const allRoutes = zones.flatMap((zone) => zone.routes);
+  const routeCount = allRoutes.length;
   const activeRoutes = (activeRoot === "__all" ? allRoutes : zones.find((zone) => zone.root === activeRoot)?.routes || allRoutes).filter((route) => !groupsById.get(route.service.groupId)?.collapsed);
   const selectedRoute = activeRoutes.find((route) => route.service.id === selectedId);
 
@@ -366,7 +367,7 @@ function RouteDataTable({
                 const displayName = displayRouteName(route, t);
                 return (
                   <TableRow
-                    key={service.id}
+                    key={route.routeId}
                     className={`${selected ? "bg-muted/50" : ""} ${draggingId === service.id ? "outline outline-1 outline-cyan-300/70" : ""}`}
                     draggable
                     onDragStart={() => onDragStart(service.id)}
@@ -404,7 +405,6 @@ function RouteDataTable({
                             <span className="truncate">{route.primaryDomain}</span>
                             <ExternalLink className="size-3 shrink-0" />
                           </a>
-                          {service.domains.length > 1 ? <span className="ml-2 text-xs text-muted-foreground">+{service.domains.length - 1}</span> : null}
                         </>
                       )}
                     </TableCell>
@@ -485,10 +485,10 @@ function RouteDetails({ route }: { route: DomainRoute }) {
     <Card className="overflow-hidden bg-card/70">
       <CardContent className="grid gap-3 p-4 text-sm md:grid-cols-4">
         <DetailCell label={t("Selected rule", "选中规则")} value={displayName} />
-        <DetailCell label={t("Frontend", "前端")} value={route.isDefault ? t("Unmatched domains", "未匹配域名") : service.domains.join(", ")} />
+        <DetailCell label={t("Frontend", "前端")} value={route.isDefault ? t("Unmatched domains", "未匹配域名") : route.primaryDomain} />
         <DetailCell label={t("Backend", "后端")} value={`${backend.scheme}://${backend.hostPort}`} />
         <DetailCell label={t("Runtime", "运行时")} value={`${service.runtime?.name || "unmatched"} · ${service.runtime?.status || (service.enabled ? "unknown" : "disabled")}`} />
-        <DetailCell label={t("Traefik rule", "Traefik 规则")} value={service.runtime?.rule || service.domains.map((domain) => `Host(${domain})`).join(" || ")} />
+        <DetailCell label={t("Traefik rule", "Traefik 规则")} value={service.runtime?.rule || (route.isDefault ? "PathPrefix(/)" : service.domains.map((domain) => `Host(${domain})`).join(" || "))} />
         <DetailCell label={t("Entrypoints", "入口点")} value={service.entryPoints.join(", ")} />
         <DetailCell label={t("Traffic source", "流量来源")} value={traffic?.source || "unavailable"} />
         <DetailCell label={t("Requests", "请求数")} value={`${traffic?.totalRequests || 0}`} />
@@ -652,23 +652,24 @@ function ServiceForm({
             <Field label={t("Root domain", "根域名")}>
               <Input value={draft.domainRoot} onChange={(event) => setDraft({ ...draft, domainRoot: event.target.value })} placeholder="1804.surfacer.cc" disabled={mode === "subrule" && activeRoot !== "__all" && !service} />
             </Field>
-            <Field label={t("Frontend address", "前端地址")}>
-              <Input value={draft.subdomainsText} onChange={(event) => setDraft({ ...draft, subdomainsText: event.target.value })} placeholder={mode === "subrule" ? "qb, mp, 8081.jb" : "@"} required={mode === "subrule" && !service} />
+            <Field label={t("Frontend domain", "前端域名")}>
+              <Input value={draft.subdomainsText} onChange={(event) => setDraft({ ...draft, subdomainsText: event.target.value })} placeholder={mode === "subrule" ? "qb" : "@"} required={mode === "subrule" && !service} />
             </Field>
           </>
         ) : null}
-        <div className="md:col-span-2 rounded-lg border bg-background/40 px-3 py-2 text-xs text-muted-foreground">
-          <span>{t("Preview", "预览")} </span>
-          <span className="text-foreground">{isDefaultRule ? t("Unmatched domains on selected entrypoints", "指定入口点上的未匹配域名") : domainPreview.length ? domainPreview.join(", ") : t("No domain yet", "还没有域名")}</span>
-        </div>
+        <Field className="md:col-span-2" label={t("Backend IP:port", "后端 IP:端口")}>
+          <Input value={draft.targetUrl} onChange={(event) => setDraft({ ...draft, targetUrl: event.target.value })} placeholder="http://192.168.31.26:8081" required />
+        </Field>
+        <RoutePairPreview
+          frontends={domainPreview}
+          backend={draft.targetUrl}
+          isDefaultRule={isDefaultRule}
+        />
         <Field label={t("Listen port", "监听端口")}>
           <Input type="number" min="1" max="65535" value={draft.listenPort} onChange={(event) => setDraft({ ...draft, listenPort: Number(event.target.value) })} />
         </Field>
         <Field label={t("Entrypoints", "入口点")}>
           <Input value={draft.entryPointsText} onChange={(event) => setDraft({ ...draft, entryPointsText: event.target.value })} placeholder="web, websecure" required />
-        </Field>
-        <Field className="md:col-span-2" label={t("Backend IP:port", "后端 IP:端口")}>
-          <Input value={draft.targetUrl} onChange={(event) => setDraft({ ...draft, targetUrl: event.target.value })} placeholder="http://192.168.31.26:8081" required />
         </Field>
         <Field label={t("TLS mode", "TLS 模式")}>
           <select className={selectClass} value={draft.tlsMode} onChange={(event) => setDraft({ ...draft, tlsMode: event.target.value as DraftService["tlsMode"] })}>
@@ -728,22 +729,77 @@ function Field({ label, children, className }: { label: string; children: ReactN
   );
 }
 
+function RoutePairPreview({
+  frontends,
+  backend,
+  isDefaultRule
+}: {
+  frontends: string[];
+  backend: string;
+  isDefaultRule: boolean;
+}) {
+  const { t } = useLanguage();
+  const backendTarget = formatBackendTarget(backend);
+  const visibleFrontends = isDefaultRule ? [t("Unmatched domains", "未匹配域名")] : frontends.length ? frontends : [t("No domain yet", "还没有域名")];
+  return (
+    <div className="grid gap-2 rounded-lg border bg-background/40 p-3 text-xs md:col-span-2">
+      <div className="grid items-center gap-2 md:grid-cols-[minmax(0,1fr)_2rem_minmax(0,1fr)]">
+        <div className="grid min-w-0 gap-1">
+          <span className="text-muted-foreground">{t("Frontend domain", "前端域名")}</span>
+          <div className="flex min-w-0 flex-wrap gap-1">
+            {visibleFrontends.slice(0, 3).map((domain) => (
+              <span key={domain} className="max-w-full truncate rounded-md border bg-muted/45 px-2 py-1 font-mono text-cyan-100">
+                {domain}
+              </span>
+            ))}
+            {visibleFrontends.length > 3 ? <span className="rounded-md border bg-muted/30 px-2 py-1 text-muted-foreground">+{visibleFrontends.length - 3}</span> : null}
+          </div>
+        </div>
+        <ArrowRight className="mx-auto hidden size-4 text-muted-foreground md:block" />
+        <div className="grid min-w-0 gap-1">
+          <span className="text-muted-foreground">{t("Backend IP:port", "后端 IP:端口")}</span>
+          <span className="max-w-full truncate rounded-md border bg-muted/45 px-2 py-1 font-mono text-amber-100">
+            {backendTarget.hostPort || t("No backend yet", "还没有后端")}
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function buildDomainZones(services: WebServiceWithRuntime[], groupsById: Map<string, ServiceGroup>): DomainZone[] {
   const zones = new Map<string, DomainRoute[]>();
   for (const service of services) {
     const isDefault = service.matchMode === "default";
-    const primaryDomain = isDefault ? "default rule" : service.domains[0] || service.name.toLowerCase().replace(/\s+/g, "-") || service.id;
-    const root = isDefault ? "__default" : inferRootDomain(primaryDomain);
-    const labels = isDefault ? ["*"] : service.domains.map((domain) => domainToLabel(domain, root));
-    const route: DomainRoute = {
-      service,
-      root,
-      primaryDomain,
-      labels,
-      groupName: groupsById.get(service.groupId)?.name || "Ungrouped",
-      isDefault
-    };
-    zones.set(root, [...(zones.get(root) || []), route]);
+    if (isDefault) {
+      const route: DomainRoute = {
+        routeId: `${service.id}:default`,
+        service,
+        root: "__default",
+        primaryDomain: "default rule",
+        labels: ["*"],
+        groupName: groupsById.get(service.groupId)?.name || "Ungrouped",
+        isDefault: true
+      };
+      zones.set(route.root, [...(zones.get(route.root) || []), route]);
+      continue;
+    }
+
+    const domains = service.domains.length ? service.domains : [service.name.toLowerCase().replace(/\s+/g, "-") || service.id];
+    for (const [index, domain] of domains.entries()) {
+      const primaryDomain = domain;
+      const root = inferRootDomain(primaryDomain);
+      const route: DomainRoute = {
+        routeId: `${service.id}:${index}:${primaryDomain}`,
+        service,
+        root,
+        primaryDomain,
+        labels: [domainToLabel(primaryDomain, root)],
+        groupName: groupsById.get(service.groupId)?.name || "Ungrouped",
+        isDefault: false
+      };
+      zones.set(root, [...(zones.get(root) || []), route]);
+    }
   }
   return Array.from(zones.entries()).map(([root, routes]) => ({ root, routes }));
 }
