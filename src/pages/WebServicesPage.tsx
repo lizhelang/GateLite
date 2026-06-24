@@ -1572,14 +1572,14 @@ function ServiceForm({
         <div className="grid gap-3 rounded-lg border bg-background/35 p-3 md:grid-cols-2">
           {!isDefaultRule ? (
             <>
-              <Field label={mode === "subrule" ? t("Parent domain", "所属主域") : t("Frontend domain", "前端域名")}>
-                <Input value={draft.domainRoot} onChange={(event) => setDraft({ ...draft, domainRoot: event.target.value })} placeholder="1804.surfacer.cc" disabled={mode === "subrule" && activeRoot !== "__all" && !service} />
-              </Field>
               {mode === "subrule" || service ? (
                 <Field label={mode === "subrule" ? t("Subdomain label", "子域名前缀") : t("Domain label", "域名前缀")}>
                   <Input value={draft.subdomainsText} onChange={(event) => setDraft({ ...draft, subdomainsText: event.target.value })} placeholder={isCustomRule ? "optional display domain" : mode === "subrule" ? "qb" : "@"} required={draft.matchMode === "host" && mode === "subrule" && !service} />
                 </Field>
               ) : null}
+              <Field label={mode === "subrule" ? t("Parent domain", "所属主域") : t("Frontend domain", "前端域名")}>
+                <Input value={draft.domainRoot} onChange={(event) => setDraft({ ...draft, domainRoot: event.target.value })} placeholder="1804.surfacer.cc" disabled={mode === "subrule" && activeRoot !== "__all" && !service} />
+              </Field>
             </>
           ) : null}
           <Field className="md:col-span-2" label={t("Backend IP:port", "后端 IP:端口")}>
