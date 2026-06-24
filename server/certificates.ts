@@ -143,6 +143,71 @@ export function createCertificateFromInput(input: CertificateInput): Certificate
   };
 }
 
+export function updateCertificateFromInput(current: CertificateItem, input: Partial<CertificateInput>): CertificateItem {
+  const source = input.source ?? current.source;
+  const domains = input.domains !== undefined ? normalizeDomains(input.domains) : current.domains;
+  const name = input.name ?? current.name;
+  const enabled = input.enabled ?? current.enabled;
+  const now = new Date().toISOString();
+  const base = {
+    id: current.id,
+    name,
+    enabled,
+    source,
+    order: current.order,
+    createdAt: current.createdAt,
+    updatedAt: now
+  };
+
+  if (source === "self-signed") {
+    const shouldRegenerate = current.source !== "self-signed" || input.domains !== undefined || input.days !== undefined;
+    const certificate = shouldRegenerate ? createSelfSignedCertificate(name, domains, input.days ?? 365) : current;
+    return {
+      ...certificate,
+      ...base,
+      source: "self-signed",
+      acme: undefined,
+      sync: undefined
+    };
+  }
+
+  let certPath = input.certPath ?? (source === current.source ? current.certPath : undefined);
+  let keyPath = input.keyPath ?? (source === current.source ? current.keyPath : undefined);
+
+  if (source === "upload") {
+    const shouldWritePem = input.certPem !== undefined || input.keyPem !== undefined || (!certPath && !keyPath);
+    if (shouldWritePem) {
+      if (!input.certPem || !input.keyPem) {
+        throw new Error("Certificate and private key PEM are required when replacing an uploaded certificate.");
+      }
+      fs.mkdirSync(config.certDir, { recursive: true });
+      certPath = path.join(config.certDir, `${current.id}.crt`);
+      keyPath = path.join(config.certDir, `${current.id}.key`);
+      fs.writeFileSync(certPath, input.certPem.trim() + "\n", "utf8");
+      fs.writeFileSync(keyPath, input.keyPem.trim() + "\n", { encoding: "utf8", mode: 0o600 });
+    }
+  }
+
+  const readableCertPath = source === "acme" || source === "sync" ? undefined : certPath;
+  const readableKeyPath = source === "acme" || source === "sync" ? undefined : keyPath;
+  const parsed = readableCertPath && fs.existsSync(readableCertPath) ? parseCertificate(readableCertPath, domains) : undefined;
+
+  return {
+    ...base,
+    domains: parsed?.domains.length ? parsed.domains : domains,
+    certPath: readableCertPath,
+    keyPath: readableKeyPath,
+    status: parsed?.status ?? (source === "acme" ? "pending" : "invalid"),
+    statusMessage: parsed?.statusMessage ?? (source === "acme" ? "Resolver configuration pending local validation." : "Certificate file is not readable."),
+    notBefore: parsed?.notBefore,
+    notAfter: parsed?.notAfter,
+    issuer: parsed?.issuer,
+    subject: parsed?.subject,
+    acme: source === "acme" ? input.acme ?? current.acme : undefined,
+    sync: source === "sync" ? input.sync ?? current.sync : undefined
+  };
+}
+
 export function refreshCertificateMetadata(certificate: CertificateItem): CertificateItem {
   if (!certificate.certPath || !fs.existsSync(certificate.certPath)) {
     return {
@@ -220,4 +285,3 @@ function certificateStatus(notAfter?: string): CertificateStatus {
   if (expiresAt - now <= 30 * 24 * 60 * 60 * 1000) return "expiring";
   return "valid";
 }
-

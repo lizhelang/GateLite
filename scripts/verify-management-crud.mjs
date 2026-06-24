@@ -10,6 +10,7 @@ const originalHttpHost = `crud-${suffix}.localhost`;
 const editedHttpHost = `crud-edit-${suffix}.localhost`;
 const defaultFallbackHost = `unmatched-${suffix}.localhost`;
 const httpsHost = `crud-tls-${suffix}.localhost`;
+const editedHttpsHost = `crud-tls-edit-${suffix}.localhost`;
 
 const created = {
   groupId: "",
@@ -39,7 +40,7 @@ try {
   await deleteAndVerifyDefaultHttpService(defaultService.id);
   created.defaultServiceId = "";
 
-  const httpsService = await createAndVerifyHttpsService(group.id, certificate.id);
+  const httpsService = await createAndVerifyHttpsService(group.id, certificate.id, certificate.domains[0] || editedHttpsHost);
   created.httpsServiceId = httpsService.id;
   await verifyCertificateBinding(certificate.id, httpsService.id);
   await reorderAndVerifyServices([httpsService.id, httpService.id]);
@@ -108,6 +109,19 @@ async function createAndVerifyCertificate() {
     throw new Error("Certificate edit was not persisted.");
   }
 
+  const regenerated = await apiJson(`/api/certificates/${certificate.id}`, {
+    method: "PUT",
+    body: {
+      name: `CRUD TLS renamed ${suffix}`,
+      source: "self-signed",
+      domains: [editedHttpsHost],
+      days: 120
+    }
+  });
+  if (!regenerated.domains.includes(editedHttpsHost) || regenerated.status !== "valid" || !regenerated.notAfter) {
+    throw new Error("Certificate edit did not regenerate a valid self-signed certificate with the updated SAN.");
+  }
+
   const disabled = await apiJson(`/api/certificates/${certificate.id}/toggle`, {
     method: "PATCH",
     body: { enabled: false }
@@ -122,7 +136,7 @@ async function createAndVerifyCertificate() {
   if (enabled.enabled !== true) {
     throw new Error("Certificate enable toggle was not persisted.");
   }
-  console.log("[ok] Certificate create, edit, status, expiry, and enable toggles work.");
+  console.log("[ok] Certificate create, edit, SAN regeneration, status, expiry, and enable toggles work.");
   return enabled;
 }
 
@@ -261,14 +275,14 @@ async function deleteAndVerifyDefaultHttpService(serviceId) {
   console.log("[ok] Default Web service fallback is removed when deleted.");
 }
 
-async function createAndVerifyHttpsService(groupId, certificateId) {
+async function createAndVerifyHttpsService(groupId, certificateId, host = httpsHost) {
   const service = await apiJson("/api/web-services", {
     method: "POST",
     body: {
       name: `CRUD HTTPS ${suffix}`,
       enabled: true,
       groupId,
-      domains: [httpsHost],
+      domains: [host],
       listenPort: 18443,
       entryPoints: ["websecure"],
       targetUrl: "http://whoami:80",
@@ -278,10 +292,10 @@ async function createAndVerifyHttpsService(groupId, certificateId) {
     },
     expectedStatus: 201
   });
-  await waitForHttpRoute(httpsHost, "https");
-  const body = await routeText(httpsRouteUrl, httpsHost, { allowSelfSigned: true });
-  assertIncludes(body, `Host: ${httpsHost}`, httpsHost);
-  assertIncludes(body, "X-Forwarded-Proto: https", httpsHost);
+  await waitForHttpRoute(host, "https");
+  const body = await routeText(httpsRouteUrl, host, { allowSelfSigned: true });
+  assertIncludes(body, `Host: ${host}`, host);
+  assertIncludes(body, "X-Forwarded-Proto: https", host);
   console.log("[ok] Web service create applies an HTTPS/TLS Traefik route.");
   return service;
 }

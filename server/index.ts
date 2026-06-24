@@ -4,7 +4,7 @@ import path from "node:path";
 import { z } from "zod";
 import type { CertificateWithBindings, DashboardPayload, WebService, WebServiceWithRuntime } from "../shared/types";
 import { config } from "./config";
-import { createCertificateFromInput } from "./certificates";
+import { createCertificateFromInput, updateCertificateFromInput } from "./certificates";
 import { createId, traefikName } from "./ids";
 import { getTrafficSnapshot } from "./metrics";
 import { certificateInputSchema, groupInputSchema, reorderSchema, webServiceInputSchema } from "./schemas";
@@ -168,12 +168,7 @@ app.put("/api/certificates/:id", (request, response) => {
   if (index === -1) return response.status(404).json({ error: "Certificate not found." });
 
   const current = state.certificates[index];
-  state.certificates[index] = {
-    ...current,
-    ...parsed,
-    domains: parsed.domains ? normalizeDomains(parsed.domains) : current.domains,
-    updatedAt: new Date().toISOString()
-  };
+  state.certificates[index] = updateCertificateFromInput(current, parsed);
   const next = saveState(state, "certificate.update", `Updated certificate ${state.certificates[index].name}.`);
   response.json(next.certificates.find((certificate) => certificate.id === request.params.id));
 });
