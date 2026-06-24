@@ -503,9 +503,11 @@ function CertificateForm({
         }
       : { ...emptyDraft, source: initialSource }
   );
+  const uploadPemStarted = draft.source === "upload" && (draft.certPem.trim().length > 0 || draft.keyPem.trim().length > 0);
+  const uploadPemRequired = draft.source === "upload" && (!certificate || certificate.source !== "upload" || uploadPemStarted);
   const submitDisabled =
     saving ||
-    (draft.source === "upload" && (!draft.certPem.trim() || !draft.keyPem.trim())) ||
+    (uploadPemRequired && (!draft.certPem.trim() || !draft.keyPem.trim())) ||
     (draft.source === "path" && (!draft.certPath.trim() || !draft.keyPath.trim())) ||
     (draft.source === "sync" && !draft.syncTarget.trim());
 
@@ -560,10 +562,10 @@ function CertificateForm({
 
         {draft.source === "upload" ? (
           <>
-            <Field className="md:col-span-2" label={t("Certificate PEM", "证书 PEM")}>
+            <Field className="md:col-span-2" label={certificate?.source === "upload" ? t("Certificate PEM replacement", "替换证书 PEM") : t("Certificate PEM", "证书 PEM")}>
               <Textarea value={draft.certPem} onChange={(event) => setDraft({ ...draft, certPem: event.target.value })} rows={6} placeholder="-----BEGIN CERTIFICATE-----" />
             </Field>
-            <Field className="md:col-span-2" label={t("Private key PEM", "私钥 PEM")}>
+            <Field className="md:col-span-2" label={certificate?.source === "upload" ? t("Private key PEM replacement", "替换私钥 PEM") : t("Private key PEM", "私钥 PEM")}>
               <Textarea value={draft.keyPem} onChange={(event) => setDraft({ ...draft, keyPem: event.target.value })} rows={6} placeholder="-----BEGIN PRIVATE KEY-----" />
             </Field>
           </>
