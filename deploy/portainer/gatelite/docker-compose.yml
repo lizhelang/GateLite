@@ -22,7 +22,7 @@ services:
     labels:
       - traefik.enable=true
       - traefik.docker.network=proxy
-      - traefik.http.routers.gatelite.rule=Host(`${GATELITE_HOST:-gatelite.1804.surfacer.cc}`)
+      - traefik.http.routers.gatelite.rule=Host(`${GATELITE_HOST:-gl.erp.tjhtj.com}`)
       - traefik.http.routers.gatelite.entrypoints=websecure
       - traefik.http.routers.gatelite.tls=true
       - traefik.http.services.gatelite.loadbalancer.server.port=3001
