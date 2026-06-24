@@ -1,6 +1,7 @@
 import express from "express";
 import fs from "node:fs";
 import path from "node:path";
+import zlib from "node:zlib";
 import { z } from "zod";
 import type { CertificateItem, CertificatePreview, CertificateWithBindings, DashboardPayload, DiscoveredRoute, ImportRoutePreview, ImportRoutesResult, WebService, WebServicePreview, WebServiceWithRuntime } from "../shared/types";
 import { certificateCoversDomain, resolverName, webServicesBoundToCertificate } from "./bindings";
@@ -21,6 +22,7 @@ ensureState();
 
 const app = express();
 app.use(express.json({ limit: "4mb" }));
+const gzipAssetCache = new Map<string, { mtimeMs: number; content: Buffer }>();
 
 const importRouteSchema = z.object({
   routerName: z.string().trim().min(1),
@@ -430,6 +432,7 @@ app.post("/api/history/:id/rollback", async (request, response) => {
 
 const distDir = path.resolve(process.cwd(), "dist");
 if (fs.existsSync(distDir)) {
+  app.use(serveCompressedStaticAsset);
   app.use(express.static(distDir));
   app.use((_request, response) => {
     response.sendFile(path.join(distDir, "index.html"));
@@ -487,6 +490,43 @@ async function dashboardPayload(): Promise<DashboardPayload> {
     traffic: trafficSnapshot.overview,
     history: historyEventsForState(state)
   };
+}
+
+function serveCompressedStaticAsset(request: express.Request, response: express.Response, next: express.NextFunction) {
+  if (request.method !== "GET" && request.method !== "HEAD") return next();
+  if (!request.acceptsEncodings("gzip")) return next();
+  if (!/^\/assets\/.+\.(?:js|css)$/i.test(request.path)) return next();
+
+  const filePath = safeDistPath(request.path);
+  if (!filePath) return next();
+
+  try {
+    const stat = fs.statSync(filePath);
+    if (!stat.isFile()) return next();
+    const cached = gzipAssetCache.get(filePath);
+    const content = cached && cached.mtimeMs === stat.mtimeMs ? cached.content : zlib.gzipSync(fs.readFileSync(filePath), { level: 6 });
+
+    if (!cached || cached.mtimeMs !== stat.mtimeMs) {
+      gzipAssetCache.set(filePath, { mtimeMs: stat.mtimeMs, content });
+    }
+
+    response.setHeader("Content-Encoding", "gzip");
+    response.setHeader("Vary", "Accept-Encoding");
+    response.setHeader("Content-Length", content.length);
+    response.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+    response.type(path.extname(filePath));
+    if (request.method === "HEAD") return response.end();
+    return response.end(content);
+  } catch {
+    return next();
+  }
+}
+
+function safeDistPath(requestPath: string): string | undefined {
+  const relativePath = decodeURIComponent(requestPath).replace(/^\/+/, "");
+  const filePath = path.resolve(distDir, relativePath);
+  if (filePath !== distDir && !filePath.startsWith(`${distDir}${path.sep}`)) return undefined;
+  return filePath;
 }
 
 async function loadImportableDiscoveredRoute(state: ReturnType<typeof loadState>, routerName: string): Promise<DiscoveredRoute> {
