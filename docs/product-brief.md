@@ -29,15 +29,18 @@ API/configuration model as the source of truth.
 
 ## Primary Workflows
 
-### Web Services
+### Web Services / Reverse Proxy Rules
 
-Goal: make it visually obvious which domains are in use and where they point.
+Goal: make it visually obvious which frontend domains are in use and which
+backend IP:port each reverse proxy rule points to.
 
 The first Web Services screen should answer:
 
 - Which domains are currently active?
 - Which router owns each domain?
 - Which backend service receives the traffic?
+- What are the per-row downstream bytes, upstream bytes, and current
+  connection count from Traefik metrics?
 - Is TLS enabled, passthrough, or missing?
 - Which entrypoints and middlewares apply?
 - Which provider produced the route?
@@ -79,4 +82,3 @@ GateLite should show Traefik dashboard/API-level information for:
 - Human UI and Agent API use the same backend validation layer.
 - GateLite should prefer Traefik-supported configuration surfaces instead of
   inventing a private runtime format.
-

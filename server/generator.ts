@@ -32,7 +32,7 @@ export function generateTraefikDynamicConfig(state: GateLiteState): GeneratedCon
     services[serviceName] = {
       loadBalancer: {
         servers: [{ url: service.targetUrl }],
-        passHostHeader: true
+        passHostHeader: service.passHostHeader ?? true
       }
     };
   }

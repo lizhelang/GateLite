@@ -34,7 +34,7 @@ const views: Array<{ key: ViewKey; label: { en: string; zh: string }; descriptio
   {
     key: "web",
     label: { en: "Web Services", zh: "Web 服务" },
-    description: { en: "Domains, upstreams, groups", zh: "域名、后端、分组" },
+    description: { en: "Reverse proxy rules", zh: "反代规则" },
     icon: Globe2
   },
   {

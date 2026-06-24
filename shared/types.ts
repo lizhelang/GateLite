@@ -28,6 +28,7 @@ export interface WebService {
   listenPort: number;
   entryPoints: string[];
   targetUrl: string;
+  passHostHeader?: boolean;
   middlewares: string[];
   priority?: number;
   tls: WebServiceTls;

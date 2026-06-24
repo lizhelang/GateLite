@@ -11,6 +11,7 @@ export const webServiceInputSchema = z
     listenPort: z.coerce.number().int().min(1).max(65535).default(18080),
     entryPoints: z.array(z.string().trim().min(1)).min(1).default(["web"]),
     targetUrl: z.string().trim().url(),
+    passHostHeader: z.boolean().default(true),
     middlewares: z.array(z.string().trim()).default([]),
     priority: z.coerce.number().int().optional(),
     tls: z

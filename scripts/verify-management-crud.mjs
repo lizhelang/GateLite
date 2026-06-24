@@ -258,20 +258,23 @@ async function createAndVerifyCustomHttpService(groupId) {
       listenPort: 18080,
       entryPoints: ["web"],
       targetUrl: "http://whoami:80",
+      passHostHeader: false,
       middlewares: [],
       tls: { mode: "none" },
       notes: "Temporary custom Traefik rule created by verify:crud."
     },
     expectedStatus: 201
   });
-  if (service.matchMode !== "custom" || service.customRule !== customRule) {
+  if (service.matchMode !== "custom" || service.customRule !== customRule || service.passHostHeader !== false) {
     throw new Error("Custom Web service rule was not persisted.");
   }
   await waitForCustomHttpRoute(customHttpHost, customRule);
+  await verifyGeneratedConfigIncludes(`gatelite-service-${service.id}:`, "custom Web service generated backend");
+  await verifyGeneratedConfigIncludes("passHostHeader: false", "custom Web service passHostHeader=false");
   const body = await routeText(httpRouteUrl, customHttpHost, { path: "/agent/check" });
   assertIncludes(body, `Host: ${customHttpHost}`, customHttpHost);
   assertIncludes(body, "GET /agent/check HTTP/1.1", customHttpHost);
-  console.log("[ok] Web service custom Traefik rule applies a Host plus PathPrefix route.");
+  console.log("[ok] Web service custom Traefik rule applies a Host plus PathPrefix route and writes passHostHeader=false.");
   return service;
 }
 
@@ -471,6 +474,14 @@ async function requestJson(url) {
     throw new Error(`${url} returned HTTP ${response.status}: ${response.body.slice(0, 300)}`);
   }
   return JSON.parse(response.body);
+}
+
+async function verifyGeneratedConfigIncludes(fragment, label) {
+  const response = await request(`${gateliteApiUrl}/api/generated-config`);
+  if (response.status < 200 || response.status >= 300) {
+    throw new Error(`generated config request returned HTTP ${response.status}: ${response.body.slice(0, 300)}`);
+  }
+  assertIncludes(response.body, fragment, label);
 }
 
 async function routeText(url, host, options = {}) {

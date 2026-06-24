@@ -40,6 +40,8 @@ GateLite MVP mapping:
 - Domain list -> `Host(...)` rule projection.
 - Listening port -> local host port hint for the configured Traefik entrypoint.
 - Backend address -> Traefik service server URL.
+- Backend Host forwarding -> per-service `passHostHeader` switch, defaulting to
+  Traefik's normal frontend Host behavior.
 - TLS/SNI -> file certificate or cert-resolver mode.
 - Default rule / unmatched-domain fallback -> managed Traefik catch-all router
   using `PathPrefix(`/`)` with low priority.
@@ -50,6 +52,9 @@ GateLite MVP mapping:
   `copy-` frontend domain.
 - Multi-select rows -> shadcn-style table selection with batch enable/disable
   for visible Web service rules.
+- Web service page shape -> dense reverse-proxy rule table where each row
+  exposes frontend domain, backend IP:port, downstream/upstream bytes, and
+  current connection count instead of a bulky service card.
 
 ## SSL/TLS Core Behaviors
 

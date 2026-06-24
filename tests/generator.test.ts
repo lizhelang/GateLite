@@ -32,6 +32,7 @@ describe("generateTraefikDynamicConfig", () => {
           listenPort: 18080,
           entryPoints: ["web"],
           targetUrl: "http://whoami:80",
+          passHostHeader: false,
           middlewares: [],
           tls: { mode: "none" },
           order: 1,
@@ -61,6 +62,7 @@ describe("generateTraefikDynamicConfig", () => {
 
     expect(generated.yaml).toContain("Host(`plain.localhost`)");
     expect(generated.yaml).toContain("Host(`secure.localhost`)");
+    expect(generated.yaml).toContain("passHostHeader: false");
     expect(generated.yaml).toContain("websecure");
     expect(generated.yaml).toContain("compress@file");
     expect(generated.yaml).toContain("/certs/cert-dev.crt");

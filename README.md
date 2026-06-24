@@ -21,10 +21,12 @@ configuration generation, rollback, and agent-friendly automation.
 
 ## Initial Product Scope
 
-1. Web services
+1. Web services / reverse proxy rules
    - Show which domains are currently in use.
-   - Connect each domain to its router, service, backend target, entrypoints,
-     middleware chain, TLS mode, provider, and current health/config status.
+   - Show each frontend domain, backend IP:port, downstream/upstream bytes, and
+     live connection count in one dense rule row.
+   - Connect each rule to its router, service, entrypoints, middleware chain,
+     TLS mode, provider, and current health/config status.
    - Make common route creation feel closer to Lucky than raw Traefik YAML.
 
 2. SSL/TLS certificate management
