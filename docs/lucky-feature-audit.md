@@ -90,6 +90,10 @@ GateLite MVP mapping:
 - Backend address input -> accepts Lucky-style bare `IP:port` / `host:port`
   values from both UI and agent API, normalizing them to Traefik server URLs
   before writing file-provider config.
+- Domain occupancy protection -> enabled Host rules cannot reuse the same
+  frontend domain on the same Traefik entrypoint, and disabled duplicate
+  drafts are blocked when enabled, keeping the domain list truthful and the
+  generated router set unambiguous.
 
 ## SSL/TLS Core Behaviors
 

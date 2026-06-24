@@ -112,6 +112,34 @@ describe("validateWebService", () => {
   it("keeps blank rule names displayable by domain", () => {
     expect(webServiceLabel(webService({ name: "" }))).toBe("secure.localhost");
   });
+
+  it("rejects duplicate enabled frontend domains on the same entrypoint", () => {
+    const existing = webService({ id: "svc-existing", domains: ["app.localhost"], entryPoints: ["web"] });
+    const duplicate = webService({ id: "svc-duplicate", domains: ["app.localhost"], entryPoints: ["web"], tls: { mode: "none" } });
+
+    expect(() => validateWebService(duplicate, state({ webServices: [existing] }))).toThrow(/already used/);
+  });
+
+  it("allows the same frontend domain on different entrypoints", () => {
+    const existing = webService({ id: "svc-existing", domains: ["app.localhost"], entryPoints: ["web"], tls: { mode: "none" } });
+    const secure = webService({ id: "svc-secure", domains: ["app.localhost"], entryPoints: ["websecure"] });
+
+    expect(() => validateWebService(secure, state({ webServices: [existing] }))).not.toThrow();
+  });
+
+  it("allows editing the same service without treating its own domain as a conflict", () => {
+    const existing = webService({ id: "svc-existing", domains: ["app.localhost"], entryPoints: ["websecure"] });
+    const edited = webService({ id: "svc-existing", name: "Renamed", domains: ["app.localhost"], entryPoints: ["websecure"] });
+
+    expect(() => validateWebService(edited, state({ webServices: [existing] }))).not.toThrow();
+  });
+
+  it("rejects duplicate enabled default fallback rules on the same entrypoint", () => {
+    const existing = webService({ id: "svc-default-a", matchMode: "default", domains: [], entryPoints: ["web"], tls: { mode: "none" } });
+    const duplicate = webService({ id: "svc-default-b", matchMode: "default", domains: [], entryPoints: ["web"], tls: { mode: "none" } });
+
+    expect(() => validateWebService(duplicate, state({ webServices: [existing] }))).toThrow(/Default fallback already exists/);
+  });
 });
 
 describe("webServiceInputSchema", () => {

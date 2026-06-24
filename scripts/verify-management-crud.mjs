@@ -28,6 +28,7 @@ const created = {
   certificateId: "",
   acmeCertificateId: "",
   httpServiceId: "",
+  duplicateHttpServiceId: "",
   customServiceId: "",
   defaultServiceId: "",
   httpsServiceId: "",
@@ -60,6 +61,7 @@ try {
   const httpService = await createAndVerifyHttpService(group.id);
   created.httpServiceId = httpService.id;
 
+  await verifyDuplicateDomainProtection(group.id, httpService.domains[0]);
   await updateAndVerifyHttpService(httpService, group.id);
   await toggleAndVerifyHttpService(httpService.id);
   const customService = await createAndVerifyCustomHttpService(group.id);
@@ -403,6 +405,59 @@ async function createAndVerifyHttpService(groupId) {
   assertIncludes(body, "X-Forwarded-Proto: http", originalHttpHost);
   console.log("[ok] Web service create accepts a blank rule name and applies an HTTP Traefik route.");
   return service;
+}
+
+async function verifyDuplicateDomainProtection(groupId, host) {
+  const duplicateResponse = await request(`${gateliteApiUrl}/api/web-services`, {
+    method: "POST",
+    body: JSON.stringify({
+      name: `CRUD duplicate ${suffix}`,
+      enabled: true,
+      groupId,
+      domains: [host],
+      listenPort: 18080,
+      entryPoints: ["web"],
+      targetUrl: "whoami:80",
+      middlewares: [],
+      tls: { mode: "none" }
+    }),
+    headers: { "Content-Type": "application/json" }
+  });
+  if (duplicateResponse.status !== 400 || !duplicateResponse.body.includes("already used")) {
+    throw new Error(`Duplicate enabled Web service domain should return HTTP 400, got ${duplicateResponse.status}: ${duplicateResponse.body.slice(0, 300)}`);
+  }
+
+  const disabledDuplicate = await apiJson("/api/web-services", {
+    method: "POST",
+    body: {
+      name: `CRUD disabled duplicate ${suffix}`,
+      enabled: false,
+      groupId,
+      domains: [host],
+      listenPort: 18080,
+      entryPoints: ["web"],
+      targetUrl: "whoami:80",
+      middlewares: [],
+      tls: { mode: "none" },
+      notes: "Disabled duplicate route created by verify:crud."
+    },
+    expectedStatus: 201
+  });
+  created.duplicateHttpServiceId = disabledDuplicate.id;
+
+  const toggleResponse = await request(`${gateliteApiUrl}/api/web-services/${disabledDuplicate.id}/toggle`, {
+    method: "PATCH",
+    body: JSON.stringify({ enabled: true }),
+    headers: { "Content-Type": "application/json" }
+  });
+  if (toggleResponse.status !== 400 || !toggleResponse.body.includes("already used")) {
+    throw new Error(`Enabling a disabled duplicate Web service domain should return HTTP 400, got ${toggleResponse.status}: ${toggleResponse.body.slice(0, 300)}`);
+  }
+
+  await apiNoContent(`/api/web-services/${disabledDuplicate.id}`, "DELETE");
+  created.duplicateHttpServiceId = "";
+  await waitForHttpRoute(host, "http");
+  console.log("[ok] Web service duplicate domain protection works on create and enable.");
 }
 
 async function updateAndVerifyHttpService(service, groupId) {
@@ -791,6 +846,7 @@ async function cleanup() {
   await ignoreNotFound(async () => created.httpsServiceId && apiNoContent(`/api/web-services/${created.httpsServiceId}`, "DELETE"));
   await ignoreNotFound(async () => created.defaultServiceId && apiNoContent(`/api/web-services/${created.defaultServiceId}`, "DELETE"));
   await ignoreNotFound(async () => created.customServiceId && apiNoContent(`/api/web-services/${created.customServiceId}`, "DELETE"));
+  await ignoreNotFound(async () => created.duplicateHttpServiceId && apiNoContent(`/api/web-services/${created.duplicateHttpServiceId}`, "DELETE"));
   await ignoreNotFound(async () => created.httpServiceId && apiNoContent(`/api/web-services/${created.httpServiceId}`, "DELETE"));
   await ignoreNotFound(async () => created.acmeCertificateId && apiNoContent(`/api/certificates/${created.acmeCertificateId}`, "DELETE"));
   await ignoreNotFound(async () => created.syncedCertificateId && apiNoContent(`/api/certificates/${created.syncedCertificateId}`, "DELETE"));

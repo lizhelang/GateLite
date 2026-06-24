@@ -86,8 +86,13 @@ app.patch("/api/web-services/:id/toggle", (request, response) => {
   const state = loadState();
   const service = state.webServices.find((item) => item.id === request.params.id);
   if (!service) return response.status(404).json({ error: "Web service not found." });
-  service.enabled = enabled;
-  service.updatedAt = new Date().toISOString();
+  const updated: WebService = {
+    ...service,
+    enabled,
+    updatedAt: new Date().toISOString()
+  };
+  validateWebService(updated, state);
+  Object.assign(service, updated);
   const next = saveState(state, "web-service.toggle", `${enabled ? "Enabled" : "Disabled"} Web service ${webServiceLabel(service)}.`);
   response.json(next.webServices.find((item) => item.id === service.id));
 });
