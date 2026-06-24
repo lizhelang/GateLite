@@ -55,6 +55,12 @@ GateLite MVP mapping:
 - Web service page shape -> dense reverse-proxy rule table where each row
   exposes frontend domain, backend IP:port, downstream/upstream bytes, and
   current connection count instead of a bulky service card.
+- Lucky-style rule creation -> `New rule` creates the parent domain rule
+  context, while `New sub-rule` is only enabled inside a selected domain and
+  pre-fills that parent domain so users add a subdomain-to-backend mapping.
+- Web service detail view -> explicit row action opens a compact rule detail
+  dialog with frontend/backend mapping, generated Traefik rule, runtime status,
+  TLS, Host header behavior, traffic, and notes.
 
 ## SSL/TLS Core Behaviors
 

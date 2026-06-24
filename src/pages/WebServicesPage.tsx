@@ -5,6 +5,7 @@ import {
   Copy,
   Download,
   ExternalLink,
+  FileText,
   GripVertical,
   Layers,
   Link2,
@@ -104,6 +105,7 @@ const selectClass = "h-8 w-full rounded-lg border border-input bg-background px-
 export function WebServicesPage({ dashboard, onRefresh }: WebServicesPageProps) {
   const { t } = useLanguage();
   const [editing, setEditing] = useState<WebServiceWithRuntime | null>(null);
+  const [detailsRoute, setDetailsRoute] = useState<DomainRoute | null>(null);
   const [createMode, setCreateMode] = useState<"rule" | "subrule" | "default">("rule");
   const [draftPreset, setDraftPreset] = useState<Partial<DraftService> | null>(null);
   const [showForm, setShowForm] = useState(false);
@@ -134,9 +136,12 @@ export function WebServicesPage({ dashboard, onRefresh }: WebServicesPageProps) 
   };
 
   const openEdit = (service: WebServiceWithRuntime) => {
+    const domains = domainsToDraft(service.domains);
+    const labels = splitList(domains.subdomainsText);
+    const isRootHostRule = service.matchMode !== "custom" && labels.length > 0 && labels.every((label) => normalizeDomain(label) === "@");
     setEditing(service);
     setDraftPreset(null);
-    setCreateMode(service.matchMode === "default" ? "default" : "subrule");
+    setCreateMode(service.matchMode === "default" ? "default" : isRootHostRule ? "rule" : "subrule");
     setShowForm(true);
   };
 
@@ -322,7 +327,7 @@ export function WebServicesPage({ dashboard, onRefresh }: WebServicesPageProps) 
           </Button>
           <Button type="button" onClick={() => openCreate("rule")}>
             <Plus className="size-4" />
-            {t("New reverse proxy rule", "新建反代规则")}
+            {t("New rule", "新建规则")}
           </Button>
         </div>
       </div>
@@ -348,6 +353,7 @@ export function WebServicesPage({ dashboard, onRefresh }: WebServicesPageProps) 
         onToggle={handleToggle}
         onBulkToggle={handleBulkToggle}
         onDuplicate={openDuplicate}
+        onDetails={setDetailsRoute}
         onEdit={openEdit}
         onDelete={handleDelete}
       />
@@ -385,6 +391,12 @@ export function WebServicesPage({ dashboard, onRefresh }: WebServicesPageProps) 
           }}
         />
       ) : null}
+
+      {detailsRoute ? (
+        <Modal title={displayRouteName(detailsRoute, t)} subtitle={t("Reverse proxy rule details, generated Traefik match, runtime state, and traffic.", "反代规则详情、生成的 Traefik 匹配、运行状态和流量。")} onClose={() => setDetailsRoute(null)}>
+          <RouteDetails route={detailsRoute} />
+        </Modal>
+      ) : null}
     </section>
   );
 }
@@ -400,6 +412,7 @@ function RouteDataTable({
   onToggle,
   onBulkToggle,
   onDuplicate,
+  onDetails,
   onEdit,
   onDelete
 }: {
@@ -413,6 +426,7 @@ function RouteDataTable({
   onToggle: (service: WebServiceWithRuntime) => Promise<void>;
   onBulkToggle: (enabled: boolean) => Promise<void>;
   onDuplicate: (route: DomainRoute) => void;
+  onDetails: (route: DomainRoute) => void;
   onEdit: (service: WebServiceWithRuntime) => void;
   onDelete: (service: WebServiceWithRuntime) => Promise<void>;
 }) {
@@ -423,37 +437,37 @@ function RouteDataTable({
   return (
     <div className="overflow-hidden rounded-xl border bg-card/70">
       <div className="overflow-x-auto">
-        <Table className="min-w-[1120px]">
+        <Table className="min-w-[1280px]">
           <TableHeader className="bg-muted/50">
             <TableRow className="hover:bg-transparent">
               <TableHead className="w-8" />
               <TableHead className="w-9">
                 <Checkbox aria-label={t("Select visible rules", "选择当前规则")} checked={allVisibleSelected} onCheckedChange={(checked) => onSelectAll(Boolean(checked))} />
               </TableHead>
-              <TableHead className="w-[15rem]">{t("Rule", "规则")}</TableHead>
-              <TableHead className="w-[20rem]">{t("Frontend domain", "前端域名")}</TableHead>
-              <TableHead className="w-[20rem]">{t("Backend IP:port", "后端 IP:端口")}</TableHead>
-              <TableHead className="w-28">
+              <TableHead className="w-[14rem]">{t("Rule", "规则")}</TableHead>
+              <TableHead className="w-[19rem]">{t("Frontend domain", "前端域名")}</TableHead>
+              <TableHead className="w-[19rem]">{t("Backend IP:port", "后端 IP:端口")}</TableHead>
+              <TableHead className="w-32">
                 <span className="inline-flex items-center gap-1">
                   <Download className="size-3.5" />
-                  {t("Down", "下行")}
+                  {t("Down traffic", "下行流量")}
+                </span>
+              </TableHead>
+              <TableHead className="w-32">
+                <span className="inline-flex items-center gap-1">
+                  <Upload className="size-3.5" />
+                  {t("Up traffic", "上行流量")}
                 </span>
               </TableHead>
               <TableHead className="w-28">
                 <span className="inline-flex items-center gap-1">
-                  <Upload className="size-3.5" />
-                  {t("Up", "上行")}
-                </span>
-              </TableHead>
-              <TableHead className="w-24">
-                <span className="inline-flex items-center gap-1">
                   <Link2 className="size-3.5" />
-                  {t("Conn.", "连接")}
+                  {t("Live conn.", "实时连接")}
                 </span>
               </TableHead>
               <TableHead className="w-28">{t("Status", "状态")}</TableHead>
               <TableHead className="w-32">TLS</TableHead>
-              <TableHead className="w-32 text-right">{t("Actions", "操作")}</TableHead>
+              <TableHead className="w-40 text-right">{t("Actions", "操作")}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -496,14 +510,17 @@ function RouteDataTable({
                     </div>
                   </TableCell>
                   <TableCell>
-                    {frontend.href ? (
-                      <a className="inline-flex max-w-full items-center gap-1 truncate font-mono text-sm text-cyan-100 hover:text-cyan-200" href={frontend.href} target="_blank" rel="noreferrer" onClick={(event) => event.stopPropagation()}>
-                        <span className="truncate">{frontend.label}</span>
-                        <ExternalLink className="size-3.5 shrink-0" />
-                      </a>
-                    ) : (
-                      <span className="inline-flex max-w-full truncate font-mono text-sm text-amber-100">{frontend.label}</span>
-                    )}
+                    <div className="grid min-w-0 gap-0.5">
+                      {frontend.href ? (
+                        <a className="inline-flex max-w-full items-center gap-1 truncate font-mono text-sm text-cyan-100 hover:text-cyan-200" href={frontend.href} target="_blank" rel="noreferrer" onClick={(event) => event.stopPropagation()}>
+                          <span className="truncate">{frontend.label}</span>
+                          <ExternalLink className="size-3.5 shrink-0" />
+                        </a>
+                      ) : (
+                        <span className="inline-flex max-w-full truncate font-mono text-sm text-amber-100">{frontend.label}</span>
+                      )}
+                      <span className="truncate text-xs text-muted-foreground">{frontend.meta}</span>
+                    </div>
                   </TableCell>
                   <TableCell>
                     <div className="flex min-w-0 items-center gap-2">
@@ -534,6 +551,9 @@ function RouteDataTable({
                   </TableCell>
                   <TableCell>
                     <div className="flex items-center justify-end gap-1" onClick={(event) => event.stopPropagation()}>
+                      <Button variant="outline" size="icon-xs" onClick={() => onDetails(route)} aria-label={t("View rule details", "查看规则详情")}>
+                        <FileText className="size-3.5" />
+                      </Button>
                       <Button variant="outline" size="icon-xs" onClick={() => void onToggle(service)} aria-label={t("Toggle rule", "切换规则启用状态")}>
                         <Power className="size-3.5" />
                       </Button>
@@ -583,22 +603,79 @@ function TrafficValue({ value, tone }: { value: number; tone: "down" | "up" }) {
   return <span className={`font-mono text-sm ${toneClass}`}>{formatBytes(value)}</span>;
 }
 
+function RouteDetails({ route }: { route: DomainRoute }) {
+  const { t } = useLanguage();
+  const service = route.service;
+  const traffic = service.traffic;
+  const frontend = formatFrontendEndpoint(route, service, t);
+  const backend = formatBackendTarget(service.targetUrl);
+  const isRootRule = route.labels.some((label) => label === "@");
+  return (
+    <div className="grid gap-4">
+      <div className="grid gap-3 rounded-xl border bg-background/35 p-4 text-sm md:grid-cols-3">
+        <DetailCell label={t("Rule type", "规则类型")} value={routeKindLabel(route, isRootRule, t)} />
+        <DetailCell label={t("Group", "分组")} value={route.groupName} />
+        <DetailCell label={t("Status", "状态")} value={service.enabled ? service.runtime?.status || "unknown" : "disabled"} />
+        <DetailCell label={t("Frontend domain", "前端域名")} value={`${frontend.label} · ${frontend.meta}`} mono />
+        <DetailCell label={t("Backend IP:port", "后端 IP:端口")} value={`${backend.hostPort} (${backend.scheme})`} mono />
+        <DetailCell label={t("Host header", "Host 头")} value={service.passHostHeader === false ? t("Backend host", "后端 Host") : t("Frontend host", "前端 Host")} />
+      </div>
+
+      <div className="grid gap-3 rounded-xl border bg-background/35 p-4 text-sm md:grid-cols-3">
+        <DetailCell label={t("Traefik rule", "Traefik 规则")} value={service.runtime?.rule || fallbackRuleText(service)} mono className="md:col-span-2" />
+        <DetailCell label={t("Runtime router", "运行时路由")} value={service.runtime?.name || t("Unmatched", "未匹配")} mono />
+        <DetailCell label={t("Entrypoints", "入口点")} value={service.entryPoints.join(", ")} />
+        <DetailCell label={t("Middlewares", "中间件")} value={service.middlewares.length ? service.middlewares.join(", ") : t("None", "无")} />
+        <DetailCell label="TLS" value={tlsDetailText(service, t)} />
+      </div>
+
+      <div className="grid gap-3 rounded-xl border bg-background/35 p-4 text-sm md:grid-cols-4">
+        <DetailCell label={t("Requests", "请求数")} value={`${traffic?.totalRequests || 0}`} mono />
+        <DetailCell label={t("Downstream", "下行")} value={formatBytes(traffic?.responseBytes || 0)} mono />
+        <DetailCell label={t("Upstream", "上行")} value={formatBytes(traffic?.requestBytes || 0)} mono />
+        <DetailCell label={t("Live connections", "实时连接")} value={`${traffic?.openConnections ?? 0}`} mono />
+      </div>
+
+      {service.notes ? (
+        <div className="rounded-xl border bg-background/35 p-4 text-sm">
+          <div className="mb-1 text-xs text-muted-foreground">{t("Notes", "备注")}</div>
+          <div className="whitespace-pre-wrap break-words">{service.notes}</div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function DetailCell({ label, value, mono, className }: { label: string; value: string; mono?: boolean; className?: string }) {
+  return (
+    <div className={`grid min-w-0 gap-1 ${className || ""}`}>
+      <dt className="text-xs text-muted-foreground">{label}</dt>
+      <dd className={`break-words font-medium ${mono ? "font-mono text-xs" : ""}`}>{value}</dd>
+    </div>
+  );
+}
+
 function formatFrontendEndpoint(
   route: DomainRoute,
   service: WebServiceWithRuntime,
   t: (english: string, chinese: string) => string
-): { label: string; href?: string } {
+): { label: string; meta: string; href?: string } {
   if (route.isDefault) {
-    return { label: t("Unmatched domains", "未匹配域名") };
+    return { label: t("Unmatched domains", "未匹配域名"), meta: t("Default fallback", "默认规则") };
   }
   if (!isOpenableDomain(route.primaryDomain)) {
     return {
-      label: service.matchMode === "custom" ? service.customRule || t("Custom Traefik rule", "自定义 Traefik 规则") : route.primaryDomain
+      label: service.matchMode === "custom" ? service.customRule || t("Custom Traefik rule", "自定义 Traefik 规则") : route.primaryDomain,
+      meta: service.matchMode === "custom" ? t("Custom match", "自定义匹配") : t("Not openable", "不可直接打开")
     };
   }
   const scheme = service.tls.mode === "none" ? "http" : "https";
-  const label = `${scheme}://${route.primaryDomain}:${service.listenPort}`;
-  return { label, href: label };
+  const href = `${scheme}://${route.primaryDomain}:${service.listenPort}`;
+  return {
+    label: route.primaryDomain,
+    meta: `${scheme.toUpperCase()} :${service.listenPort}`,
+    href
+  };
 }
 
 function GroupStrip({
@@ -701,22 +778,24 @@ function ServiceForm({
       ? t("Edit default rule", "编辑默认规则")
       : isCustomRule
       ? t("Edit custom rule", "编辑自定义规则")
-      : t("Edit sub-rule", "编辑子规则")
+      : mode === "subrule"
+      ? t("Edit sub-rule", "编辑子规则")
+      : t("Edit rule", "编辑规则")
     : mode === "default"
       ? t("New default rule", "新建默认规则")
       : isCustomRule
       ? t("New custom rule", "新建自定义规则")
       : mode === "subrule"
       ? t("New sub-rule", "新建子规则")
-      : t("New reverse proxy rule", "新建反代规则");
+      : t("New rule", "新建规则");
   const subtitle =
     isDefaultRule
       ? t("Fallback frontend traffic to one backend.", "把未匹配的前端请求转发到一个后端。")
       : isCustomRule
       ? t("Custom Traefik match, managed backend and TLS.", "自定义 Traefik 匹配，后端和 TLS 仍由 GateLite 管理。")
       : mode === "subrule"
-      ? t("Add a subdomain under the selected root domain.", "在当前根域名下添加一个子域名反代。")
-      : t("Frontend domain to backend IP:port.", "前端域名指向后端 IP:端口。");
+      ? t("Add one subdomain under the selected domain and point it to a backend IP:port.", "在当前域名下新增一个子域名，并指向后端 IP:端口。")
+      : t("Create a domain rule first; add sub-rules under this domain later.", "先创建一个域名规则，之后可以在这个域名下继续添加子规则。");
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
@@ -746,11 +825,11 @@ function ServiceForm({
       <form className="grid gap-3 md:grid-cols-2" onSubmit={(event) => void submit(event)}>
         {!isDefaultRule ? (
           <>
-            <Field label={mode === "subrule" ? t("Parent domain", "所属域名") : t("Root domain", "根域名")}>
+            <Field label={mode === "subrule" ? t("Parent domain", "所属域名") : t("Domain", "域名")}>
               <Input value={draft.domainRoot} onChange={(event) => setDraft({ ...draft, domainRoot: event.target.value })} placeholder="1804.surfacer.cc" disabled={mode === "subrule" && activeRoot !== "__all" && !service} />
             </Field>
-            <Field label={mode === "subrule" ? t("Sub-rule domain", "子规则域名") : t("Frontend domain", "前端域名")}>
-              <Input value={draft.subdomainsText} onChange={(event) => setDraft({ ...draft, subdomainsText: event.target.value })} placeholder={isCustomRule ? "optional display domain" : mode === "subrule" ? "qb" : "@, www"} required={draft.matchMode === "host" && mode === "subrule" && !service} />
+            <Field label={mode === "subrule" ? t("Subdomain", "子域名") : t("Frontend domain", "前端域名")}>
+              <Input value={draft.subdomainsText} onChange={(event) => setDraft({ ...draft, subdomainsText: event.target.value })} placeholder={isCustomRule ? "optional display domain" : mode === "subrule" ? "qb / pve / immich" : "@, www"} required={draft.matchMode === "host" && mode === "subrule" && !service} />
             </Field>
           </>
         ) : null}
@@ -762,7 +841,7 @@ function ServiceForm({
           backend={draft.targetUrl}
           isDefaultRule={isDefaultRule}
         />
-        <Field label={t("Rule name", "规则名称")}>
+        <Field label={t("Rule note/name", "规则备注名")}>
           <Input value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} placeholder={t("Optional", "可留空")} />
         </Field>
         <Field label={t("Group", "分组")}>
@@ -774,7 +853,7 @@ function ServiceForm({
             ))}
           </select>
         </Field>
-        <Field label={t("Rule type", "规则类型")}>
+        <Field label={t("Match mode", "匹配方式")}>
           <select className={selectClass} value={draft.matchMode} onChange={(event) => setDraft({ ...draft, matchMode: event.target.value as DraftService["matchMode"] })}>
             <option value="host">{t("Domain rule", "域名规则")}</option>
             <option value="custom">{t("Custom Traefik rule", "自定义 Traefik 规则")}</option>
@@ -946,6 +1025,18 @@ function routeKindLabel(route: DomainRoute, isRootRule: boolean, t: (english: st
   if (route.isDefault) return t("Default", "默认");
   if (route.service.matchMode === "custom") return t("Custom", "自定义");
   return isRootRule ? t("Rule", "规则") : t("Sub-rule", "子规则");
+}
+
+function fallbackRuleText(service: WebServiceWithRuntime): string {
+  if (service.matchMode === "default") return "PathPrefix(`/`)";
+  if (service.matchMode === "custom") return service.customRule || "";
+  return service.domains.map((domain) => `Host(\`${domain}\`)`).join(" || ");
+}
+
+function tlsDetailText(service: WebServiceWithRuntime, t: (english: string, chinese: string) => string): string {
+  if (service.tls.mode === "none") return "HTTP";
+  if (service.tls.mode === "resolver") return `${t("Resolver", "解析器")}: ${service.tls.resolver || "letsencrypt"}`;
+  return `${t("File certificate", "文件证书")}: ${service.tls.certificateId || t("Not selected", "未选择")}`;
 }
 
 function isOpenableDomain(value: string): boolean {
