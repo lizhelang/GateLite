@@ -2,10 +2,12 @@ import express from "express";
 import fs from "node:fs";
 import path from "node:path";
 import { z } from "zod";
-import type { CertificateItem, CertificateWithBindings, DashboardPayload, WebService, WebServiceWithRuntime } from "../shared/types";
+import type { CertificateItem, CertificateWithBindings, DashboardPayload, WebService, WebServicePreview, WebServiceWithRuntime } from "../shared/types";
 import { certificateCoversDomain, resolverName, webServicesBoundToCertificate } from "./bindings";
+import { diffText } from "./config-preview";
 import { config } from "./config";
 import { createCertificateFromInput, receiveSyncedCertificate, refreshCertificateFromAction, updateCertificateFromInput, type CertificateInput } from "./certificates";
+import { generateTraefikDynamicConfig } from "./generator";
 import { createId, traefikName } from "./ids";
 import { getTrafficSnapshot } from "./metrics";
 import { certificateInputSchema, certificateSyncInputSchema, groupInputSchema, reorderSchema, webServiceInputSchema } from "./schemas";
@@ -48,19 +50,20 @@ app.post("/api/web-services", (request, response) => {
   const parsed = webServiceInputSchema.parse(request.body);
   const now = new Date().toISOString();
   const state = loadState();
-  const service: WebService = {
-    id: createId("svc"),
-    ...parsed,
-    domains: normalizeDomains(parsed.domains),
-    middlewares: parsed.middlewares.filter(Boolean),
-    order: state.webServices.length + 1,
-    createdAt: now,
-    updatedAt: now
-  };
+  const service = webServiceFromInput(createId("svc"), parsed, state.webServices.length + 1, now);
   validateWebService(service, state);
   state.webServices.push(service);
   const next = saveState(state, "web-service.create", `Created Web service ${webServiceLabel(service)}.`);
   response.status(201).json(next.webServices.find((item) => item.id === service.id));
+});
+
+app.post("/api/web-services/preview", (request, response) => {
+  const parsed = webServiceInputSchema.parse(request.body);
+  const now = new Date().toISOString();
+  const state = loadState();
+  const service = webServiceFromInput(previewServiceId(parsed.domains[0] || parsed.name || "new"), parsed, state.webServices.length + 1, now);
+  validateWebService(service, state);
+  response.json(previewWebServiceChange(state, service, "create"));
 });
 
 app.put("/api/web-services/:id", (request, response) => {
@@ -79,6 +82,22 @@ app.put("/api/web-services/:id", (request, response) => {
   state.webServices[index] = updated;
   const next = saveState(state, "web-service.update", `Updated Web service ${webServiceLabel(updated)}.`);
   response.json(next.webServices.find((service) => service.id === updated.id));
+});
+
+app.post("/api/web-services/:id/preview", (request, response) => {
+  const parsed = webServiceInputSchema.parse(request.body);
+  const state = loadState();
+  const index = state.webServices.findIndex((service) => service.id === request.params.id);
+  if (index === -1) return response.status(404).json({ error: "Web service not found." });
+  const updated: WebService = {
+    ...state.webServices[index],
+    ...parsed,
+    domains: normalizeDomains(parsed.domains),
+    middlewares: parsed.middlewares.filter(Boolean),
+    updatedAt: new Date().toISOString()
+  };
+  validateWebService(updated, state);
+  response.json(previewWebServiceChange(state, updated, "update"));
 });
 
 app.patch("/api/web-services/:id/toggle", (request, response) => {
@@ -361,6 +380,49 @@ async function dashboardPayload(): Promise<DashboardPayload> {
 
 function normalizeDomains(domains: string[]): string[] {
   return Array.from(new Set(domains.map((domain) => domain.trim().toLowerCase()).filter(Boolean)));
+}
+
+function webServiceFromInput(id: string, input: z.infer<typeof webServiceInputSchema>, order: number, now: string): WebService {
+  return {
+    id,
+    ...input,
+    domains: normalizeDomains(input.domains),
+    middlewares: input.middlewares.filter(Boolean),
+    order,
+    createdAt: now,
+    updatedAt: now
+  };
+}
+
+function previewServiceId(seed: string): string {
+  const clean = seed
+    .trim()
+    .toLowerCase()
+    .replace(/^https?:\/\//, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 36);
+  return `preview-${clean || "service"}`;
+}
+
+function previewWebServiceChange(state: ReturnType<typeof loadState>, service: WebService, action: WebServicePreview["action"]): WebServicePreview {
+  const currentYaml = generateTraefikDynamicConfig(state).yaml;
+  const nextState = {
+    ...state,
+    webServices:
+      action === "create"
+        ? [...state.webServices, service]
+        : state.webServices.map((item) => (item.id === service.id ? service : item))
+  };
+  const nextYaml = generateTraefikDynamicConfig(nextState).yaml;
+  return {
+    valid: true,
+    action,
+    service,
+    currentYaml,
+    nextYaml,
+    diff: diffText(currentYaml, nextYaml)
+  };
 }
 
 function boundCertificateUpdateConflict(current: CertificateItem, input: Partial<CertificateInput>, services: WebService[]): string | undefined {

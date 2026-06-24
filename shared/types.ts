@@ -99,6 +99,20 @@ export interface GateLiteHistoryEvent {
   rollbackAvailable: boolean;
 }
 
+export interface ConfigDiffLine {
+  type: "context" | "added" | "removed";
+  line: string;
+}
+
+export interface WebServicePreview {
+  valid: true;
+  action: "create" | "update";
+  service: WebService;
+  currentYaml: string;
+  nextYaml: string;
+  diff: ConfigDiffLine[];
+}
+
 export interface RuntimeRouter {
   name: string;
   protocol: RuntimeProtocol;

@@ -76,6 +76,8 @@ GateLite should show Traefik dashboard/API-level information for:
 ## Agent API Principles
 
 - Every write supports preview before apply.
+- Web service create/update previews return the current YAML, next YAML, and a
+  compact line diff through the same validation layer used by apply.
 - Every apply returns a config diff and rollback handle.
 - Validation errors are structured and repairable.
 - Generated configuration is deterministic.

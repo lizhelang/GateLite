@@ -418,20 +418,35 @@ async function createAndVerifyPathCertificateRoute(groupId) {
 }
 
 async function createAndVerifyHttpService(groupId) {
+  const input = {
+    name: "",
+    enabled: true,
+    groupId,
+    domains: [originalHttpHost],
+    listenPort: 18080,
+    entryPoints: ["web"],
+    targetUrl: "http://whoami:80",
+    middlewares: [],
+    tls: { mode: "none" },
+    notes: "Temporary HTTP route created by verify:crud."
+  };
+  const preview = await apiJson("/api/web-services/preview", {
+    method: "POST",
+    body: input
+  });
+  if (preview.action !== "create" || preview.service.id.includes("svc-") || !preview.nextYaml.includes(originalHttpHost)) {
+    throw new Error("Web service create preview did not return the expected dry-run service and YAML.");
+  }
+  assertDiffIncludes(preview.diff, "added", originalHttpHost, "create preview frontend domain");
+  assertDiffIncludes(preview.diff, "added", "http://whoami:80", "create preview backend target");
+  const afterPreview = await apiJson("/api/dashboard");
+  if (afterPreview.webServices.some((service) => service.domains.includes(originalHttpHost))) {
+    throw new Error("Web service create preview unexpectedly wrote dashboard state.");
+  }
+
   const service = await apiJson("/api/web-services", {
     method: "POST",
-    body: {
-      name: "",
-      enabled: true,
-      groupId,
-      domains: [originalHttpHost],
-      listenPort: 18080,
-      entryPoints: ["web"],
-      targetUrl: "http://whoami:80",
-      middlewares: [],
-      tls: { mode: "none" },
-      notes: "Temporary HTTP route created by verify:crud."
-    },
+    body: input,
     expectedStatus: 201
   });
   if (service.name !== "") {
@@ -539,20 +554,31 @@ async function verifyDuplicateDomainProtection(groupId, host) {
 }
 
 async function updateAndVerifyHttpService(service, groupId) {
+  const input = {
+    name: `CRUD HTTP edited ${suffix}`,
+    enabled: true,
+    groupId,
+    domains: [editedHttpHost],
+    listenPort: 18080,
+    entryPoints: ["web"],
+    targetUrl: "http://whoami:80",
+    middlewares: [],
+    tls: { mode: "none" },
+    notes: "Edited temporary HTTP route created by verify:crud."
+  };
+  const preview = await apiJson(`/api/web-services/${service.id}/preview`, {
+    method: "POST",
+    body: input
+  });
+  if (preview.action !== "update" || preview.service.id !== service.id || !preview.nextYaml.includes(editedHttpHost)) {
+    throw new Error("Web service update preview did not preserve the target service id or next YAML.");
+  }
+  assertDiffIncludes(preview.diff, "removed", originalHttpHost, "update preview previous frontend domain");
+  assertDiffIncludes(preview.diff, "added", editedHttpHost, "update preview next frontend domain");
+
   const updated = await apiJson(`/api/web-services/${service.id}`, {
     method: "PUT",
-    body: {
-      name: `CRUD HTTP edited ${suffix}`,
-      enabled: true,
-      groupId,
-      domains: [editedHttpHost],
-      listenPort: 18080,
-      entryPoints: ["web"],
-      targetUrl: "http://whoami:80",
-      middlewares: [],
-      tls: { mode: "none" },
-      notes: "Edited temporary HTTP route created by verify:crud."
-    }
+    body: input
   });
   if (updated.name !== `CRUD HTTP edited ${suffix}` || updated.domains[0] !== editedHttpHost) {
     throw new Error("Web service edit was not persisted.");
@@ -1193,5 +1219,11 @@ async function ignoreNotFound(operation) {
 function assertIncludes(value, expected, source) {
   if (!value.includes(expected)) {
     throw new Error(`Expected ${source} to include "${expected}".`);
+  }
+}
+
+function assertDiffIncludes(diff, type, expected, source) {
+  if (!Array.isArray(diff) || !diff.some((line) => line.type === type && String(line.line).includes(expected))) {
+    throw new Error(`Expected ${source} diff to include ${type} line containing "${expected}".`);
   }
 }

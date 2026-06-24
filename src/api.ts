@@ -5,6 +5,7 @@ import type {
   ServiceGroup,
   TraefikRuntime,
   WebService,
+  WebServicePreview,
   WebServiceWithRuntime
 } from "../shared/types";
 
@@ -70,9 +71,23 @@ export async function createWebService(input: WebServiceInput): Promise<WebServi
   });
 }
 
+export async function previewCreateWebService(input: WebServiceInput): Promise<WebServicePreview> {
+  return request<WebServicePreview>("/api/web-services/preview", {
+    method: "POST",
+    body: JSON.stringify(input)
+  });
+}
+
 export async function updateWebService(id: string, input: WebServiceInput): Promise<WebServiceWithRuntime> {
   return request<WebServiceWithRuntime>(`/api/web-services/${id}`, {
     method: "PUT",
+    body: JSON.stringify(input)
+  });
+}
+
+export async function previewUpdateWebService(id: string, input: WebServiceInput): Promise<WebServicePreview> {
+  return request<WebServicePreview>(`/api/web-services/${id}/preview`, {
+    method: "POST",
     body: JSON.stringify(input)
   });
 }
