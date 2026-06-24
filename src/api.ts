@@ -3,6 +3,7 @@ import type {
   CertificateWithBindings,
   DashboardPayload,
   ImportRoutePreview,
+  ImportRoutesResult,
   GateLiteHistoryEvent,
   ServiceGroup,
   TraefikRuntime,
@@ -123,6 +124,12 @@ export async function importDiscoveredRoute(routerName: string, groupId?: string
   return request<WebServiceWithRuntime>("/api/discovered-routes/import", {
     method: "POST",
     body: JSON.stringify({ routerName, groupId })
+  });
+}
+
+export async function importAllDiscoveredRoutes(): Promise<ImportRoutesResult> {
+  return request<ImportRoutesResult>("/api/discovered-routes/import-all", {
+    method: "POST"
   });
 }
 

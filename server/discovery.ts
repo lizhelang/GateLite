@@ -127,7 +127,7 @@ export function createMappedWebServiceFromRoute(route: DiscoveredRoute, id: stri
     notes: [
       `Mapped from existing Traefik router ${route.routerName}.`,
       route.backend.serviceName ? `Runtime service: ${route.backend.serviceName}.` : "",
-      "GateLite will not write a duplicate file-provider router for this mapped object."
+      "GateLite treats this as an external read-only route and will not write a duplicate file-provider router."
     ]
       .filter(Boolean)
       .join("\n"),

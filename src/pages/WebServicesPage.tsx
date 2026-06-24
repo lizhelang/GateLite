@@ -23,6 +23,7 @@ import {
   createWebService,
   deleteGroup,
   deleteWebService,
+  importAllDiscoveredRoutes,
   importDiscoveredRoute,
   previewCreateWebService,
   previewImportDiscoveredRoute,
@@ -141,10 +142,12 @@ export function WebServicesPage({ dashboard, onRefresh }: WebServicesPageProps) 
   const [draggingGroupId, setDraggingGroupId] = useState<string | null>(null);
   const [importPreview, setImportPreview] = useState<ImportRoutePreview | null>(null);
   const [importingRouterName, setImportingRouterName] = useState<string | null>(null);
+  const [bulkImporting, setBulkImporting] = useState(false);
   const [importSaving, setImportSaving] = useState(false);
   const [saving, setSaving] = useState(false);
   const [groupSaving, setGroupSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
   const sortedServices = useMemo(() => [...dashboard.webServices].sort((a, b) => a.order - b.order), [dashboard.webServices]);
   const groupsById = useMemo(() => new Map(dashboard.groups.map((group) => [group.id, group])), [dashboard.groups]);
@@ -396,6 +399,7 @@ export function WebServicesPage({ dashboard, onRefresh }: WebServicesPageProps) 
 
   const handlePreviewImport = async (route: DiscoveredRoute) => {
     setError(null);
+    setNotice(null);
     setImportPreview(null);
     setImportingRouterName(route.routerName);
     try {
@@ -411,6 +415,7 @@ export function WebServicesPage({ dashboard, onRefresh }: WebServicesPageProps) 
     if (!importPreview) return;
     setImportSaving(true);
     setError(null);
+    setNotice(null);
     try {
       await importDiscoveredRoute(importPreview.route.routerName, importPreview.service.groupId);
       setImportPreview(null);
@@ -422,14 +427,32 @@ export function WebServicesPage({ dashboard, onRefresh }: WebServicesPageProps) 
     }
   };
 
+  const handleBulkImport = async () => {
+    setBulkImporting(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const result = await importAllDiscoveredRoutes();
+      setNotice(t(`Mapped ${result.created.length} external read-only route(s). Skipped ${result.skipped.length}.`, `已映射 ${result.created.length} 条外部只读路由，跳过 ${result.skipped.length} 条。`));
+      await onRefresh();
+    } catch (importError) {
+      setError(importError instanceof Error ? importError.message : t("Bulk import failed.", "批量映射失败。"));
+    } finally {
+      setBulkImporting(false);
+    }
+  };
+
   return (
     <section className="grid gap-3">
       {error ? <div className="rounded-xl border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">{error}</div> : null}
+      {notice ? <div className="rounded-xl border border-cyan-300/35 bg-cyan-300/10 p-3 text-sm text-cyan-100">{notice}</div> : null}
 
       <DiscoveredRouteTable
         routes={dashboard.discoveredRoutes}
         importingRouterName={importingRouterName}
+        bulkImporting={bulkImporting}
         onPreviewImport={handlePreviewImport}
+        onBulkImport={handleBulkImport}
       />
 
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -557,7 +580,7 @@ export function WebServicesPage({ dashboard, onRefresh }: WebServicesPageProps) 
             <div className="grid gap-3 rounded-lg border bg-background/35 p-3 text-sm md:grid-cols-3">
               <DetailCell label={t("Frontend domain", "前端域名")} value={importPreview.route.domains.join(", ")} mono />
               <DetailCell label={t("Backend IP:port", "后端 IP:端口")} value={formatBackendTarget(importPreview.route.backend.targetUrl || "").hostPort || importPreview.route.backend.targetUrl || ""} mono />
-              <DetailCell label="Provider" value={importPreview.route.provider || "unknown"} />
+              <DetailCell label={t("Source", "来源")} value={sourceDetailLabel(importPreview.route.provider, t)} />
             </div>
             <ConfigPreviewPanel
               title={t("Mapping preview", "映射预览")}
@@ -599,14 +622,19 @@ export function WebServicesPage({ dashboard, onRefresh }: WebServicesPageProps) 
 function DiscoveredRouteTable({
   routes,
   importingRouterName,
-  onPreviewImport
+  bulkImporting,
+  onPreviewImport,
+  onBulkImport
 }: {
   routes: DiscoveredRoute[];
   importingRouterName: string | null;
+  bulkImporting: boolean;
   onPreviewImport: (route: DiscoveredRoute) => Promise<void>;
+  onBulkImport: () => Promise<void>;
 }) {
   const { t } = useLanguage();
   const unmanagedCount = routes.filter((route) => route.managedMode === "unmanaged").length;
+  const importableExternalCount = routes.filter((route) => route.importable && route.managedMode === "unmanaged" && route.provider !== "internal").length;
   return (
     <div className="overflow-hidden rounded-xl border bg-card/80">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3">
@@ -621,6 +649,13 @@ function DiscoveredRouteTable({
           <Badge variant="outline" className="rounded-md">
             {t(`${unmanagedCount} unmapped`, `${unmanagedCount} 个未映射`)}
           </Badge>
+          <Button type="button" variant="outline" size="sm" disabled={importableExternalCount === 0 || bulkImporting} onClick={() => void onBulkImport()}>
+            <Plus className="size-3.5" />
+            {bulkImporting ? t("Mapping...", "映射中...") : t("Map external read-only", "一键映射外部只读")}
+            <Badge variant="secondary" className="ml-1 rounded-full px-1.5 py-0 text-[10px]">
+              {importableExternalCount}
+            </Badge>
+          </Button>
         </div>
       </div>
       <div className="overflow-x-auto">
@@ -629,7 +664,7 @@ function DiscoveredRouteTable({
             <TableRow className="hover:bg-transparent">
               <TableHead className="min-w-[250px]">{t("Frontend domain", "前端域名")}</TableHead>
               <TableHead className="min-w-[230px]">{t("Backend IP:port", "后端 IP:端口")}</TableHead>
-              <TableHead className="w-28">Provider</TableHead>
+              <TableHead className="w-40">{t("Source", "来源")}</TableHead>
               <TableHead className="w-28">{t("Status", "状态")}</TableHead>
               <TableHead className="w-24 text-right">
                 <span className="inline-flex items-center gap-1">
@@ -653,7 +688,7 @@ function DiscoveredRouteTable({
               const backend = formatBackendTarget(route.backend.targetUrl || route.backend.servers[0] || "");
               const canImport = route.importable && route.managedMode === "unmanaged";
               return (
-                <TableRow key={route.routerName} className="h-11">
+                <TableRow key={route.routerName} className={`h-11 ${route.managedMode === "mapped" || route.managedMode === "unmanaged" ? "bg-amber-300/[0.025]" : ""}`}>
                   <TableCell className="py-1.5">
                     <div className="grid min-w-0 gap-0.5">
                       <span className="truncate font-mono text-xs font-medium text-cyan-100">{frontend.label}</span>
@@ -669,9 +704,7 @@ function DiscoveredRouteTable({
                     </div>
                   </TableCell>
                   <TableCell>
-                    <Badge variant="outline" className="rounded-md">
-                      {route.provider || "unknown"}
-                    </Badge>
+                    <SourceBadge provider={route.provider} mode={route.provider === "internal" ? "internal" : route.managedMode === "generated" ? "generated" : "external"} />
                   </TableCell>
                   <TableCell>
                     <div className="flex flex-wrap gap-1">
@@ -692,9 +725,7 @@ function DiscoveredRouteTable({
                   </TableCell>
                   <TableCell className="text-right">
                     {route.managedMode !== "unmanaged" ? (
-                      <Badge variant="secondary" className="rounded-md">
-                        {route.managedMode === "mapped" ? t("Mapped", "已映射") : t("Generated", "已生成")}
-                      </Badge>
+                      route.managedMode === "mapped" ? <ReadOnlyBadge /> : <Badge variant="secondary" className="rounded-md">{t("Generated", "已生成")}</Badge>
                     ) : (
                       <Button
                         type="button"
@@ -899,11 +930,12 @@ function RouteTableRow({
   const traffic = service.traffic;
   const isRootRule = route.labels.some((label) => label === "@");
   const displayName = displayRouteName(route, t);
+  const isExternalReadOnly = service.managementMode === "mapped";
 
   return (
     <TableRow
       data-state={selected ? "selected" : undefined}
-      className={`${dragging ? "outline outline-1 outline-cyan-300/70" : ""} h-10`}
+      className={`${dragging ? "outline outline-1 outline-cyan-300/70" : ""} ${isExternalReadOnly ? "bg-amber-300/[0.035]" : ""} h-10`}
       draggable
       onDragStart={() => onDragStart(service.id)}
       onDragOver={(event) => event.preventDefault()}
@@ -960,6 +992,7 @@ function RouteTableRow({
           <Badge variant="outline" className="h-5 shrink-0 rounded-md px-1.5 text-[10px]">
             {service.tls.mode === "none" ? "HTTP" : "TLS"}
           </Badge>
+          {isExternalReadOnly ? <ReadOnlyBadge compact /> : null}
         </div>
       </TableCell>
       <TableCell className="text-right">
@@ -1191,6 +1224,52 @@ function discoveredFrontend(route: DiscoveredRoute): { label: string; meta: stri
     label: domainLabel,
     meta: `${route.routerName} · ${entryPoints}`
   };
+}
+
+function SourceBadge({ provider, mode }: { provider?: string; mode: "external" | "generated" | "internal" }) {
+  const { t } = useLanguage();
+  if (mode === "generated") {
+    return (
+      <div className="flex flex-wrap gap-1">
+        <Badge variant="secondary" className="rounded-md border-cyan-300/35 bg-cyan-300/10 text-cyan-100">
+          {t("GateLite", "GateLite")}
+        </Badge>
+        <Badge variant="outline" className="rounded-md text-muted-foreground">
+          file provider
+        </Badge>
+      </div>
+    );
+  }
+  if (mode === "internal") {
+    return (
+      <div className="flex flex-wrap gap-1">
+        <Badge variant="outline" className="rounded-md border-zinc-400/30 bg-zinc-400/10 text-zinc-300">
+          {t("Traefik internal", "Traefik 内部")}
+        </Badge>
+      </div>
+    );
+  }
+  return (
+    <div className="flex flex-wrap gap-1">
+      <ReadOnlyBadge />
+      <Badge variant="outline" className="rounded-md border-amber-300/25 bg-amber-300/5 text-amber-100/85">
+        {provider || "unknown"} provider
+      </Badge>
+    </div>
+  );
+}
+
+function ReadOnlyBadge({ compact = false }: { compact?: boolean }) {
+  const { t } = useLanguage();
+  return (
+    <Badge variant="outline" className={`rounded-md border-amber-300/40 bg-amber-300/10 text-amber-100 ${compact ? "h-5 px-1.5 text-[10px]" : ""}`}>
+      {compact ? t("Read-only", "只读") : t("External read-only", "外部只读")}
+    </Badge>
+  );
+}
+
+function sourceDetailLabel(provider: string | undefined, t: (english: string, chinese: string) => string): string {
+  return `${t("External read-only", "外部只读")} · ${provider || "unknown"} provider`;
 }
 
 function GroupStrip({

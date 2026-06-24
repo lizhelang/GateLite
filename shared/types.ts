@@ -175,6 +175,14 @@ export interface ImportRoutePreview {
   warnings: string[];
 }
 
+export interface ImportRoutesResult {
+  created: WebService[];
+  skipped: Array<{
+    routerName: string;
+    reason: string;
+  }>;
+}
+
 export interface CertificatePreview {
   valid: true;
   action: "create" | "update";

@@ -2,7 +2,7 @@ import express from "express";
 import fs from "node:fs";
 import path from "node:path";
 import { z } from "zod";
-import type { CertificateItem, CertificatePreview, CertificateWithBindings, DashboardPayload, DiscoveredRoute, ImportRoutePreview, WebService, WebServicePreview, WebServiceWithRuntime } from "../shared/types";
+import type { CertificateItem, CertificatePreview, CertificateWithBindings, DashboardPayload, DiscoveredRoute, ImportRoutePreview, ImportRoutesResult, WebService, WebServicePreview, WebServiceWithRuntime } from "../shared/types";
 import { certificateCoversDomain, resolverName, webServicesBoundToCertificate } from "./bindings";
 import { diffText } from "./config-preview";
 import { config } from "./config";
@@ -73,6 +73,54 @@ app.post("/api/discovered-routes/import", async (request, response) => {
   response.status(201).json(next.webServices.find((item) => item.id === service.id));
 });
 
+app.post("/api/discovered-routes/import-all", async (_request, response) => {
+  const state = loadState();
+  const runtime = await getTraefikRuntime();
+  if (!runtime.connected) throw new BadRequestError(`Traefik runtime is unavailable: ${runtime.error || "not connected"}`);
+  const routes = buildDiscoveredRoutes(runtime, state);
+  const groupId = ensureImportedGroup(state, undefined);
+  const now = new Date().toISOString();
+  const result: ImportRoutesResult = {
+    created: [],
+    skipped: []
+  };
+
+  for (const route of routes) {
+    if (route.provider === "internal") {
+      result.skipped.push({ routerName: route.routerName, reason: "Traefik internal router." });
+      continue;
+    }
+    if (route.managedMode !== "unmanaged") {
+      result.skipped.push({ routerName: route.routerName, reason: "Already represented in GateLite." });
+      continue;
+    }
+    if (!route.importable) {
+      result.skipped.push({ routerName: route.routerName, reason: route.importWarnings.join(" ") || "Not importable." });
+      continue;
+    }
+
+    const service = createMappedWebServiceFromRoute(route, createId("svc"), groupId, state.webServices.length + result.created.length + 1, now);
+    try {
+      validateWebService(service, {
+        ...state,
+        webServices: [...state.webServices, ...result.created]
+      });
+      result.created.push(service);
+    } catch (error) {
+      result.skipped.push({
+        routerName: route.routerName,
+        reason: error instanceof Error ? error.message : "Validation failed."
+      });
+    }
+  }
+
+  if (result.created.length > 0) {
+    state.webServices.push(...result.created);
+    saveState(state, "web-service.import-map-all", `Mapped ${result.created.length} existing external Traefik router(s) into GateLite.`);
+  }
+  response.json(result);
+});
+
 app.post("/api/web-services", (request, response) => {
   const parsed = webServiceInputSchema.parse(request.body);
   const now = new Date().toISOString();
@@ -135,7 +183,7 @@ app.patch("/api/web-services/:id/toggle", (request, response) => {
   const service = state.webServices.find((item) => item.id === request.params.id);
   if (!service) return response.status(404).json({ error: "Web service not found." });
   if (service.managementMode === "mapped") {
-    throw new BadRequestError("Mapped Traefik routes are read-only in GateLite. Disable or edit the source router in Traefik/Docker labels, or delete only the GateLite mapping.");
+    throw new BadRequestError("Mapped external routes are read-only in GateLite. Edit the original provider configuration, or delete only the GateLite mapping.");
   }
   const updated: WebService = {
     ...service,
@@ -524,7 +572,7 @@ function previewImportRouteChange(state: ReturnType<typeof loadState>, route: Di
     diff: diffText(currentYaml, nextYaml),
     warnings: [
       "This import creates a GateLite mapping only.",
-      "GateLite will not write a duplicate file-provider router for an existing Traefik provider route.",
+      "GateLite will not write a duplicate file-provider router for an existing external provider route.",
       ...route.importWarnings
     ]
   };
