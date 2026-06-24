@@ -16,7 +16,7 @@ import {
   Trash2,
   Upload
 } from "lucide-react";
-import { FormEvent, useMemo, useState, type ReactNode } from "react";
+import { Fragment, FormEvent, useMemo, useState, type ReactNode } from "react";
 import type { DashboardPayload, ServiceGroup, WebServiceTrafficStats, WebServiceWithRuntime } from "../../shared/types";
 import {
   createGroup,
@@ -149,30 +149,19 @@ export function WebServicesPage({ dashboard, onRefresh }: WebServicesPageProps) 
     return sortedServices.filter((service) => selectedServiceIds.has(service.id));
   }, [activeRoutes, selectedRouteIds, sortedServices]);
   const activeRootTemplate = useMemo(
-    () => activeRoutes.find((route) => !route.isDefault)?.service || zones.find((zone) => zone.root === activeRoot)?.routes.find((route) => !route.isDefault)?.service,
+    () => domainTemplateService(activeRoutes) || domainTemplateService(zones.find((zone) => zone.root === activeRoot)?.routes || []),
     [activeRoot, activeRoutes, zones]
   );
 
   const openCreate = (mode: "rule" | "subrule" | "default" = "rule") => {
-    setEditing(null);
-    setDraftPreset(null);
-    setCreateMode(mode);
-    setShowForm(true);
-  };
-
-  const openCreateSubrule = () => {
-    if (!canCreateSubrule) return;
-    setEditing(null);
-    setCreateMode("subrule");
-    setDraftPreset(
-      activeRootTemplate
+    const rootScopedPreset =
+      mode === "rule" && canCreateSubrule && activeRootTemplate
         ? {
             groupId: activeRootTemplate.groupId,
             domainRoot: activeRoot,
-            subdomainsText: "",
+            subdomainsText: "@",
             listenPort: activeRootTemplate.listenPort,
             entryPointsText: activeRootTemplate.entryPoints.join(", "),
-            targetUrl: "",
             passHostHeader: activeRootTemplate.passHostHeader ?? true,
             middlewaresText: activeRootTemplate.middlewares.join(", "),
             tlsMode: activeRootTemplate.tls.mode,
@@ -182,8 +171,37 @@ export function WebServicesPage({ dashboard, onRefresh }: WebServicesPageProps) 
             metrics: activeRootTemplate.observability?.metrics ?? true,
             tracing: activeRootTemplate.observability?.tracing ?? false
           }
+        : null;
+    setEditing(null);
+    setDraftPreset(rootScopedPreset);
+    setCreateMode(mode);
+    setShowForm(true);
+  };
+
+  const openCreateSubrule = (root = activeRoot, template = activeRootTemplate) => {
+    if (["__all", "__default", "__custom"].includes(root)) return;
+    setEditing(null);
+    setCreateMode("subrule");
+    setDraftPreset(
+      template
+        ? {
+            groupId: template.groupId,
+            domainRoot: root,
+            subdomainsText: "",
+            listenPort: template.listenPort,
+            entryPointsText: template.entryPoints.join(", "),
+            targetUrl: "",
+            passHostHeader: template.passHostHeader ?? true,
+            middlewaresText: template.middlewares.join(", "),
+            tlsMode: template.tls.mode,
+            certificateId: template.tls.certificateId || "",
+            resolver: template.tls.resolver || "letsencrypt",
+            accessLogs: template.observability?.accessLogs ?? true,
+            metrics: template.observability?.metrics ?? true,
+            tracing: template.observability?.tracing ?? false
+          }
         : {
-            domainRoot: activeRoot,
+            domainRoot: root,
             subdomainsText: "",
             targetUrl: ""
           }
@@ -361,47 +379,50 @@ export function WebServicesPage({ dashboard, onRefresh }: WebServicesPageProps) 
   };
 
   return (
-    <section className="grid gap-4">
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-card/60 p-3">
-        <div className="min-w-0">
-          <div className="text-xs text-muted-foreground">{t("Web service rules", "Web 服务规则列表")}</div>
-          <div className="mt-1 text-lg font-semibold">{t("Reverse proxy rules", "反代规则")}</div>
-        </div>
-        <div className="flex min-w-0 flex-1 justify-start md:justify-center">
-          <div className="inline-flex max-w-full items-center gap-1 overflow-x-auto rounded-lg border bg-muted/45 p-1">
-          <Button type="button" variant={activeRoot === "__all" ? "outline" : "ghost"} size="sm" onClick={() => setActiveRoot("__all")}>
-            {t("All", "全部")}
-            <Badge variant="secondary" className="ml-1 rounded-full px-1.5 py-0 text-[10px]">
-              {routeCount}
-            </Badge>
-          </Button>
-          {zones.map((zone) => (
-            <Button key={zone.root} type="button" variant={activeRoot === zone.root ? "outline" : "ghost"} size="sm" onClick={() => setActiveRoot(zone.root)}>
-              {rootLabel(zone.root, t)}
-              <Badge variant="secondary" className="ml-1 rounded-full px-1.5 py-0 text-[10px]">
-                {zone.routes.length}
-              </Badge>
+    <section className="grid gap-3">
+      <div className="grid gap-3 rounded-xl border bg-card/60 p-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="min-w-0">
+            <div className="text-xs text-muted-foreground">{t("Web services / reverse proxy", "Web 服务 / 反代服务")}</div>
+            <div className="mt-1 text-lg font-semibold">{t("Rules", "规则")}</div>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button type="button" variant="outline" onClick={handleAddGroup}>
+              <Layers className="size-4" />
+              {t("Groups", "分组")}
             </Button>
-          ))}
+            <Button type="button" variant="outline" onClick={() => openCreateSubrule()} disabled={!canCreateSubrule} title={!canCreateSubrule ? t("Select a main domain first.", "先选择主域名。") : undefined}>
+              <Plus className="size-4" />
+              {t("New sub-rule", "新建子规则")}
+            </Button>
+            <Button type="button" variant="outline" onClick={() => openCreate("default")}>
+              <Plus className="size-4" />
+              {t("Default", "默认规则")}
+            </Button>
+            <Button type="button" onClick={() => openCreate("rule")}>
+              <Plus className="size-4" />
+              {t("New rule", "新建规则")}
+            </Button>
           </div>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <Button type="button" variant="outline" onClick={handleAddGroup}>
-            <Layers className="size-4" />
-            {t("Groups", "分组")}
-          </Button>
-          <Button type="button" variant="outline" onClick={openCreateSubrule} disabled={!canCreateSubrule} title={!canCreateSubrule ? t("Select a domain rule before adding a sub-rule.", "先选择一个域名规则，再添加子规则。") : undefined}>
-            <Plus className="size-4" />
-            {t("Add sub-rule", "添加子规则")}
-          </Button>
-          <Button type="button" variant="outline" onClick={() => openCreate("default")}>
-            <Plus className="size-4" />
-            {t("Default", "默认规则")}
-          </Button>
-          <Button type="button" onClick={() => openCreate("rule")}>
-            <Plus className="size-4" />
-            {t("Add Web rule", "添加 Web 服务规则")}
-          </Button>
+        <div className="flex min-w-0 items-center gap-2">
+          <span className="shrink-0 text-xs text-muted-foreground">{t("Main domain", "主域名")}</span>
+          <div className="inline-flex max-w-full items-center gap-1 overflow-x-auto rounded-lg border bg-muted/45 p-1">
+            <Button type="button" variant={activeRoot === "__all" ? "outline" : "ghost"} size="sm" onClick={() => setActiveRoot("__all")}>
+              {t("All", "全部")}
+              <Badge variant="secondary" className="ml-1 rounded-full px-1.5 py-0 text-[10px]">
+                {routeCount}
+              </Badge>
+            </Button>
+            {zones.map((zone) => (
+              <Button key={zone.root} type="button" variant={activeRoot === zone.root ? "outline" : "ghost"} size="sm" onClick={() => setActiveRoot(zone.root)}>
+                {rootLabel(zone.root, t)}
+                <Badge variant="secondary" className="ml-1 rounded-full px-1.5 py-0 text-[10px]">
+                  {zone.routes.length}
+                </Badge>
+              </Button>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -417,6 +438,7 @@ export function WebServicesPage({ dashboard, onRefresh }: WebServicesPageProps) 
 
       <RouteDataTable
         routes={activeRoutes}
+        activeRoot={activeRoot}
         selectedRouteIds={selectedRouteIds}
         draggingId={draggingId}
         onDragStart={setDraggingId}
@@ -426,6 +448,7 @@ export function WebServicesPage({ dashboard, onRefresh }: WebServicesPageProps) 
         onToggle={handleToggle}
         onBulkToggle={handleBulkToggle}
         onDuplicate={openDuplicate}
+        onCreateSubrule={(root, template) => openCreateSubrule(root, template)}
         onDetails={setDetailsRoute}
         onEdit={openEdit}
         onDelete={handleDelete}
@@ -485,6 +508,7 @@ export function WebServicesPage({ dashboard, onRefresh }: WebServicesPageProps) 
 
 function RouteDataTable({
   routes,
+  activeRoot,
   selectedRouteIds,
   draggingId,
   onDragStart,
@@ -494,11 +518,13 @@ function RouteDataTable({
   onToggle,
   onBulkToggle,
   onDuplicate,
+  onCreateSubrule,
   onDetails,
   onEdit,
   onDelete
 }: {
   routes: DomainRoute[];
+  activeRoot: string;
   selectedRouteIds: string[];
   draggingId: string | null;
   onDragStart: (id: string) => void;
@@ -508,6 +534,7 @@ function RouteDataTable({
   onToggle: (service: WebServiceWithRuntime) => Promise<void>;
   onBulkToggle: (enabled: boolean) => Promise<void>;
   onDuplicate: (route: DomainRoute) => void;
+  onCreateSubrule: (root: string, template?: WebServiceWithRuntime) => void;
   onDetails: (route: DomainRoute) => void;
   onEdit: (service: WebServiceWithRuntime) => void;
   onDelete: (service: WebServiceWithRuntime) => Promise<void>;
@@ -515,166 +542,86 @@ function RouteDataTable({
   const { t } = useLanguage();
   const selectedCount = routes.filter((route) => selectedRouteIds.includes(route.routeId)).length;
   const allVisibleSelected = routes.length > 0 && selectedCount === routes.length;
+  const sections = groupRoutesForTable(routes, activeRoot);
 
   return (
     <div className="overflow-hidden rounded-xl border bg-card/80">
       <div className="overflow-x-auto">
-        <Table className="min-w-[1040px]">
+        <Table className="min-w-[980px]">
           <TableHeader className="bg-muted/65">
             <TableRow className="hover:bg-transparent">
               <TableHead className="w-8" />
               <TableHead className="w-9">
                 <Checkbox aria-label={t("Select visible rules", "选择当前规则")} checked={allVisibleSelected} onCheckedChange={(checked) => onSelectAll(Boolean(checked))} />
               </TableHead>
-              <TableHead className="w-36">{t("Rule name", "规则名称")}</TableHead>
-              <TableHead className="w-24">{t("Type", "类型")}</TableHead>
-              <TableHead className="w-56">{t("Frontend domain", "前端域名")}</TableHead>
-              <TableHead className="w-56">{t("Backend IP:port", "后端 IP:端口")}</TableHead>
-              <TableHead className="w-24 text-right">
+              <TableHead className="w-72">{t("Frontend domain", "前端域名")}</TableHead>
+              <TableHead className="w-72">{t("Backend IP:port", "后端 IP:端口")}</TableHead>
+              <TableHead className="w-28 text-right">
                 <span className="inline-flex items-center gap-1">
                   <Download className="size-3.5" />
                   {t("Down traffic", "下行流量")}
                 </span>
               </TableHead>
-              <TableHead className="w-24 text-right">
+              <TableHead className="w-28 text-right">
                 <span className="inline-flex items-center gap-1">
                   <Upload className="size-3.5" />
                   {t("Up traffic", "上行流量")}
                 </span>
               </TableHead>
-              <TableHead className="w-20 text-right">
+              <TableHead className="w-24 text-right">
                 <span className="inline-flex items-center gap-1">
                   {t("Live conn.", "实时连接")}
                 </span>
               </TableHead>
-              <TableHead className="w-24">{t("Status", "状态")}</TableHead>
+              <TableHead className="w-28">{t("Status", "状态")}</TableHead>
               <TableHead className="w-12 text-right" />
             </TableRow>
           </TableHeader>
           <TableBody>
-            {routes.map((route) => {
-              const service = route.service;
-              const selected = selectedRouteIds.includes(route.routeId);
-              const frontend = formatFrontendEndpoint(route, service, t);
-              const backend = formatBackendTarget(service.targetUrl);
-              const traffic = service.traffic;
-              const isRootRule = route.labels.some((label) => label === "@");
-              const displayName = displayRouteName(route, t);
-              return (
-                <TableRow
-                  key={route.routeId}
-                  data-state={selected ? "selected" : undefined}
-                  className={`${draggingId === service.id ? "outline outline-1 outline-cyan-300/70" : ""} h-12`}
-                  draggable
-                  onDragStart={() => onDragStart(service.id)}
-                  onDragOver={(event) => event.preventDefault()}
-                  onDrop={() => void onDrop(service.id)}
-                  onClick={() => onSelect(route.routeId, !selected)}
-                >
-                  <TableCell className="px-2">
-                    <Button variant="ghost" size="icon-xs" aria-label={t("Drag to reorder", "拖拽排序")}>
-                      <GripVertical className="size-3.5" />
-                    </Button>
-                  </TableCell>
-                  <TableCell className="px-2">
-                    <Checkbox checked={selected} aria-label={t(`Select ${displayName}`, `选择 ${displayName}`)} onClick={(event) => event.stopPropagation()} onCheckedChange={(checked) => onSelect(route.routeId, Boolean(checked))} />
-                  </TableCell>
-                  <TableCell>
-                    <div className="grid min-w-0 gap-1">
-                      <span className="truncate font-medium">{displayName}</span>
-                      <span className="truncate text-xs text-muted-foreground">{rootLabel(route.root, t)} / {route.groupName}</span>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex flex-wrap gap-1">
-                      <Badge variant="outline" className="h-5 rounded-md border-emerald-400/35 bg-emerald-400/10 px-1.5 text-[10px] text-emerald-200">
-                        {t("Reverse proxy", "反向代理")}
-                      </Badge>
-                      <Badge variant="outline" className="h-5 rounded-md px-1.5 text-[10px]">
-                        {routeKindLabel(route, isRootRule, t)}
-                      </Badge>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex min-w-0 items-center gap-2">
-                      {frontend.href ? (
-                        <a className="inline-flex max-w-full items-center gap-1 rounded-md bg-cyan-400/10 px-2 py-1 font-mono text-sm text-cyan-100 ring-1 ring-cyan-300/20 hover:text-cyan-200" href={frontend.href} target="_blank" rel="noreferrer" onClick={(event) => event.stopPropagation()}>
-                          <span className="truncate">{frontend.label}</span>
-                          <ExternalLink className="size-3.5 shrink-0" />
-                        </a>
-                      ) : (
-                        <span className="inline-flex max-w-full rounded-md bg-cyan-400/10 px-2 py-1 font-mono text-sm text-cyan-100 ring-1 ring-cyan-300/20">{frontend.label}</span>
-                      )}
-                      <span className="shrink-0 text-xs text-muted-foreground">{frontend.meta}</span>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex min-w-0 items-center gap-2 rounded-md bg-muted/45 px-2 py-1">
-                      <ArrowRight className="size-3.5 shrink-0 text-muted-foreground" />
-                      <span className="min-w-0 truncate font-mono text-sm text-foreground">{backend.hostPort}</span>
-                      <Badge variant="outline" className="h-5 rounded-md px-1.5 text-[10px] text-muted-foreground">
-                        {backend.scheme}
-                      </Badge>
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <TrafficValue value={traffic?.responseBytes || 0} rate={traffic?.responseBytesPerSecond || 0} source={traffic?.source} tone="down" />
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <TrafficValue value={traffic?.requestBytes || 0} rate={traffic?.requestBytesPerSecond || 0} source={traffic?.source} tone="up" />
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <ConnectionValue traffic={traffic} />
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex flex-wrap gap-1">
-                      <StatusBadge status={service.runtime?.status || (service.enabled ? "unknown" : "offline")} label={service.enabled ? undefined : t("Disabled", "停用")} />
-                      <Badge variant="outline" className="h-5 rounded-md px-1.5 text-[10px]">
-                        {service.tls.mode === "none" ? "HTTP" : "TLS"}
-                      </Badge>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center justify-end gap-1" onClick={(event) => event.stopPropagation()}>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon-xs" aria-label={t("Rule actions", "规则操作")}>
-                            <EllipsisVertical className="size-3.5" />
+            {sections.map((section) => (
+              <Fragment key={section.root}>
+                {section.showHeader ? (
+                  <TableRow key={`${section.root}:heading`} className="bg-muted/25 hover:bg-muted/25">
+                    <TableCell colSpan={9} className="h-9 px-3 py-1.5">
+                      <div className="flex min-w-0 items-center justify-between gap-3">
+                        <div className="flex min-w-0 items-center gap-2">
+                          <span className="text-xs text-muted-foreground">{t("Main domain", "主域名")}</span>
+                          <span className="truncate font-mono text-sm font-medium">{rootLabel(section.root, t)}</span>
+                          <Badge variant="secondary" className="h-5 rounded-md px-1.5 text-[10px]">
+                            {t(`${section.routes.length} rules`, `${section.routes.length} 条规则`)}
+                          </Badge>
+                        </div>
+                        {!["__default", "__custom"].includes(section.root) ? (
+                          <Button type="button" variant="outline" size="xs" onClick={() => onCreateSubrule(section.root, domainTemplateService(section.routes))}>
+                            <Plus className="size-3.5" />
+                            {t("Sub-rule", "子规则")}
                           </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="w-44">
-                          <DropdownMenuLabel>{t("Rule actions", "规则操作")}</DropdownMenuLabel>
-                          <DropdownMenuItem onSelect={() => onDetails(route)}>
-                            <FileText className="size-4" />
-                            {t("Details", "详情")}
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onSelect={() => void onToggle(service)}>
-                            <Power className="size-4" />
-                            {service.enabled ? t("Disable", "停用") : t("Enable", "启用")}
-                          </DropdownMenuItem>
-                          <DropdownMenuItem disabled={route.isDefault} onSelect={() => onDuplicate(route)}>
-                            <Copy className="size-4" />
-                            {t("Copy as rule", "复制规则")}
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onSelect={() => onEdit(service)}>
-                            <Pencil className="size-4" />
-                            {t("Edit", "编辑")}
-                          </DropdownMenuItem>
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem variant="destructive" onSelect={() => void onDelete(service)}>
-                            <Trash2 className="size-4" />
-                            {t("Delete", "删除")}
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              );
-            })}
+                        ) : null}
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ) : null}
+                {section.routes.map((route) => (
+                  <RouteTableRow
+                    key={route.routeId}
+                    route={route}
+                    selected={selectedRouteIds.includes(route.routeId)}
+                    dragging={draggingId === route.service.id}
+                    onDragStart={onDragStart}
+                    onDrop={onDrop}
+                    onSelect={onSelect}
+                    onToggle={onToggle}
+                    onDuplicate={onDuplicate}
+                    onDetails={onDetails}
+                    onEdit={onEdit}
+                    onDelete={onDelete}
+                  />
+                ))}
+              </Fragment>
+            ))}
             {routes.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={11} className="h-24 text-center text-sm text-muted-foreground">
+                <TableCell colSpan={9} className="h-24 text-center text-sm text-muted-foreground">
                   {t("No visible rules in this domain view. Expand groups or add a rule.", "这个域名视图里没有可见规则。可以展开分组或新增规则。")}
                 </TableCell>
               </TableRow>
@@ -697,6 +644,163 @@ function RouteDataTable({
       </div>
     </div>
   );
+}
+
+function RouteTableRow({
+  route,
+  selected,
+  dragging,
+  onDragStart,
+  onDrop,
+  onSelect,
+  onToggle,
+  onDuplicate,
+  onDetails,
+  onEdit,
+  onDelete
+}: {
+  route: DomainRoute;
+  selected: boolean;
+  dragging: boolean;
+  onDragStart: (id: string) => void;
+  onDrop: (id: string) => void;
+  onSelect: (id: string, checked: boolean) => void;
+  onToggle: (service: WebServiceWithRuntime) => Promise<void>;
+  onDuplicate: (route: DomainRoute) => void;
+  onDetails: (route: DomainRoute) => void;
+  onEdit: (service: WebServiceWithRuntime) => void;
+  onDelete: (service: WebServiceWithRuntime) => Promise<void>;
+}) {
+  const { t } = useLanguage();
+  const service = route.service;
+  const frontend = formatFrontendEndpoint(route, service, t);
+  const backend = formatBackendTarget(service.targetUrl);
+  const traffic = service.traffic;
+  const isRootRule = route.labels.some((label) => label === "@");
+  const displayName = displayRouteName(route, t);
+
+  return (
+    <TableRow
+      data-state={selected ? "selected" : undefined}
+      className={`${dragging ? "outline outline-1 outline-cyan-300/70" : ""} h-11`}
+      draggable
+      onDragStart={() => onDragStart(service.id)}
+      onDragOver={(event) => event.preventDefault()}
+      onDrop={() => void onDrop(service.id)}
+      onClick={() => onSelect(route.routeId, !selected)}
+    >
+      <TableCell className="px-2">
+        <Button variant="ghost" size="icon-xs" aria-label={t("Drag to reorder", "拖拽排序")}>
+          <GripVertical className="size-3.5" />
+        </Button>
+      </TableCell>
+      <TableCell className="px-2">
+        <Checkbox checked={selected} aria-label={t(`Select ${displayName}`, `选择 ${displayName}`)} onClick={(event) => event.stopPropagation()} onCheckedChange={(checked) => onSelect(route.routeId, Boolean(checked))} />
+      </TableCell>
+      <TableCell>
+        <div className="grid min-w-0 gap-0.5">
+          <div className="flex min-w-0 items-center gap-2">
+            {frontend.href ? (
+              <a className="inline-flex min-w-0 items-center gap-1 font-mono text-sm font-medium text-cyan-100 hover:text-cyan-200" href={frontend.href} target="_blank" rel="noreferrer" onClick={(event) => event.stopPropagation()}>
+                <span className="truncate">{frontend.label}</span>
+                <ExternalLink className="size-3.5 shrink-0" />
+              </a>
+            ) : (
+              <span className="truncate font-mono text-sm font-medium text-cyan-100">{frontend.label}</span>
+            )}
+            <Badge variant="outline" className="h-5 shrink-0 rounded-md px-1.5 text-[10px]">
+              {routeKindLabel(route, isRootRule, t)}
+            </Badge>
+          </div>
+          <div className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
+            <span className="truncate">{displayName}</span>
+            <span className="shrink-0">·</span>
+            <span className="shrink-0">{frontend.meta}</span>
+          </div>
+        </div>
+      </TableCell>
+      <TableCell>
+        <div className="flex min-w-0 items-center gap-2">
+          <ArrowRight className="size-3.5 shrink-0 text-muted-foreground" />
+          <span className="min-w-0 truncate font-mono text-sm text-foreground">{backend.hostPort || service.targetUrl}</span>
+          <Badge variant="outline" className="h-5 shrink-0 rounded-md px-1.5 text-[10px] text-muted-foreground">
+            {backend.scheme}
+          </Badge>
+        </div>
+      </TableCell>
+      <TableCell className="text-right">
+        <TrafficValue value={traffic?.responseBytes || 0} rate={traffic?.responseBytesPerSecond || 0} source={traffic?.source} tone="down" />
+      </TableCell>
+      <TableCell className="text-right">
+        <TrafficValue value={traffic?.requestBytes || 0} rate={traffic?.requestBytesPerSecond || 0} source={traffic?.source} tone="up" />
+      </TableCell>
+      <TableCell className="text-right">
+        <ConnectionValue traffic={traffic} />
+      </TableCell>
+      <TableCell>
+        <div className="flex flex-wrap gap-1">
+          <StatusBadge status={service.runtime?.status || (service.enabled ? "unknown" : "offline")} label={service.enabled ? undefined : t("Disabled", "停用")} />
+          <Badge variant="outline" className="h-5 rounded-md px-1.5 text-[10px]">
+            {service.tls.mode === "none" ? "HTTP" : "TLS"}
+          </Badge>
+        </div>
+      </TableCell>
+      <TableCell>
+        <div className="flex items-center justify-end gap-1" onClick={(event) => event.stopPropagation()}>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon-xs" aria-label={t("Rule actions", "规则操作")}>
+                <EllipsisVertical className="size-3.5" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-44">
+              <DropdownMenuLabel>{t("Rule actions", "规则操作")}</DropdownMenuLabel>
+              <DropdownMenuItem onSelect={() => onDetails(route)}>
+                <FileText className="size-4" />
+                {t("Details", "详情")}
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => void onToggle(service)}>
+                <Power className="size-4" />
+                {service.enabled ? t("Disable", "停用") : t("Enable", "启用")}
+              </DropdownMenuItem>
+              <DropdownMenuItem disabled={route.isDefault} onSelect={() => onDuplicate(route)}>
+                <Copy className="size-4" />
+                {t("Copy as rule", "复制规则")}
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => onEdit(service)}>
+                <Pencil className="size-4" />
+                {t("Edit", "编辑")}
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem variant="destructive" onSelect={() => void onDelete(service)}>
+                <Trash2 className="size-4" />
+                {t("Delete", "删除")}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      </TableCell>
+    </TableRow>
+  );
+}
+
+function groupRoutesForTable(routes: DomainRoute[], activeRoot: string): Array<{ root: string; routes: DomainRoute[]; showHeader: boolean }> {
+  if (activeRoot !== "__all") {
+    return [{ root: activeRoot, routes, showHeader: false }];
+  }
+  const groups = new Map<string, DomainRoute[]>();
+  for (const route of routes) {
+    groups.set(route.root, [...(groups.get(route.root) || []), route]);
+  }
+  return Array.from(groups.entries()).map(([root, groupRoutes]) => ({
+    root,
+    routes: groupRoutes,
+    showHeader: routes.length > 1
+  }));
+}
+
+function domainTemplateService(routes: DomainRoute[]): WebServiceWithRuntime | undefined {
+  return routes.find((route) => route.labels.includes("@") && !route.isDefault)?.service;
 }
 
 function TrafficValue({ value, rate, source, tone }: { value: number; rate: number; source?: WebServiceTrafficStats["source"]; tone: "down" | "up" }) {
@@ -962,23 +1066,23 @@ function ServiceForm({
       : isCustomRule
       ? t("Edit custom rule", "编辑自定义规则")
       : mode === "subrule"
-      ? t("Edit Web service sub-rule", "编辑 Web 服务子规则")
-      : t("Edit Web service rule", "编辑 Web 服务规则")
+      ? t("Edit sub-rule", "编辑子规则")
+      : t("Edit rule", "编辑规则")
     : mode === "default"
       ? t("New default rule", "新建默认规则")
       : isCustomRule
       ? t("New custom rule", "新建自定义规则")
       : mode === "subrule"
-      ? t("Add Web service sub-rule", "添加 Web 服务子规则")
-      : t("Add Web service rule", "添加 Web 服务规则");
+      ? t("New sub-rule", "新建子规则")
+      : t("New rule", "新建规则");
   const subtitle =
     isDefaultRule
-      ? t("Fallback frontend traffic to one backend.", "把未匹配的前端请求转发到一个后端。")
+      ? t("Unmatched frontend traffic -> backend IP:port.", "未匹配前端流量 -> 后端 IP:端口。")
       : isCustomRule
-      ? t("Custom Traefik match, managed backend and TLS.", "自定义 Traefik 匹配，后端和 TLS 仍由 GateLite 管理。")
+      ? t("Custom match -> backend IP:port.", "自定义匹配 -> 后端 IP:端口。")
       : mode === "subrule"
-      ? t("One frontend domain maps to one backend IP:port under the selected Web rule.", "在当前 Web 规则下，把一个前端域名映射到一个后端 IP:端口。")
-      : t("Create the listener and its first reverse proxy sub-rule together.", "同时创建监听规则和第一条反代子规则。");
+      ? t("Subdomain -> backend IP:port.", "子域名 -> 后端 IP:端口。")
+      : t("Main domain -> backend IP:port.", "主域名 -> 后端 IP:端口。");
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
@@ -1010,115 +1114,127 @@ function ServiceForm({
 
   return (
     <Modal title={title} subtitle={subtitle} onClose={onClose}>
-      <form className="grid gap-3 md:grid-cols-2" onSubmit={(event) => void submit(event)}>
-        {!isDefaultRule ? (
-          <>
-            <Field label={mode === "subrule" ? t("Parent Web rule domain", "所属 Web 规则域名") : t("Web rule domain", "Web 规则域名")}>
-              <Input value={draft.domainRoot} onChange={(event) => setDraft({ ...draft, domainRoot: event.target.value })} placeholder="1804.surfacer.cc" disabled={mode === "subrule" && activeRoot !== "__all" && !service} />
-            </Field>
-            <Field label={mode === "subrule" ? t("Sub-rule frontend domain", "子规则前端域名") : t("First frontend domain", "第一条前端域名")}>
-              <Input value={draft.subdomainsText} onChange={(event) => setDraft({ ...draft, subdomainsText: event.target.value })} placeholder={isCustomRule ? "optional display domain" : mode === "subrule" ? "qb / pve / immich" : "@ / www / app"} required={draft.matchMode === "host" && mode === "subrule" && !service} />
-            </Field>
-          </>
-        ) : null}
-        <Field className="md:col-span-2" label={t("Backend IP:port", "后端 IP:端口")}>
-          <Input value={draft.targetUrl} onChange={(event) => setDraft({ ...draft, targetUrl: event.target.value })} placeholder="http://192.168.31.26:8081" required />
-        </Field>
-        <RoutePairPreview
-          frontends={domainPreview}
-          backend={draft.targetUrl}
-          isDefaultRule={isDefaultRule}
-        />
-        <Field label={t("Rule note/name", "规则备注名")}>
-          <Input value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} placeholder={t("Optional", "可留空")} />
-        </Field>
-        <Field label={t("Group", "分组")}>
-          <select className={selectClass} value={draft.groupId} onChange={(event) => setDraft({ ...draft, groupId: event.target.value })}>
-            {groups.map((group) => (
-              <option key={group.id} value={group.id}>
-                {group.name}
-              </option>
-            ))}
-          </select>
-        </Field>
-        <Field label={t("Match mode", "匹配方式")}>
-          <select className={selectClass} value={draft.matchMode} onChange={(event) => setDraft({ ...draft, matchMode: event.target.value as DraftService["matchMode"] })}>
-            <option value="host">{t("Reverse proxy", "反向代理")}</option>
-            <option value="custom">{t("Custom Traefik rule", "自定义 Traefik 规则")}</option>
-            <option value="default">{t("Default fallback", "默认规则")}</option>
-          </select>
-        </Field>
-        <div className="flex items-center gap-3 self-end rounded-lg border bg-background/35 px-3 py-2">
-          <Switch checked={draft.passHostHeader} onCheckedChange={(checked) => setDraft({ ...draft, passHostHeader: checked })} />
-          <span className="text-sm">{t("Forward Host", "转发 Host")}</span>
-        </div>
-        {isCustomRule ? (
-          <Field className="md:col-span-2" label={t("Traefik rule", "Traefik 规则")}>
-            <Textarea value={draft.customRule} onChange={(event) => setDraft({ ...draft, customRule: event.target.value })} rows={3} placeholder="Host(`app.localhost`) && PathPrefix(`/api`)" required />
+      <form className="grid gap-4" onSubmit={(event) => void submit(event)}>
+        <div className="grid gap-3 rounded-lg border bg-background/35 p-3 md:grid-cols-2">
+          {!isDefaultRule ? (
+            <>
+              <Field label={mode === "subrule" ? t("Main domain", "主域名") : t("Main domain", "主域名")}>
+                <Input value={draft.domainRoot} onChange={(event) => setDraft({ ...draft, domainRoot: event.target.value })} placeholder="1804.surfacer.cc" disabled={mode === "subrule" && activeRoot !== "__all" && !service} />
+              </Field>
+              <Field label={mode === "subrule" ? t("Frontend subdomain", "前端子域名") : t("Frontend domain", "前端域名")}>
+                <Input value={draft.subdomainsText} onChange={(event) => setDraft({ ...draft, subdomainsText: event.target.value })} placeholder={isCustomRule ? "optional display domain" : mode === "subrule" ? "qb / pve / immich" : "@ / www / app"} required={draft.matchMode === "host" && mode === "subrule" && !service} />
+              </Field>
+            </>
+          ) : null}
+          <Field className="md:col-span-2" label={t("Backend IP:port", "后端 IP:端口")}>
+            <Input value={draft.targetUrl} onChange={(event) => setDraft({ ...draft, targetUrl: event.target.value })} placeholder="http://192.168.31.26:8081" required />
           </Field>
-        ) : null}
-        <Field label={t("Listen port", "监听端口")}>
-          <Input type="number" min="1" max="65535" value={draft.listenPort} onChange={(event) => setDraft({ ...draft, listenPort: Number(event.target.value) })} />
-        </Field>
-        <Field label={t("Entrypoints", "入口点")}>
-          <Input value={draft.entryPointsText} onChange={(event) => setDraft({ ...draft, entryPointsText: event.target.value })} placeholder="web, websecure" required />
-        </Field>
-        <Field label={t("TLS mode", "TLS 模式")}>
-          <select className={selectClass} value={draft.tlsMode} onChange={(event) => setDraft({ ...draft, tlsMode: event.target.value as DraftService["tlsMode"] })}>
-            <option value="none">{t("No TLS", "无 TLS")}</option>
-            <option value="file-certificate">{t("File certificate", "文件证书")}</option>
-            <option value="resolver">{t("ACME resolver", "ACME 解析器")}</option>
-          </select>
-        </Field>
-        {draft.tlsMode === "file-certificate" ? (
-          <Field label={t("Certificate", "证书")}>
-            <select className={selectClass} value={draft.certificateId} onChange={(event) => setDraft({ ...draft, certificateId: event.target.value })}>
-              <option value="">{t("Select certificate", "选择证书")}</option>
-              {certificates.map((certificate) => (
-                <option key={certificate.id} value={certificate.id}>
-                  {certificate.name}
+          <RoutePairPreview
+            frontends={domainPreview}
+            backend={draft.targetUrl}
+            isDefaultRule={isDefaultRule}
+          />
+          <Field label={t("Rule name", "规则名称")}>
+            <Input value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} placeholder={t("Optional", "可留空")} />
+          </Field>
+          <Field label={t("Group", "分组")}>
+            <select className={selectClass} value={draft.groupId} onChange={(event) => setDraft({ ...draft, groupId: event.target.value })}>
+              {groups.map((group) => (
+                <option key={group.id} value={group.id}>
+                  {group.name}
                 </option>
               ))}
             </select>
           </Field>
-        ) : null}
-        {draft.tlsMode === "resolver" ? (
-          <Field label={t("Resolver", "解析器")}>
-            <Input value={draft.resolver} onChange={(event) => setDraft({ ...draft, resolver: event.target.value })} />
+          <Field label={t("TLS mode", "TLS 模式")}>
+            <select className={selectClass} value={draft.tlsMode} onChange={(event) => setDraft({ ...draft, tlsMode: event.target.value as DraftService["tlsMode"] })}>
+              <option value="none">{t("No TLS", "无 TLS")}</option>
+              <option value="file-certificate">{t("File certificate", "文件证书")}</option>
+              <option value="resolver">{t("ACME resolver", "ACME 解析器")}</option>
+            </select>
           </Field>
-        ) : null}
-        <Field className="md:col-span-2" label={t("Middlewares", "中间件")}>
-          <Input value={draft.middlewaresText} onChange={(event) => setDraft({ ...draft, middlewaresText: event.target.value })} placeholder="auth@file, compress@file" />
-        </Field>
-        <div className="grid gap-2 rounded-lg border bg-background/35 p-3 md:col-span-2">
-          <div className="text-sm font-medium">{t("Logs and metrics", "日志与指标")}</div>
-          <div className="grid gap-2 sm:grid-cols-3">
-            <InlineSwitch
-              label={t("Access log", "访问日志")}
-              checked={draft.accessLogs}
-              onCheckedChange={(checked) => setDraft({ ...draft, accessLogs: checked })}
-            />
-            <InlineSwitch
-              label={t("Prometheus metrics", "Prometheus 指标")}
-              checked={draft.metrics}
-              onCheckedChange={(checked) => setDraft({ ...draft, metrics: checked })}
-            />
-            <InlineSwitch
-              label={t("Tracing", "链路追踪")}
-              checked={draft.tracing}
-              onCheckedChange={(checked) => setDraft({ ...draft, tracing: checked })}
-            />
+          {draft.tlsMode === "file-certificate" ? (
+            <Field label={t("Certificate", "证书")}>
+              <select className={selectClass} value={draft.certificateId} onChange={(event) => setDraft({ ...draft, certificateId: event.target.value })}>
+                <option value="">{t("Select certificate", "选择证书")}</option>
+                {certificates.map((certificate) => (
+                  <option key={certificate.id} value={certificate.id}>
+                    {certificate.name}
+                  </option>
+                ))}
+              </select>
+            </Field>
+          ) : null}
+          {draft.tlsMode === "resolver" ? (
+            <Field label={t("Resolver", "解析器")}>
+              <Input value={draft.resolver} onChange={(event) => setDraft({ ...draft, resolver: event.target.value })} />
+            </Field>
+          ) : null}
+          <div className="flex items-center gap-3 self-end rounded-lg border bg-background/45 px-3 py-2">
+            <Switch checked={draft.enabled} onCheckedChange={(checked) => setDraft({ ...draft, enabled: checked })} />
+            <span className="text-sm">{t("Enabled", "启用")}</span>
           </div>
         </div>
-        <Field className="md:col-span-2" label={t("Notes", "备注")}>
-          <Textarea value={draft.notes} onChange={(event) => setDraft({ ...draft, notes: event.target.value })} rows={3} />
-        </Field>
-        <div className="flex items-center gap-3 md:col-span-2">
-          <Switch checked={draft.enabled} onCheckedChange={(checked) => setDraft({ ...draft, enabled: checked })} />
-          <span className="text-sm">{t("Enabled", "启用")}</span>
-        </div>
-        <Separator className="md:col-span-2" />
-        <footer className="flex justify-end gap-2 md:col-span-2">
+
+        <details className="rounded-lg border bg-background/25 p-3 [&_summary::-webkit-details-marker]:hidden">
+          <summary className="flex cursor-pointer select-none items-center justify-between gap-3 text-sm font-medium">
+            <span>{t("Advanced Traefik settings", "高级 Traefik 设置")}</span>
+            <ChevronDown className="size-4 text-muted-foreground" />
+          </summary>
+          <div className="mt-3 grid gap-3 md:grid-cols-2">
+            <Field label={t("Match mode", "匹配方式")}>
+              <select className={selectClass} value={draft.matchMode} onChange={(event) => setDraft({ ...draft, matchMode: event.target.value as DraftService["matchMode"] })}>
+                <option value="host">{t("Reverse proxy", "反向代理")}</option>
+                <option value="custom">{t("Custom Traefik rule", "自定义 Traefik 规则")}</option>
+                <option value="default">{t("Default fallback", "默认规则")}</option>
+              </select>
+            </Field>
+            <div className="flex items-center gap-3 self-end rounded-lg border bg-background/35 px-3 py-2">
+              <Switch checked={draft.passHostHeader} onCheckedChange={(checked) => setDraft({ ...draft, passHostHeader: checked })} />
+              <span className="text-sm">{t("Forward Host", "转发 Host")}</span>
+            </div>
+            {isCustomRule ? (
+              <Field className="md:col-span-2" label={t("Traefik rule", "Traefik 规则")}>
+                <Textarea value={draft.customRule} onChange={(event) => setDraft({ ...draft, customRule: event.target.value })} rows={3} placeholder="Host(`app.localhost`) && PathPrefix(`/api`)" required />
+              </Field>
+            ) : null}
+            <Field label={t("Listen port", "监听端口")}>
+              <Input type="number" min="1" max="65535" value={draft.listenPort} onChange={(event) => setDraft({ ...draft, listenPort: Number(event.target.value) })} />
+            </Field>
+            <Field label={t("Entrypoints", "入口点")}>
+              <Input value={draft.entryPointsText} onChange={(event) => setDraft({ ...draft, entryPointsText: event.target.value })} placeholder="web, websecure" required />
+            </Field>
+            <Field className="md:col-span-2" label={t("Middlewares", "中间件")}>
+              <Input value={draft.middlewaresText} onChange={(event) => setDraft({ ...draft, middlewaresText: event.target.value })} placeholder="auth@file, compress@file" />
+            </Field>
+            <div className="grid gap-2 rounded-lg border bg-background/35 p-3 md:col-span-2">
+              <div className="text-sm font-medium">{t("Logs and metrics", "日志与指标")}</div>
+              <div className="grid gap-2 sm:grid-cols-3">
+                <InlineSwitch
+                  label={t("Access log", "访问日志")}
+                  checked={draft.accessLogs}
+                  onCheckedChange={(checked) => setDraft({ ...draft, accessLogs: checked })}
+                />
+                <InlineSwitch
+                  label={t("Prometheus metrics", "Prometheus 指标")}
+                  checked={draft.metrics}
+                  onCheckedChange={(checked) => setDraft({ ...draft, metrics: checked })}
+                />
+                <InlineSwitch
+                  label={t("Tracing", "链路追踪")}
+                  checked={draft.tracing}
+                  onCheckedChange={(checked) => setDraft({ ...draft, tracing: checked })}
+                />
+              </div>
+            </div>
+            <Field className="md:col-span-2" label={t("Notes", "备注")}>
+              <Textarea value={draft.notes} onChange={(event) => setDraft({ ...draft, notes: event.target.value })} rows={3} />
+            </Field>
+          </div>
+        </details>
+
+        <Separator />
+        <footer className="flex justify-end gap-2">
           <Button type="button" variant="outline" onClick={onClose}>
             {t("Cancel", "取消")}
           </Button>
