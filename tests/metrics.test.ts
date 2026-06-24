@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { counterRatePerSecond, parsePrometheusMetrics, readEntrypointOpenConnections, readRouterRequestTotals, readRouterTrafficStats } from "../server/metrics";
+import { counterRatePerSecond, parsePrometheusMetrics, readEntrypointOpenConnections, readRouterRequestTotals, readRouterTrafficStats, readServiceOpenConnections } from "../server/metrics";
 
 describe("Traefik Prometheus metrics parsing", () => {
   it("sums router request counters across labels", () => {
@@ -32,12 +32,14 @@ traefik_entrypoint_requests_total{code="200",entrypoint="web",method="GET",proto
     ]);
   });
 
-  it("sums router byte counters and entrypoint open connections", () => {
+  it("sums router byte counters and open connections", () => {
     const text = `
 traefik_router_requests_total{code="200",router="gatelite-svc-one@file",service="gatelite-service-svc-one@file"} 3
 traefik_router_requests_total{code="404",router="gatelite-svc-one@file",service="gatelite-service-svc-one@file"} 2
 traefik_router_requests_bytes_total{code="200",router="gatelite-svc-one@file",service="gatelite-service-svc-one@file"} 128
 traefik_router_responses_bytes_total{code="200",router="gatelite-svc-one@file",service="gatelite-service-svc-one@file"} 2048
+traefik_service_open_connections{service="gatelite-service-svc-one@file",protocol="TCP"} 2
+traefik_service_open_connections{service="gatelite-service-svc-one@file",protocol="HTTP"} 3
 traefik_open_connections{entrypoint="web",protocol="TCP"} 4
 traefik_open_connections{entrypoint="websecure",protocol="TCP"} 1
 `;
@@ -52,6 +54,9 @@ traefik_open_connections{entrypoint="websecure",protocol="TCP"} 1
     const connections = readEntrypointOpenConnections(text);
     expect(connections.get("web")).toBe(4);
     expect(connections.get("websecure")).toBe(1);
+
+    const serviceConnections = readServiceOpenConnections(text);
+    expect(serviceConnections.get("gatelite-service-svc-one@file")).toBe(5);
   });
 
   it("calculates counter rates while tolerating resets and first samples", () => {

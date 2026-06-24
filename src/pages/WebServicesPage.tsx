@@ -600,7 +600,7 @@ function RouteDataTable({
                     <TrafficValue value={traffic?.requestBytes || 0} rate={traffic?.requestBytesPerSecond || 0} source={traffic?.source} tone="up" />
                   </TableCell>
                   <TableCell className="text-right">
-                    <span className="font-mono text-sm">{traffic?.source === "unavailable" ? "N/A" : traffic?.openConnections ?? 0}</span>
+                    <ConnectionValue traffic={traffic} />
                   </TableCell>
                   <TableCell>
                     <div className="flex flex-wrap gap-1">
@@ -688,6 +688,20 @@ function TrafficValue({ value, rate, source, tone }: { value: number; rate: numb
   );
 }
 
+function ConnectionValue({ traffic }: { traffic?: WebServiceTrafficStats }) {
+  const { t } = useLanguage();
+  if (!traffic || traffic.source === "unavailable" || traffic.openConnectionsScope === "unavailable") {
+    return <span className="font-mono text-sm text-muted-foreground">N/A</span>;
+  }
+
+  return (
+    <span className="grid gap-0.5 leading-tight">
+      <span className="font-mono text-sm text-foreground">{traffic.openConnections}</span>
+      <span className="text-[10px] text-muted-foreground">{connectionScopeLabel(traffic.openConnectionsScope, t)}</span>
+    </span>
+  );
+}
+
 function RouteDetails({ route }: { route: DomainRoute }) {
   const { t } = useLanguage();
   const service = route.service;
@@ -719,7 +733,7 @@ function RouteDetails({ route }: { route: DomainRoute }) {
         <DetailCell label={t("Requests", "请求数")} value={`${traffic?.totalRequests || 0}`} mono />
         <DetailCell label={t("Downstream", "下行")} value={`${formatBytesPerSecond(traffic?.responseBytesPerSecond || 0)} / ${formatBytes(traffic?.responseBytes || 0)}`} mono />
         <DetailCell label={t("Upstream", "上行")} value={`${formatBytesPerSecond(traffic?.requestBytesPerSecond || 0)} / ${formatBytes(traffic?.requestBytes || 0)}`} mono />
-        <DetailCell label={t("Live connections", "实时连接")} value={`${traffic?.openConnections ?? 0}`} mono />
+        <DetailCell label={t("Live connections", "实时连接")} value={connectionDetailText(traffic, t)} mono />
       </div>
 
       {service.notes ? (
@@ -730,6 +744,15 @@ function RouteDetails({ route }: { route: DomainRoute }) {
       ) : null}
     </div>
   );
+}
+
+function connectionDetailText(traffic: WebServiceTrafficStats | undefined, t: (english: string, chinese: string) => string): string {
+  if (!traffic || traffic.source === "unavailable" || traffic.openConnectionsScope === "unavailable") return "N/A";
+  return `${traffic.openConnections} (${connectionScopeLabel(traffic.openConnectionsScope, t)})`;
+}
+
+function connectionScopeLabel(scope: WebServiceTrafficStats["openConnectionsScope"], t: (english: string, chinese: string) => string): string {
+  return scope === "service" ? t("rule", "规则") : t("entrypoint", "入口点");
 }
 
 function DetailCell({ label, value, mono, className }: { label: string; value: string; mono?: boolean; className?: string }) {

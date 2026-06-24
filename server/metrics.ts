@@ -45,6 +45,7 @@ export async function getTrafficSnapshot(services: WebService[]): Promise<Traffi
     const text = await fetchTraefikMetrics();
     const routerStats = readRouterTrafficStats(text);
     const routerTotals = new Map(Array.from(routerStats.entries()).map(([router, stats]) => [router, stats.totalRequests]));
+    const serviceOpenConnections = readServiceOpenConnections(text);
     const openConnectionsByEntrypoint = readEntrypointOpenConnections(text);
     const series = buildDomainSeries(services, routerTotals, updatedAt);
 
@@ -55,7 +56,7 @@ export async function getTrafficSnapshot(services: WebService[]): Promise<Traffi
         updatedAt,
         series
       },
-      statsByServiceId: buildServiceTrafficStats(services, routerStats, openConnectionsByEntrypoint, updatedAt, "prometheus")
+      statsByServiceId: buildServiceTrafficStats(services, routerStats, serviceOpenConnections, openConnectionsByEntrypoint, updatedAt, "prometheus")
     };
   } catch (error) {
     return {
@@ -66,7 +67,7 @@ export async function getTrafficSnapshot(services: WebService[]): Promise<Traffi
         series: [],
         error: error instanceof Error ? error.message : "Unable to load Traefik metrics."
       },
-      statsByServiceId: buildServiceTrafficStats(services, new Map(), new Map(), updatedAt, "unavailable")
+      statsByServiceId: buildServiceTrafficStats(services, new Map(), new Map(), new Map(), updatedAt, "unavailable")
     };
   }
 }
@@ -120,6 +121,19 @@ export function readEntrypointOpenConnections(text: string): Map<string, number>
   return connections;
 }
 
+export function readServiceOpenConnections(text: string): Map<string, number> {
+  const connections = new Map<string, number>();
+
+  for (const metric of parsePrometheusMetrics(text)) {
+    if (metric.name !== "traefik_service_open_connections") continue;
+    const service = metric.labels.service;
+    if (!service || !Number.isFinite(metric.value)) continue;
+    connections.set(service, (connections.get(service) || 0) + metric.value);
+  }
+
+  return connections;
+}
+
 export function counterRatePerSecond(previousTotal: number, currentTotal: number, elapsedMs: number): number {
   if (!Number.isFinite(previousTotal) || !Number.isFinite(currentTotal) || !Number.isFinite(elapsedMs) || elapsedMs <= 0) return 0;
   if (currentTotal < previousTotal) return 0;
@@ -148,6 +162,7 @@ export function parsePrometheusMetrics(text: string): ParsedMetric[] {
 function buildServiceTrafficStats(
   services: WebService[],
   routerStats: Map<string, RouterTrafficStats>,
+  serviceOpenConnections: Map<string, number>,
   openConnectionsByEntrypoint: Map<string, number>,
   updatedAt: string,
   source: WebServiceTrafficStats["source"]
@@ -157,6 +172,8 @@ function buildServiceTrafficStats(
   for (const service of services) {
     const routerName = traefikName("gatelite", service.id);
     const routerKey = routerStats.has(`${routerName}@file`) ? `${routerName}@file` : routerName;
+    const traefikServiceName = traefikName("gatelite-service", service.id);
+    const traefikServiceKey = serviceOpenConnections.has(`${traefikServiceName}@file`) ? `${traefikServiceName}@file` : traefikServiceName;
     const stats = routerStats.get(routerKey) || {
       totalRequests: 0,
       requestBytes: 0,
@@ -166,7 +183,9 @@ function buildServiceTrafficStats(
     const currentAtMs = new Date(updatedAt).getTime();
     const requestBytesPerSecond = source === "prometheus" && previous ? counterRatePerSecond(previous.requestBytes, stats.requestBytes, currentAtMs - previous.atMs) : 0;
     const responseBytesPerSecond = source === "prometheus" && previous ? counterRatePerSecond(previous.responseBytes, stats.responseBytes, currentAtMs - previous.atMs) : 0;
-    const openConnections = service.entryPoints.reduce((total, entrypoint) => total + (openConnectionsByEntrypoint.get(entrypoint) || 0), 0);
+    const hasServiceOpenConnections = source === "prometheus" && serviceOpenConnections.has(traefikServiceKey);
+    const entrypointOpenConnections = service.entryPoints.reduce((total, entrypoint) => total + (openConnectionsByEntrypoint.get(entrypoint) || 0), 0);
+    const openConnections = hasServiceOpenConnections ? serviceOpenConnections.get(traefikServiceKey) || 0 : entrypointOpenConnections;
 
     statsByServiceId.set(service.id, {
       source,
@@ -176,7 +195,8 @@ function buildServiceTrafficStats(
       responseBytes: stats.responseBytes,
       requestBytesPerSecond,
       responseBytesPerSecond,
-      openConnections
+      openConnections,
+      openConnectionsScope: source === "unavailable" ? "unavailable" : hasServiceOpenConnections ? "service" : "entrypoint"
     });
 
     if (source === "prometheus") {

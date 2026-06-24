@@ -58,6 +58,9 @@ GateLite MVP mapping:
 - Lucky-style traffic columns -> each Web service rule row shows downstream
   and upstream byte rates from Prometheus counters, with cumulative bytes kept
   as secondary context.
+- Live connection count -> service-level Traefik connection metrics are used
+  when available; otherwise the table shows the Traefik entrypoint aggregate
+  with an explicit `entrypoint` source label.
 - Lucky-style rule creation -> `New rule` creates the parent domain rule
   context, while `New sub-rule` is only enabled inside a selected domain and
   pre-fills that parent domain so users add a subdomain-to-backend mapping.

@@ -151,6 +151,7 @@ export interface WebServiceTrafficStats {
   requestBytesPerSecond: number;
   responseBytesPerSecond: number;
   openConnections: number;
+  openConnectionsScope: "service" | "entrypoint" | "unavailable";
 }
 
 export interface WebServiceWithRuntime extends WebService {
