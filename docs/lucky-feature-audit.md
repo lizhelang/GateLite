@@ -42,6 +42,9 @@ GateLite MVP mapping:
   using `PathPrefix(`/`)` with low priority.
 - Grouped display -> GateLite group metadata, independent of Traefik runtime.
 - Drag reorder -> GateLite metadata order and deterministic generated YAML order.
+- Copy rule/sub-rule data -> prefilled `copy as new rule` form that keeps
+  backend, TLS, group, and middleware settings while generating a safe
+  `copy-` frontend domain.
 
 ## SSL/TLS Core Behaviors
 

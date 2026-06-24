@@ -2,6 +2,7 @@ import {
   ArrowRight,
   ChevronDown,
   ChevronRight,
+  Copy,
   ExternalLink,
   GripVertical,
   Layers,
@@ -98,6 +99,7 @@ export function WebServicesPage({ dashboard, onRefresh }: WebServicesPageProps) 
   const { t } = useLanguage();
   const [editing, setEditing] = useState<WebServiceWithRuntime | null>(null);
   const [createMode, setCreateMode] = useState<"rule" | "subrule" | "default">("rule");
+  const [draftPreset, setDraftPreset] = useState<Partial<DraftService> | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [selectedId, setSelectedId] = useState("");
   const [activeRoot, setActiveRoot] = useState("__all");
@@ -116,13 +118,40 @@ export function WebServicesPage({ dashboard, onRefresh }: WebServicesPageProps) 
 
   const openCreate = (mode: "rule" | "subrule" | "default" = "rule") => {
     setEditing(null);
+    setDraftPreset(null);
     setCreateMode(mode);
     setShowForm(true);
   };
 
   const openEdit = (service: WebServiceWithRuntime) => {
     setEditing(service);
+    setDraftPreset(null);
     setCreateMode(service.matchMode === "default" ? "default" : "subrule");
+    setShowForm(true);
+  };
+
+  const openDuplicate = (route: DomainRoute) => {
+    if (route.isDefault) return;
+    const domains = domainsToDraft([route.primaryDomain]);
+    const label = domainToLabel(route.primaryDomain, domains.domainRoot);
+    setEditing(null);
+    setCreateMode(label === "@" ? "rule" : "subrule");
+    setDraftPreset({
+      name: `${displayRouteName(route, t)} ${t("copy", "副本")}`,
+      enabled: true,
+      matchMode: "host",
+      groupId: route.service.groupId,
+      domainRoot: domains.domainRoot,
+      subdomainsText: copyDomainLabel(label),
+      listenPort: route.service.listenPort,
+      entryPointsText: route.service.entryPoints.join(", "),
+      targetUrl: route.service.targetUrl,
+      middlewaresText: route.service.middlewares.join(", "),
+      tlsMode: route.service.tls.mode,
+      certificateId: route.service.tls.certificateId || "",
+      resolver: route.service.tls.resolver || "letsencrypt",
+      notes: route.service.notes || ""
+    });
     setShowForm(true);
   };
 
@@ -273,6 +302,7 @@ export function WebServicesPage({ dashboard, onRefresh }: WebServicesPageProps) 
         onDrop={handleDrop}
         onSelect={setSelectedId}
         onToggle={handleToggle}
+        onDuplicate={openDuplicate}
         onEdit={openEdit}
         onDelete={handleDelete}
       />
@@ -286,8 +316,12 @@ export function WebServicesPage({ dashboard, onRefresh }: WebServicesPageProps) 
           activeRoot={activeRoot}
           groups={dashboard.groups}
           certificates={dashboard.certificates}
+          draftPreset={draftPreset}
           saving={saving}
-          onClose={() => setShowForm(false)}
+          onClose={() => {
+            setShowForm(false);
+            setDraftPreset(null);
+          }}
           onSubmit={async (input) => {
             setSaving(true);
             setError(null);
@@ -298,6 +332,7 @@ export function WebServicesPage({ dashboard, onRefresh }: WebServicesPageProps) 
                 await createWebService(input);
               }
               setShowForm(false);
+              setDraftPreset(null);
               await onRefresh();
             } catch (saveError) {
               setError(saveError instanceof Error ? saveError.message : t("Save failed.", "保存失败。"));
@@ -319,6 +354,7 @@ function RouteDataTable({
   onDrop,
   onSelect,
   onToggle,
+  onDuplicate,
   onEdit,
   onDelete
 }: {
@@ -329,6 +365,7 @@ function RouteDataTable({
   onDrop: (id: string) => void;
   onSelect: (id: string) => void;
   onToggle: (service: WebServiceWithRuntime) => Promise<void>;
+  onDuplicate: (route: DomainRoute) => void;
   onEdit: (service: WebServiceWithRuntime) => void;
   onDelete: (service: WebServiceWithRuntime) => Promise<void>;
 }) {
@@ -353,7 +390,7 @@ function RouteDataTable({
                 <TableHead>{t("Live conn.", "实时连接")}</TableHead>
                 <TableHead>{t("Status", "状态")}</TableHead>
                 <TableHead>TLS</TableHead>
-                <TableHead className="w-28 text-right">{t("Actions", "操作")}</TableHead>
+                <TableHead className="w-36 text-right">{t("Actions", "操作")}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -441,6 +478,9 @@ function RouteDataTable({
                       <div className="flex items-center justify-end gap-1" onClick={(event) => event.stopPropagation()}>
                         <Button variant="outline" size="icon-xs" onClick={() => void onToggle(service)} aria-label={t("Toggle service", "切换服务启用状态")}>
                           <Power className="size-3.5" />
+                        </Button>
+                        <Button variant="outline" size="icon-xs" onClick={() => onDuplicate(route)} disabled={route.isDefault} aria-label={t("Copy as new rule", "复制为新规则")}>
+                          <Copy className="size-3.5" />
                         </Button>
                         <Button variant="outline" size="icon-xs" onClick={() => onEdit(service)} aria-label={t("Edit service", "编辑服务")}>
                           <Pencil className="size-3.5" />
@@ -550,6 +590,7 @@ function ServiceForm({
   activeRoot,
   groups,
   certificates,
+  draftPreset,
   saving,
   onClose,
   onSubmit
@@ -559,6 +600,7 @@ function ServiceForm({
   activeRoot: string;
   groups: ServiceGroup[];
   certificates: DashboardPayload["certificates"];
+  draftPreset: Partial<DraftService> | null;
   saving: boolean;
   onClose: () => void;
   onSubmit: (input: WebServiceInput) => Promise<void>;
@@ -585,7 +627,14 @@ function ServiceForm({
           resolver: service.tls.resolver || "letsencrypt",
           notes: service.notes || ""
         }
-      : { ...emptyDraft, matchMode, groupId: groups[0]?.id || "local", domainRoot: createRoot, subdomainsText: mode === "rule" ? "@" : "" };
+      : {
+          ...emptyDraft,
+          matchMode,
+          groupId: groups[0]?.id || "local",
+          domainRoot: createRoot,
+          subdomainsText: mode === "rule" ? "@" : "",
+          ...(draftPreset || {})
+        };
   });
   const isDefaultRule = draft.matchMode === "default";
   const domainPreview = isDefaultRule ? [] : composeDomains(draft.domainRoot, draft.subdomainsText);
@@ -814,6 +863,13 @@ function displayRouteName(route: Pick<DomainRoute, "service" | "primaryDomain" |
 
 function rootLabel(root: string, t: (english: string, chinese: string) => string): string {
   return root === "__default" ? t("Default", "默认") : root;
+}
+
+function copyDomainLabel(label: string): string {
+  const clean = normalizeDomain(label);
+  if (!clean || clean === "@") return "copy";
+  if (clean.startsWith("copy-")) return clean;
+  return `copy-${clean}`;
 }
 
 function countServicesByGroup(services: WebServiceWithRuntime[]): Map<string, number> {
