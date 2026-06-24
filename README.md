@@ -118,7 +118,9 @@ already running. It checks the local Traefik API, the GateLite API connection,
 the generated dynamic configuration, and both seeded HTTP/HTTPS whoami routes.
 `npm run verify:ui-i18n` uses Playwright against the running GateLite frontend
 to switch between Chinese and English and verify the core Web services and
-SSL/TLS certificate labels, table columns, and inline binding expansion.
+SSL/TLS certificate labels, table columns, details/edit row actions, Web
+service rule/sub-rule preview flows, browser PEM upload, and inline certificate
+binding expansion.
 `npm run verify:crud` uses temporary `*.localhost` domains to exercise Web
 service, group, certificate, history rollback, create/edit/toggle/reorder/delete
 flows against the same local Traefik stack, then removes those temporary

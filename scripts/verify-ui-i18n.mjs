@@ -41,6 +41,7 @@ async function verifyLanguage(browser, language) {
     await assertBody(page, /whoami\.localhost/, `${language} Web service frontend domain row`);
     await assertBody(page, /whoami:80/, `${language} Web service backend host-port row`);
     await assertVisibleButton(page, language === "zh" ? /拖拽分组/ : /Drag group/, `${language} Web service group drag handle`);
+    await verifyWebServiceRowActions(page, language);
     await verifyWebServicePreview(page, language);
     await verifyWebServiceSubrulePreview(page, language);
 
@@ -48,6 +49,7 @@ async function verifyLanguage(browser, language) {
     await assertBody(page, language === "zh" ? /添加证书/ : /Add certificate/, `${language} certificate create action`);
     await assertBody(page, language === "zh" ? /域名 \/ SAN/ : /Domains \/ SANs/, `${language} certificate SAN column`);
     await assertBody(page, language === "zh" ? /绑定/ : /Bindings/, `${language} certificate binding column`);
+    await verifyCertificateRowActions(page, language);
     await verifyCertificatePreview(page, language);
     await verifyCertificateUploadFromFiles(page, language);
     await assertCertificateBindingExpansion(page, language);
@@ -61,6 +63,21 @@ async function verifyLanguage(browser, language) {
   } finally {
     await page.close();
   }
+}
+
+async function verifyWebServiceRowActions(page, language) {
+  await page.getByRole("button", { name: language === "zh" ? /规则操作/ : /Rule actions/ }).first().click();
+  await page.getByRole("menuitem", { name: language === "zh" ? /^详情$/ : /^Details$/ }).click();
+  await assertBody(page, language === "zh" ? /反代规则详情/ : /Reverse proxy rule details/, `${language} Web service details dialog`);
+  await assertBody(page, language === "zh" ? /Traefik 规则/ : /Traefik rule/, `${language} Web service details Traefik rule`);
+  await assertBody(page, language === "zh" ? /实时连接/ : /Live connections/, `${language} Web service details traffic`);
+  await closeTopDialog(page);
+
+  await page.getByRole("button", { name: language === "zh" ? /规则操作/ : /Rule actions/ }).first().click();
+  await page.getByRole("menuitem", { name: language === "zh" ? /^编辑$/ : /^Edit$/ }).click();
+  await assertBody(page, language === "zh" ? /编辑规则|编辑子规则/ : /Edit rule|Edit sub-rule/, `${language} Web service edit dialog`);
+  await assertBody(page, language === "zh" ? /^前端域名|所属主域/m : /Frontend domain|Parent domain/, `${language} Web service edit frontend field`);
+  await page.getByRole("button", { name: language === "zh" ? /^取消$/ : /^Cancel$/ }).click();
 }
 
 async function verifyWebServicePreview(page, language) {
@@ -91,6 +108,20 @@ async function verifyWebServiceSubrulePreview(page, language) {
   await page.getByText(language === "zh" ? "配置预览" : "Configuration preview").waitFor({ timeout: 5000 });
   await assertBody(page, new RegExp(escapeRegex(domain)), `${language} Web service sub-rule preview domain`);
   await assertBody(page, /whoami:80/, `${language} Web service sub-rule backend target`);
+  await page.getByRole("button", { name: language === "zh" ? /^取消$/ : /^Cancel$/ }).click();
+}
+
+async function verifyCertificateRowActions(page, language) {
+  await page.getByRole("button", { name: language === "zh" ? /证书操作/ : /Certificate actions/ }).first().click();
+  await page.getByRole("menuitem", { name: language === "zh" ? /^详情$/ : /^Details$/ }).click();
+  await assertBody(page, language === "zh" ? /证书元数据/ : /Certificate metadata/, `${language} certificate details dialog`);
+  await assertBody(page, language === "zh" ? /域名绑定明细/ : /Domain bindings/, `${language} certificate details binding rows`);
+  await closeTopDialog(page);
+
+  await page.getByRole("button", { name: language === "zh" ? /证书操作/ : /Certificate actions/ }).first().click();
+  await page.getByRole("menuitem", { name: language === "zh" ? /^编辑$/ : /^Edit$/ }).click();
+  await assertBody(page, language === "zh" ? /编辑证书/ : /Edit certificate/, `${language} certificate edit dialog`);
+  await assertBody(page, language === "zh" ? /证书名称/ : /Certificate name/, `${language} certificate edit name field`);
   await page.getByRole("button", { name: language === "zh" ? /^取消$/ : /^Cancel$/ }).click();
 }
 
@@ -206,6 +237,11 @@ async function readReadableCertificatePaths(page) {
 async function openView(page, namePattern) {
   await page.getByRole("button", { name: namePattern }).click();
   await page.waitForLoadState("networkidle");
+}
+
+async function closeTopDialog(page) {
+  await page.keyboard.press("Escape");
+  await page.waitForTimeout(150);
 }
 
 async function assertCertificateBindingExpansion(page, language) {
