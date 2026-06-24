@@ -151,7 +151,7 @@ async function createAndVerifyHttpService(groupId) {
   const service = await apiJson("/api/web-services", {
     method: "POST",
     body: {
-      name: `CRUD HTTP ${suffix}`,
+      name: "",
       enabled: true,
       groupId,
       domains: [originalHttpHost],
@@ -164,11 +164,14 @@ async function createAndVerifyHttpService(groupId) {
     },
     expectedStatus: 201
   });
+  if (service.name !== "") {
+    throw new Error("Blank Web service rule name was not preserved.");
+  }
   await waitForHttpRoute(originalHttpHost, "http");
   const body = await routeText(httpRouteUrl, originalHttpHost);
   assertIncludes(body, `Host: ${originalHttpHost}`, originalHttpHost);
   assertIncludes(body, "X-Forwarded-Proto: http", originalHttpHost);
-  console.log("[ok] Web service create applies an HTTP Traefik route.");
+  console.log("[ok] Web service create accepts a blank rule name and applies an HTTP Traefik route.");
   return service;
 }
 

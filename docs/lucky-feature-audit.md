@@ -33,6 +33,7 @@ Lucky behaviors observed from the Web service chunk:
 GateLite MVP mapping:
 
 - Main rule -> managed Traefik HTTP router plus load-balancer service.
+- Blank rule name -> accepted in state/API, with domain fallback in the UI.
 - Domain list -> `Host(...)` rule projection.
 - Listening port -> local host port hint for the configured Traefik entrypoint.
 - Backend address -> Traefik service server URL.

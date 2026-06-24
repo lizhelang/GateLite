@@ -133,7 +133,8 @@ export function WebServicesPage({ dashboard, onRefresh }: WebServicesPageProps) 
   };
 
   const handleDelete = async (service: WebServiceWithRuntime) => {
-    if (!window.confirm(t(`Delete Web service "${service.name}"?`, `删除 Web 服务「${service.name}」？`))) return;
+    const label = displayServiceName({ service, primaryDomain: service.domains[0] || service.id });
+    if (!window.confirm(t(`Delete Web service "${label}"?`, `删除 Web 服务「${label}」？`))) return;
     setError(null);
     try {
       await deleteWebService(service.id);
@@ -355,6 +356,7 @@ function RouteDataTable({
                 const backend = formatBackendTarget(service.targetUrl);
                 const traffic = service.traffic;
                 const isRootRule = route.labels.some((label) => label === "@");
+                const displayName = displayServiceName(route);
                 return (
                   <TableRow
                     key={service.id}
@@ -371,11 +373,11 @@ function RouteDataTable({
                       </Button>
                     </TableCell>
                     <TableCell>
-                      <Checkbox checked={selected} aria-label={t(`Select ${service.name}`, `选择 ${service.name}`)} onClick={(event) => event.stopPropagation()} onCheckedChange={(checked) => onSelect(checked ? service.id : "")} />
+                      <Checkbox checked={selected} aria-label={t(`Select ${displayName}`, `选择 ${displayName}`)} onClick={(event) => event.stopPropagation()} onCheckedChange={(checked) => onSelect(checked ? service.id : "")} />
                     </TableCell>
                     <TableCell>
                       <div className="grid min-w-0 gap-0.5">
-                        <span className="truncate font-medium">{service.name}</span>
+                        <span className="truncate font-medium">{displayName}</span>
                         <span className="flex min-w-0 items-center gap-1 truncate text-xs text-muted-foreground">
                           <Badge variant="outline" className="h-5 rounded-md px-1.5 text-[10px]">
                             {isRootRule ? t("Rule", "规则") : t("Sub-rule", "子规则")}
@@ -463,10 +465,11 @@ function RouteDetails({ route }: { route: DomainRoute }) {
   const service = route.service;
   const traffic = service.traffic;
   const backend = formatBackendTarget(service.targetUrl);
+  const displayName = displayServiceName(route);
   return (
     <Card className="overflow-hidden bg-card/70">
       <CardContent className="grid gap-3 p-4 text-sm md:grid-cols-4">
-        <DetailCell label={t("Selected rule", "选中规则")} value={service.name} />
+        <DetailCell label={t("Selected rule", "选中规则")} value={displayName} />
         <DetailCell label={t("Frontend", "前端")} value={service.domains.join(", ")} />
         <DetailCell label={t("Backend", "后端")} value={`${backend.scheme}://${backend.hostPort}`} />
         <DetailCell label={t("Runtime", "运行时")} value={`${service.runtime?.name || "unmatched"} · ${service.runtime?.status || (service.enabled ? "unknown" : "disabled")}`} />
@@ -602,7 +605,7 @@ function ServiceForm({
     <Modal title={title} subtitle={subtitle} onClose={onClose}>
       <form className="grid gap-4 md:grid-cols-2" onSubmit={(event) => void submit(event)}>
         <Field label={t("Rule name", "规则名称")}>
-          <Input value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} required />
+          <Input value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} placeholder={t("Optional, domain is used when blank", "可留空，留空时使用域名显示")} />
         </Field>
         <Field label={t("Group", "分组")}>
           <select className={selectClass} value={draft.groupId} onChange={(event) => setDraft({ ...draft, groupId: event.target.value })}>
@@ -671,7 +674,7 @@ function ServiceForm({
           <Button type="button" variant="outline" onClick={onClose}>
             {t("Cancel", "取消")}
           </Button>
-          <Button type="submit" disabled={saving || domainPreview.length === 0 || !draft.name.trim() || !draft.targetUrl.trim() || (mode === "subrule" && !service && !draft.subdomainsText.trim())}>
+          <Button type="submit" disabled={saving || domainPreview.length === 0 || !draft.targetUrl.trim() || (mode === "subrule" && !service && !draft.subdomainsText.trim())}>
             <Save className="size-4" />
             {saving ? t("Saving...", "保存中...") : t("Save", "保存")}
           </Button>
@@ -693,7 +696,7 @@ function Field({ label, children, className }: { label: string; children: ReactN
 function buildDomainZones(services: WebServiceWithRuntime[], groupsById: Map<string, ServiceGroup>): DomainZone[] {
   const zones = new Map<string, DomainRoute[]>();
   for (const service of services) {
-    const primaryDomain = service.domains[0] || service.name.toLowerCase().replace(/\s+/g, "-");
+    const primaryDomain = service.domains[0] || service.name.toLowerCase().replace(/\s+/g, "-") || service.id;
     const root = inferRootDomain(primaryDomain);
     const labels = service.domains.map((domain) => domainToLabel(domain, root));
     const route: DomainRoute = {
@@ -706,6 +709,10 @@ function buildDomainZones(services: WebServiceWithRuntime[], groupsById: Map<str
     zones.set(root, [...(zones.get(root) || []), route]);
   }
   return Array.from(zones.entries()).map(([root, routes]) => ({ root, routes }));
+}
+
+function displayServiceName(route: Pick<DomainRoute, "service" | "primaryDomain">): string {
+  return route.service.name.trim() || route.primaryDomain;
 }
 
 function countServicesByGroup(services: WebServiceWithRuntime[]): Map<string, number> {

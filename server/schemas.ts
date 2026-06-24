@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 export const webServiceInputSchema = z.object({
-  name: z.string().trim().min(1),
+  name: z.string().trim().default(""),
   enabled: z.boolean().default(true),
   groupId: z.string().trim().default("local"),
   domains: z.array(z.string().trim().min(1)).min(1),
@@ -54,4 +54,3 @@ export const groupInputSchema = z.object({
   name: z.string().trim().min(1),
   collapsed: z.boolean().default(false)
 });
-

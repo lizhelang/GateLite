@@ -56,7 +56,7 @@ app.post("/api/web-services", (request, response) => {
   };
   validateWebService(service);
   state.webServices.push(service);
-  const next = saveState(state, "web-service.create", `Created Web service ${service.name}.`);
+  const next = saveState(state, "web-service.create", `Created Web service ${webServiceLabel(service)}.`);
   response.status(201).json(next.webServices.find((item) => item.id === service.id));
 });
 
@@ -74,7 +74,7 @@ app.put("/api/web-services/:id", (request, response) => {
   };
   validateWebService(updated);
   state.webServices[index] = updated;
-  const next = saveState(state, "web-service.update", `Updated Web service ${updated.name}.`);
+  const next = saveState(state, "web-service.update", `Updated Web service ${webServiceLabel(updated)}.`);
   response.json(next.webServices.find((service) => service.id === updated.id));
 });
 
@@ -85,7 +85,7 @@ app.patch("/api/web-services/:id/toggle", (request, response) => {
   if (!service) return response.status(404).json({ error: "Web service not found." });
   service.enabled = enabled;
   service.updatedAt = new Date().toISOString();
-  const next = saveState(state, "web-service.toggle", `${enabled ? "Enabled" : "Disabled"} Web service ${service.name}.`);
+  const next = saveState(state, "web-service.toggle", `${enabled ? "Enabled" : "Disabled"} Web service ${webServiceLabel(service)}.`);
   response.json(next.webServices.find((item) => item.id === service.id));
 });
 
@@ -94,7 +94,7 @@ app.delete("/api/web-services/:id", (request, response) => {
   const service = state.webServices.find((item) => item.id === request.params.id);
   if (!service) return response.status(404).json({ error: "Web service not found." });
   state.webServices = state.webServices.filter((item) => item.id !== request.params.id);
-  saveState(state, "web-service.delete", `Deleted Web service ${service.name}.`);
+  saveState(state, "web-service.delete", `Deleted Web service ${webServiceLabel(service)}.`);
   response.status(204).send();
 });
 
@@ -304,4 +304,8 @@ function validateWebService(service: WebService): void {
 
 function normalizeDomains(domains: string[]): string[] {
   return Array.from(new Set(domains.map((domain) => domain.trim().toLowerCase()).filter(Boolean)));
+}
+
+function webServiceLabel(service: WebService): string {
+  return service.name.trim() || service.domains[0] || service.id;
 }
