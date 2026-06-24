@@ -85,7 +85,17 @@ export interface GateLiteState {
     at: string;
     action: string;
     summary: string;
+    rollbackId?: string;
   }>;
+}
+
+export interface GateLiteHistoryEvent {
+  id: string;
+  at: string;
+  action: string;
+  summary: string;
+  rollbackId?: string;
+  rollbackAvailable: boolean;
 }
 
 export interface RuntimeRouter {
@@ -170,4 +180,5 @@ export interface DashboardPayload {
   webServices: WebServiceWithRuntime[];
   certificates: CertificateWithBindings[];
   traffic: TrafficOverview;
+  history: GateLiteHistoryEvent[];
 }

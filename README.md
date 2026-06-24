@@ -62,6 +62,7 @@ This repository now contains the first local development module:
 - React/Vite management frontend
 - Express API companion
 - Traefik file-provider configuration generation
+- Local state history with rollback handles
 - Docker Compose Traefik + whoami test environment
 - Web services and SSL/TLS certificate management pages
 
@@ -115,8 +116,17 @@ npm run verify:crud
 already running. It checks the local Traefik API, the GateLite API connection,
 the generated dynamic configuration, and both seeded HTTP/HTTPS whoami routes.
 `npm run verify:crud` uses temporary `*.localhost` domains to exercise Web
-service, group, and certificate create/edit/toggle/reorder/delete flows against
-the same local Traefik stack, then removes those temporary resources.
+service, group, certificate, history rollback, create/edit/toggle/reorder/delete
+flows against the same local Traefik stack, then removes those temporary
+resources.
+
+Useful Agent API endpoints:
+
+- `GET /api/dashboard` returns runtime, Web service, certificate, traffic, and
+  recent history data.
+- `GET /api/history` returns recent changes with `rollbackAvailable` flags.
+- `POST /api/history/:id/rollback` restores the state snapshot captured before
+  that change and regenerates Traefik dynamic config.
 
 ## References
 

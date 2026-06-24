@@ -9,7 +9,7 @@ import { createCertificateFromInput, receiveSyncedCertificate, refreshCertificat
 import { createId, traefikName } from "./ids";
 import { getTrafficSnapshot } from "./metrics";
 import { certificateInputSchema, certificateSyncInputSchema, groupInputSchema, reorderSchema, webServiceInputSchema } from "./schemas";
-import { ensureState, loadState, saveState } from "./store";
+import { ensureState, historyEventsForState, listHistory, loadState, rollbackToHistoryEvent, saveState } from "./store";
 import { getTraefikRuntime } from "./traefik";
 import { validateWebService, webServiceLabel } from "./web-services";
 import { BadRequestError } from "./errors";
@@ -283,6 +283,15 @@ app.get("/api/generated-config", (_request, response) => {
   response.type("text/yaml").send(fs.readFileSync(config.dynamicFile, "utf8"));
 });
 
+app.get("/api/history", (_request, response) => {
+  response.json(listHistory());
+});
+
+app.post("/api/history/:id/rollback", async (request, response) => {
+  if (!rollbackToHistoryEvent(request.params.id)) return response.status(404).json({ error: "Rollback snapshot not found for this history event." });
+  response.json(await dashboardPayload());
+});
+
 const distDir = path.resolve(process.cwd(), "dist");
 if (fs.existsSync(distDir)) {
   app.use(express.static(distDir));
@@ -333,7 +342,8 @@ async function dashboardPayload(): Promise<DashboardPayload> {
     groups: state.groups,
     webServices,
     certificates,
-    traffic: trafficSnapshot.overview
+    traffic: trafficSnapshot.overview,
+    history: historyEventsForState(state)
   };
 }
 

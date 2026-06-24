@@ -113,7 +113,7 @@ export function App() {
           {activeView === "dashboard" ? <DashboardPage dashboard={dashboard} loading={loading} /> : null}
           {dashboard && activeView === "web" ? <WebServicesPage dashboard={dashboard} onRefresh={load} /> : null}
           {dashboard && activeView === "certificates" ? <CertificatesPage dashboard={dashboard} onRefresh={load} /> : null}
-          {dashboard && activeView === "runtime" ? <RuntimePage runtime={dashboard.runtime} /> : null}
+          {dashboard && activeView === "runtime" ? <RuntimePage dashboard={dashboard} onRefresh={load} /> : null}
         </main>
       </SidebarInset>
     </SidebarProvider>

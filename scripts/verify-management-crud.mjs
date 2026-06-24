@@ -12,6 +12,7 @@ const httpsRouteUrl = process.env.GATELITE_VERIFY_HTTPS_URL || "https://127.0.0.
 const suffix = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
 const originalHttpHost = `crud-${suffix}.localhost`;
 const editedHttpHost = `crud-edit-${suffix}.localhost`;
+const rollbackHttpHost = `crud-rollback-${suffix}.localhost`;
 const customHttpHost = `crud-custom-${suffix}.localhost`;
 const defaultFallbackHost = `unmatched-${suffix}.localhost`;
 const httpsHost = `crud-tls-${suffix}.localhost`;
@@ -28,6 +29,7 @@ const created = {
   certificateId: "",
   acmeCertificateId: "",
   httpServiceId: "",
+  rollbackServiceId: "",
   duplicateHttpServiceId: "",
   customServiceId: "",
   defaultServiceId: "",
@@ -49,6 +51,7 @@ try {
   created.groupId = group.id;
   await verifyWebServiceValidation(group.id);
   await verifySingleDomainRuleValidation(group.id);
+  await createAndVerifyRollbackRoute(group.id);
 
   const certificate = await createAndVerifyCertificate();
   created.certificateId = certificate.id;
@@ -428,6 +431,43 @@ async function createAndVerifyHttpService(groupId) {
   assertIncludes(body, "X-Forwarded-Proto: http", originalHttpHost);
   console.log("[ok] Web service create accepts a blank rule name and applies an HTTP Traefik route.");
   return service;
+}
+
+async function createAndVerifyRollbackRoute(groupId) {
+  const service = await apiJson("/api/web-services", {
+    method: "POST",
+    body: {
+      name: `CRUD rollback ${suffix}`,
+      enabled: true,
+      groupId,
+      domains: [rollbackHttpHost],
+      listenPort: 18080,
+      entryPoints: ["web"],
+      targetUrl: "http://whoami:80",
+      middlewares: [],
+      tls: { mode: "none" },
+      notes: "Temporary HTTP route used to verify history rollback."
+    },
+    expectedStatus: 201
+  });
+  created.rollbackServiceId = service.id;
+  await waitForHttpRoute(rollbackHttpHost, "http");
+
+  const history = await apiJson("/api/history");
+  const createEvent = history[0];
+  if (createEvent?.action !== "web-service.create" || !createEvent.rollbackAvailable) {
+    throw new Error("Latest Web service creation did not expose a rollback handle.");
+  }
+
+  await apiJson(`/api/history/${createEvent.id}/rollback`, { method: "POST" });
+  created.rollbackServiceId = "";
+  await waitForRouteUnavailable(rollbackHttpHost, "http");
+
+  const dashboard = await apiJson("/api/dashboard");
+  if (dashboard.webServices.some((item) => item.id === service.id || item.domains.includes(rollbackHttpHost))) {
+    throw new Error("Rollback left the temporary Web service in dashboard state.");
+  }
+  console.log("[ok] Web service create rollback restores previous state and removes the Traefik route.");
 }
 
 async function verifyDuplicateDomainProtection(groupId, host) {
@@ -870,6 +910,7 @@ async function cleanup() {
   await ignoreNotFound(async () => created.defaultServiceId && apiNoContent(`/api/web-services/${created.defaultServiceId}`, "DELETE"));
   await ignoreNotFound(async () => created.customServiceId && apiNoContent(`/api/web-services/${created.customServiceId}`, "DELETE"));
   await ignoreNotFound(async () => created.duplicateHttpServiceId && apiNoContent(`/api/web-services/${created.duplicateHttpServiceId}`, "DELETE"));
+  await ignoreNotFound(async () => created.rollbackServiceId && apiNoContent(`/api/web-services/${created.rollbackServiceId}`, "DELETE"));
   await ignoreNotFound(async () => created.httpServiceId && apiNoContent(`/api/web-services/${created.httpServiceId}`, "DELETE"));
   await ignoreNotFound(async () => created.acmeCertificateId && apiNoContent(`/api/certificates/${created.acmeCertificateId}`, "DELETE"));
   await ignoreNotFound(async () => created.syncedCertificateId && apiNoContent(`/api/certificates/${created.syncedCertificateId}`, "DELETE"));

@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import type { CertificateItem, GateLiteState, ServiceGroup, WebService } from "../shared/types";
+import type { CertificateItem, GateLiteHistoryEvent, GateLiteState, ServiceGroup, WebService } from "../shared/types";
 import { config } from "./config";
 import { createSelfSignedCertificate, refreshCertificateMetadata } from "./certificates";
 import { writeTraefikDynamicConfig } from "./generator";
@@ -15,6 +15,8 @@ export function loadState(): GateLiteState {
 
 export function saveState(state: GateLiteState, action = "state.save", summary = "Saved GateLite state."): GateLiteState {
   const now = new Date().toISOString();
+  const eventId = createHistoryId("evt");
+  const rollbackId = saveRollbackSnapshot(eventId);
   const next: GateLiteState = {
     ...state,
     groups: normalizeGroupOrders(state.groups),
@@ -32,10 +34,11 @@ export function saveState(state: GateLiteState, action = "state.save", summary =
     certificates: normalizeCertificateOrders(state.certificates).map(refreshCertificateMetadata),
     history: [
       {
-        id: `evt-${Date.now()}`,
+        id: eventId,
         at: now,
         action,
-        summary
+        summary,
+        rollbackId
       },
       ...state.history
     ].slice(0, 100)
@@ -45,6 +48,41 @@ export function saveState(state: GateLiteState, action = "state.save", summary =
   fs.writeFileSync(config.stateFile, JSON.stringify(next, null, 2), "utf8");
   writeTraefikDynamicConfig(next);
   return next;
+}
+
+export function listHistory(): GateLiteHistoryEvent[] {
+  return historyEventsForState(loadState());
+}
+
+export function historyEventsForState(state: GateLiteState): GateLiteHistoryEvent[] {
+  return state.history.map((event) => ({
+    ...event,
+    rollbackAvailable: rollbackAvailable(event.rollbackId)
+  }));
+}
+
+export function rollbackToHistoryEvent(eventId: string): GateLiteState | undefined {
+  const state = loadState();
+  const event = state.history.find((item) => item.id === eventId);
+  if (!event?.rollbackId) return undefined;
+  const snapshotPath = rollbackSnapshotPath(event.rollbackId);
+  if (!fs.existsSync(snapshotPath)) return undefined;
+
+  const snapshot = JSON.parse(fs.readFileSync(snapshotPath, "utf8")) as GateLiteState;
+  const restored: GateLiteState = {
+    ...snapshot,
+    history: [
+      {
+        id: createHistoryId("evt"),
+        at: new Date().toISOString(),
+        action: "state.rollback",
+        summary: `Rolled back to before ${event.summary}`,
+        rollbackId: saveRollbackSnapshot(createHistoryId("rollback"))
+      },
+      ...state.history
+    ].slice(0, 100)
+  };
+  return saveRestoredState(restored);
 }
 
 export function ensureState(): void {
@@ -156,4 +194,49 @@ function normalizeObservability(observability: WebService["observability"]): Web
   if (typeof observability.metrics === "boolean") next.metrics = observability.metrics;
   if (typeof observability.tracing === "boolean") next.tracing = observability.tracing;
   return Object.keys(next).length ? next : undefined;
+}
+
+function createHistoryId(prefix: string): string {
+  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function rollbackAvailable(rollbackId: string | undefined): boolean {
+  return Boolean(rollbackId && fs.existsSync(rollbackSnapshotPath(rollbackId)));
+}
+
+function saveRollbackSnapshot(eventId: string): string | undefined {
+  if (!fs.existsSync(config.stateFile)) return undefined;
+  const rollbackId = eventId.replace(/[^a-zA-Z0-9_-]/g, "-");
+  const filePath = rollbackSnapshotPath(rollbackId);
+  fs.mkdirSync(path.dirname(filePath), { recursive: true });
+  fs.copyFileSync(config.stateFile, filePath);
+  return rollbackId;
+}
+
+function rollbackSnapshotPath(rollbackId: string): string {
+  return path.join(path.dirname(config.stateFile), "rollbacks", `${rollbackId}.json`);
+}
+
+function saveRestoredState(state: GateLiteState): GateLiteState {
+  const restored: GateLiteState = {
+    ...state,
+    groups: normalizeGroupOrders(state.groups),
+    webServices: normalizeServiceOrders(state.webServices).map((service) => {
+      const matchMode = service.matchMode || "host";
+      return {
+        ...service,
+        matchMode,
+        domains: matchMode === "default" ? [] : normalizeStringList(service.domains),
+        entryPoints: normalizeStringList(service.entryPoints),
+        middlewares: normalizeStringList(service.middlewares),
+        observability: normalizeObservability(service.observability)
+      };
+    }),
+    certificates: normalizeCertificateOrders(state.certificates).map(refreshCertificateMetadata)
+  };
+
+  fs.mkdirSync(path.dirname(config.stateFile), { recursive: true });
+  fs.writeFileSync(config.stateFile, JSON.stringify(restored, null, 2), "utf8");
+  writeTraefikDynamicConfig(restored);
+  return restored;
 }

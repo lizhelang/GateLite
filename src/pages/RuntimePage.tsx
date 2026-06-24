@@ -1,7 +1,7 @@
-import { Activity, Boxes, Check, Copy, Download, FileCode2, Network, RefreshCw, Server } from "lucide-react";
+import { Activity, Boxes, Check, Copy, Download, FileCode2, Network, RefreshCw, RotateCcw, Server } from "lucide-react";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import type { TraefikRuntime } from "../../shared/types";
-import { getGeneratedConfig } from "../api";
+import type { DashboardPayload, GateLiteHistoryEvent } from "../../shared/types";
+import { getGeneratedConfig, rollbackHistoryEvent } from "../api";
 import { StatusBadge } from "../components/StatusBadge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -10,15 +10,19 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { useLanguage } from "../i18n";
 
 interface RuntimePageProps {
-  runtime: TraefikRuntime;
+  dashboard: DashboardPayload;
+  onRefresh: () => Promise<void>;
 }
 
-export function RuntimePage({ runtime }: RuntimePageProps) {
+export function RuntimePage({ dashboard, onRefresh }: RuntimePageProps) {
   const { t } = useLanguage();
+  const runtime = dashboard.runtime;
   const [generatedConfig, setGeneratedConfig] = useState("");
   const [configLoading, setConfigLoading] = useState(true);
   const [configError, setConfigError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [rollingBackId, setRollingBackId] = useState<string | null>(null);
+  const [rollbackError, setRollbackError] = useState<string | null>(null);
 
   const configStats = useMemo(() => summarizeGeneratedConfig(generatedConfig), [generatedConfig]);
   const entryPoints = useMemo(() => normalizeEntryPoints(runtime.entryPoints), [runtime.entryPoints]);
@@ -60,6 +64,22 @@ export function RuntimePage({ runtime }: RuntimePageProps) {
     anchor.download = "gatelite-traefik-dynamic.yml";
     anchor.click();
     URL.revokeObjectURL(url);
+  };
+
+  const handleRollback = async (event: GateLiteHistoryEvent) => {
+    if (!event.rollbackAvailable) return;
+    if (!window.confirm(t(`Rollback GateLite state to before "${event.summary}"?`, `回滚到「${event.summary}」之前的状态？`))) return;
+    setRollingBackId(event.id);
+    setRollbackError(null);
+    try {
+      await rollbackHistoryEvent(event.id);
+      await onRefresh();
+      await loadGeneratedConfig();
+    } catch (error) {
+      setRollbackError(error instanceof Error ? error.message : t("Rollback failed.", "回滚失败。"));
+    } finally {
+      setRollingBackId(null);
+    }
   };
 
   return (
@@ -162,6 +182,13 @@ export function RuntimePage({ runtime }: RuntimePageProps) {
         </CardContent>
       </Card>
 
+      <HistoryTable
+        history={dashboard.history}
+        rollingBackId={rollingBackId}
+        rollbackError={rollbackError}
+        onRollback={handleRollback}
+      />
+
       <Card className="bg-card/80">
         <CardHeader>
           <div className="grid gap-3 md:flex md:items-center md:justify-between">
@@ -213,6 +240,77 @@ export function RuntimePage({ runtime }: RuntimePageProps) {
         </CardContent>
       </Card>
     </section>
+  );
+}
+
+function HistoryTable({
+  history,
+  rollingBackId,
+  rollbackError,
+  onRollback
+}: {
+  history: GateLiteHistoryEvent[];
+  rollingBackId: string | null;
+  rollbackError: string | null;
+  onRollback: (event: GateLiteHistoryEvent) => Promise<void>;
+}) {
+  const { t } = useLanguage();
+  const rows = history.slice(0, 12);
+
+  return (
+    <Card className="bg-card/80">
+      <CardHeader>
+        <div className="grid gap-1">
+          <CardDescription>{t("Config history", "配置历史")}</CardDescription>
+          <CardTitle>{t("Rollback-ready changes", "可回滚的变更记录")}</CardTitle>
+          <CardDescription>{t("Every successful GateLite write stores the previous state before regenerating Traefik file-provider config.", "每次 GateLite 成功写入都会先保存旧状态，再重新生成 Traefik file-provider 配置。")}</CardDescription>
+        </div>
+      </CardHeader>
+      <CardContent className="grid gap-3">
+        {rollbackError ? <div className="rounded-xl border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">{rollbackError}</div> : null}
+        {rows.length ? (
+          <div className="overflow-x-auto rounded-xl border">
+            <Table className="min-w-[780px]">
+              <TableHeader className="bg-muted/65">
+                <TableRow className="hover:bg-transparent">
+                  <TableHead className="w-44">{t("Time", "时间")}</TableHead>
+                  <TableHead className="w-44">{t("Action", "动作")}</TableHead>
+                  <TableHead>{t("Summary", "摘要")}</TableHead>
+                  <TableHead className="w-28 text-right">{t("Rollback", "回滚")}</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {rows.map((event) => (
+                  <TableRow key={event.id}>
+                    <TableCell className="font-mono text-xs text-muted-foreground">{formatHistoryTime(event.at)}</TableCell>
+                    <TableCell>
+                      <Badge variant="outline" className="rounded-md font-mono text-[11px]">
+                        {event.action}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="max-w-[520px] truncate text-sm text-muted-foreground">{event.summary}</TableCell>
+                    <TableCell className="text-right">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={!event.rollbackAvailable || rollingBackId === event.id}
+                        onClick={() => void onRollback(event)}
+                      >
+                        <RotateCcw className={rollingBackId === event.id ? "size-3.5 animate-spin" : "size-3.5"} />
+                        {t("Rollback", "回滚")}
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        ) : (
+          <div className="rounded-xl border border-dashed p-6 text-sm text-muted-foreground">{t("No config changes recorded yet.", "还没有配置变更记录。")}</div>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 
@@ -296,6 +394,12 @@ function countIndentedKeys(config: string, section: string): number {
     if (/^ {4}[A-Za-z0-9-]+:/.test(line)) count += 1;
   }
   return count;
+}
+
+function formatHistoryTime(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString();
 }
 
 type RecordLike = Record<string, unknown>;

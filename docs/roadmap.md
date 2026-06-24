@@ -21,7 +21,9 @@
 - Support dry-run and diff before apply.
 - Validate domains, backend URLs, entrypoints, middleware references, and TLS
   resolver choices.
-- Add local version history and rollback.
+- Add local version history and rollback. Current local module snapshots state
+  before successful writes and exposes history rollback handles through the UI
+  and Agent API.
 
 ## Phase 3: Guided TLS
 
@@ -42,4 +44,3 @@
 - Add Kubernetes read-only visibility.
 - Evaluate provider-specific write support only where it can be safe and
   predictable.
-

@@ -1,6 +1,7 @@
 import type {
   CertificateWithBindings,
   DashboardPayload,
+  GateLiteHistoryEvent,
   ServiceGroup,
   TraefikRuntime,
   WebService,
@@ -50,6 +51,16 @@ export async function getGeneratedConfig(): Promise<string> {
     throw new Error(`Generated config request failed with ${response.status}`);
   }
   return response.text();
+}
+
+export async function getHistory(): Promise<GateLiteHistoryEvent[]> {
+  return request<GateLiteHistoryEvent[]>("/api/history");
+}
+
+export async function rollbackHistoryEvent(id: string): Promise<DashboardPayload> {
+  return request<DashboardPayload>(`/api/history/${id}/rollback`, {
+    method: "POST"
+  });
 }
 
 export async function createWebService(input: WebServiceInput): Promise<WebServiceWithRuntime> {
