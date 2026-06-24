@@ -7,6 +7,12 @@ type TrafficSample = {
   total: number;
 };
 
+type RouterByteSample = {
+  atMs: number;
+  requestBytes: number;
+  responseBytes: number;
+};
+
 type ParsedMetric = {
   name: string;
   labels: Record<string, string>;
@@ -15,6 +21,7 @@ type ParsedMetric = {
 
 const maxSamples = 12;
 const samplesByDomain = new Map<string, TrafficSample[]>();
+const byteSamplesByRouter = new Map<string, RouterByteSample>();
 
 type RouterTrafficStats = {
   totalRequests: number;
@@ -113,6 +120,12 @@ export function readEntrypointOpenConnections(text: string): Map<string, number>
   return connections;
 }
 
+export function counterRatePerSecond(previousTotal: number, currentTotal: number, elapsedMs: number): number {
+  if (!Number.isFinite(previousTotal) || !Number.isFinite(currentTotal) || !Number.isFinite(elapsedMs) || elapsedMs <= 0) return 0;
+  if (currentTotal < previousTotal) return 0;
+  return (currentTotal - previousTotal) / (elapsedMs / 1000);
+}
+
 export function parsePrometheusMetrics(text: string): ParsedMetric[] {
   const metrics: ParsedMetric[] = [];
 
@@ -143,11 +156,16 @@ function buildServiceTrafficStats(
 
   for (const service of services) {
     const routerName = traefikName("gatelite", service.id);
-    const stats = routerStats.get(`${routerName}@file`) || routerStats.get(routerName) || {
+    const routerKey = routerStats.has(`${routerName}@file`) ? `${routerName}@file` : routerName;
+    const stats = routerStats.get(routerKey) || {
       totalRequests: 0,
       requestBytes: 0,
       responseBytes: 0
     };
+    const previous = byteSamplesByRouter.get(routerKey);
+    const currentAtMs = new Date(updatedAt).getTime();
+    const requestBytesPerSecond = source === "prometheus" && previous ? counterRatePerSecond(previous.requestBytes, stats.requestBytes, currentAtMs - previous.atMs) : 0;
+    const responseBytesPerSecond = source === "prometheus" && previous ? counterRatePerSecond(previous.responseBytes, stats.responseBytes, currentAtMs - previous.atMs) : 0;
     const openConnections = service.entryPoints.reduce((total, entrypoint) => total + (openConnectionsByEntrypoint.get(entrypoint) || 0), 0);
 
     statsByServiceId.set(service.id, {
@@ -156,8 +174,18 @@ function buildServiceTrafficStats(
       totalRequests: stats.totalRequests,
       requestBytes: stats.requestBytes,
       responseBytes: stats.responseBytes,
+      requestBytesPerSecond,
+      responseBytesPerSecond,
       openConnections
     });
+
+    if (source === "prometheus") {
+      byteSamplesByRouter.set(routerKey, {
+        atMs: currentAtMs,
+        requestBytes: stats.requestBytes,
+        responseBytes: stats.responseBytes
+      });
+    }
   }
 
   return statsByServiceId;

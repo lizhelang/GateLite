@@ -594,10 +594,10 @@ function RouteDataTable({
                     </div>
                   </TableCell>
                   <TableCell className="text-right">
-                    <TrafficValue value={traffic?.responseBytes || 0} source={traffic?.source} tone="down" />
+                    <TrafficValue value={traffic?.responseBytes || 0} rate={traffic?.responseBytesPerSecond || 0} source={traffic?.source} tone="down" />
                   </TableCell>
                   <TableCell className="text-right">
-                    <TrafficValue value={traffic?.requestBytes || 0} source={traffic?.source} tone="up" />
+                    <TrafficValue value={traffic?.requestBytes || 0} rate={traffic?.requestBytesPerSecond || 0} source={traffic?.source} tone="up" />
                   </TableCell>
                   <TableCell className="text-right">
                     <span className="font-mono text-sm">{traffic?.source === "unavailable" ? "N/A" : traffic?.openConnections ?? 0}</span>
@@ -675,12 +675,17 @@ function RouteDataTable({
   );
 }
 
-function TrafficValue({ value, source, tone }: { value: number; source?: WebServiceTrafficStats["source"]; tone: "down" | "up" }) {
+function TrafficValue({ value, rate, source, tone }: { value: number; rate: number; source?: WebServiceTrafficStats["source"]; tone: "down" | "up" }) {
   if (source === "unavailable") {
     return <span className="font-mono text-sm text-muted-foreground">N/A</span>;
   }
   const toneClass = tone === "down" ? "text-cyan-100" : "text-amber-100";
-  return <span className={`font-mono text-sm ${toneClass}`}>{formatBytes(value)}</span>;
+  return (
+    <span className="grid gap-0.5 leading-tight">
+      <span className={`font-mono text-sm ${toneClass}`}>{formatBytesPerSecond(rate)}</span>
+      <span className="font-mono text-[10px] text-muted-foreground">{formatBytes(value)}</span>
+    </span>
+  );
 }
 
 function RouteDetails({ route }: { route: DomainRoute }) {
@@ -712,8 +717,8 @@ function RouteDetails({ route }: { route: DomainRoute }) {
 
       <div className="grid gap-3 rounded-xl border bg-background/35 p-4 text-sm md:grid-cols-4">
         <DetailCell label={t("Requests", "请求数")} value={`${traffic?.totalRequests || 0}`} mono />
-        <DetailCell label={t("Downstream", "下行")} value={formatBytes(traffic?.responseBytes || 0)} mono />
-        <DetailCell label={t("Upstream", "上行")} value={formatBytes(traffic?.requestBytes || 0)} mono />
+        <DetailCell label={t("Downstream", "下行")} value={`${formatBytesPerSecond(traffic?.responseBytesPerSecond || 0)} / ${formatBytes(traffic?.responseBytes || 0)}`} mono />
+        <DetailCell label={t("Upstream", "上行")} value={`${formatBytesPerSecond(traffic?.requestBytesPerSecond || 0)} / ${formatBytes(traffic?.requestBytes || 0)}`} mono />
         <DetailCell label={t("Live connections", "实时连接")} value={`${traffic?.openConnections ?? 0}`} mono />
       </div>
 
@@ -1290,4 +1295,8 @@ function formatBytes(value: number): string {
   }
   const precision = size >= 10 || unitIndex === 0 ? 0 : 1;
   return `${size.toFixed(precision)} ${units[unitIndex]}`;
+}
+
+function formatBytesPerSecond(value: number): string {
+  return `${formatBytes(value)}/s`;
 }

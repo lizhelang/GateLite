@@ -148,6 +148,8 @@ export interface WebServiceTrafficStats {
   totalRequests: number;
   requestBytes: number;
   responseBytes: number;
+  requestBytesPerSecond: number;
+  responseBytesPerSecond: number;
   openConnections: number;
 }
 

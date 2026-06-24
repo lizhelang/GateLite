@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parsePrometheusMetrics, readEntrypointOpenConnections, readRouterRequestTotals, readRouterTrafficStats } from "../server/metrics";
+import { counterRatePerSecond, parsePrometheusMetrics, readEntrypointOpenConnections, readRouterRequestTotals, readRouterTrafficStats } from "../server/metrics";
 
 describe("Traefik Prometheus metrics parsing", () => {
   it("sums router request counters across labels", () => {
@@ -52,5 +52,11 @@ traefik_open_connections{entrypoint="websecure",protocol="TCP"} 1
     const connections = readEntrypointOpenConnections(text);
     expect(connections.get("web")).toBe(4);
     expect(connections.get("websecure")).toBe(1);
+  });
+
+  it("calculates counter rates while tolerating resets and first samples", () => {
+    expect(counterRatePerSecond(100, 220, 2000)).toBe(60);
+    expect(counterRatePerSecond(220, 100, 2000)).toBe(0);
+    expect(counterRatePerSecond(100, 220, 0)).toBe(0);
   });
 });
