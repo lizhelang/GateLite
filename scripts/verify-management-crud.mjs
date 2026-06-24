@@ -120,8 +120,23 @@ async function createAndVerifyGroup() {
   if (renamed.name !== `CRUD verify renamed ${suffix}` || renamed.collapsed !== false) {
     throw new Error("Group rename/collapse reset was not persisted.");
   }
-  console.log("[ok] Group create, rename, collapse, and expand operations work.");
+  await reorderAndVerifyGroups(renamed.id);
+  console.log("[ok] Group create, rename, collapse, expand, and reorder operations work.");
   return renamed;
+}
+
+async function reorderAndVerifyGroups(groupId) {
+  const dashboard = await apiJson("/api/dashboard");
+  const remainingIds = dashboard.groups.map((group) => group.id).filter((id) => id !== groupId);
+  await apiJson("/api/groups/reorder", {
+    method: "POST",
+    body: { orderedIds: [groupId, ...remainingIds] }
+  });
+  const next = await apiJson("/api/dashboard");
+  const orderedIds = next.groups.map((group) => group.id);
+  if (orderedIds[0] !== groupId) {
+    throw new Error("Group reorder was not persisted.");
+  }
 }
 
 async function verifyWebServiceValidation(groupId) {

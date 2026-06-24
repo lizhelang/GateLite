@@ -48,6 +48,8 @@ GateLite MVP mapping:
 - Grouped display -> GateLite group metadata, independent of Traefik runtime.
 - Group create/rename -> shadcn-style modal form so grouping operations use
   the same interaction pattern as rule and certificate forms.
+- Group reorder -> Web service group chips can be dragged to persist group
+  order, matching Lucky's list-first management model.
 - Drag reorder -> GateLite metadata order and deterministic generated YAML order.
 - Copy rule/sub-rule data -> prefilled `copy as new rule` form that keeps
   backend, TLS, group, and middleware settings while generating a safe

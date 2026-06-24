@@ -33,6 +33,7 @@ async function verifyLanguage(browser, language) {
     await assertBody(page, language === "zh" ? /下行/ : /\bDown\b/, `${language} Web service downstream column`);
     await assertBody(page, language === "zh" ? /上行/ : /\bUp\b/, `${language} Web service upstream column`);
     await assertBody(page, language === "zh" ? /连接/ : /Conn\./, `${language} Web service connection column`);
+    await assertVisibleButton(page, language === "zh" ? /拖拽分组/ : /Drag group/, `${language} Web service group drag handle`);
 
     await openView(page, language === "zh" ? /SSL\/TLS 证书/ : /SSL\/TLS/);
     await assertBody(page, language === "zh" ? /添加证书/ : /Add certificate/, `${language} certificate create action`);
@@ -69,6 +70,13 @@ async function assertCertificateBindingExpansion(page, language) {
 async function assertBody(page, pattern, label) {
   const text = await page.locator("body").innerText();
   if (!pattern.test(text)) {
+    throw new Error(`Missing ${label}.`);
+  }
+}
+
+async function assertVisibleButton(page, namePattern, label) {
+  const count = await page.getByRole("button", { name: namePattern }).count();
+  if (count < 1) {
     throw new Error(`Missing ${label}.`);
   }
 }

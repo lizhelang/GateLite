@@ -23,6 +23,7 @@ import {
   createWebService,
   deleteGroup,
   deleteWebService,
+  reorderGroups,
   reorderWebServices,
   toggleWebService,
   updateGroup,
@@ -132,6 +133,7 @@ export function WebServicesPage({ dashboard, onRefresh }: WebServicesPageProps) 
   const [selectedRouteIds, setSelectedRouteIds] = useState<string[]>([]);
   const [activeRoot, setActiveRoot] = useState("__all");
   const [draggingId, setDraggingId] = useState<string | null>(null);
+  const [draggingGroupId, setDraggingGroupId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [groupSaving, setGroupSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -332,6 +334,30 @@ export function WebServicesPage({ dashboard, onRefresh }: WebServicesPageProps) 
     await onRefresh();
   };
 
+  const handleGroupDrop = async (targetId: string) => {
+    if (!draggingGroupId || draggingGroupId === targetId) {
+      setDraggingGroupId(null);
+      return;
+    }
+    const ids = dashboard.groups.map((group) => group.id);
+    const from = ids.indexOf(draggingGroupId);
+    const to = ids.indexOf(targetId);
+    if (from === -1 || to === -1) {
+      setDraggingGroupId(null);
+      return;
+    }
+    const [moved] = ids.splice(from, 1);
+    ids.splice(to, 0, moved);
+    setDraggingGroupId(null);
+    setError(null);
+    try {
+      await reorderGroups(ids);
+      await onRefresh();
+    } catch (groupError) {
+      setError(groupError instanceof Error ? groupError.message : t("Group reorder failed.", "分组排序失败。"));
+    }
+  };
+
   const handleSelectRoute = (routeId: string, checked: boolean) => {
     setSelectedRouteIds((ids) => {
       if (checked) return ids.includes(routeId) ? ids : [...ids, routeId];
@@ -393,6 +419,9 @@ export function WebServicesPage({ dashboard, onRefresh }: WebServicesPageProps) 
       <GroupStrip
         groups={dashboard.groups}
         counts={serviceCountByGroup}
+        draggingGroupId={draggingGroupId}
+        onDragStart={setDraggingGroupId}
+        onDrop={handleGroupDrop}
         onToggle={handleGroupToggle}
         onRename={handleRenameGroup}
         onDelete={handleDeleteGroup}
@@ -923,12 +952,18 @@ function formatFrontendEndpoint(
 function GroupStrip({
   groups,
   counts,
+  draggingGroupId,
+  onDragStart,
+  onDrop,
   onToggle,
   onRename,
   onDelete
 }: {
   groups: ServiceGroup[];
   counts: Map<string, number>;
+  draggingGroupId: string | null;
+  onDragStart: (id: string) => void;
+  onDrop: (id: string) => Promise<void>;
   onToggle: (group: ServiceGroup) => Promise<void>;
   onRename: (group: ServiceGroup) => Promise<void>;
   onDelete: (group: ServiceGroup, serviceCount: number) => Promise<void>;
@@ -939,7 +974,17 @@ function GroupStrip({
       {groups.map((group) => {
         const serviceCount = counts.get(group.id) || 0;
         return (
-          <div key={group.id} className="flex items-center gap-1 rounded-lg border bg-background/45 px-1.5 py-1">
+          <div
+            key={group.id}
+            className={`flex items-center gap-1 rounded-lg border bg-background/45 px-1.5 py-1 ${draggingGroupId === group.id ? "outline outline-1 outline-cyan-300/70" : ""}`}
+            draggable
+            onDragStart={() => onDragStart(group.id)}
+            onDragOver={(event) => event.preventDefault()}
+            onDrop={() => void onDrop(group.id)}
+          >
+            <Button type="button" variant="ghost" size="icon-xs" aria-label={t(`Drag group ${group.name}`, `拖拽分组 ${group.name}`)}>
+              <GripVertical className="size-3.5" />
+            </Button>
             <Button type="button" variant="ghost" size="xs" className="gap-1 px-1.5" onClick={() => void onToggle(group)}>
               {group.collapsed ? <ChevronRight className="size-3.5" /> : <ChevronDown className="size-3.5" />}
               <span className="max-w-36 truncate">{group.name}</span>

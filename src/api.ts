@@ -113,6 +113,13 @@ export async function deleteGroup(id: string): Promise<ServiceGroup[]> {
   return request<ServiceGroup[]>(`/api/groups/${id}`, { method: "DELETE" });
 }
 
+export async function reorderGroups(orderedIds: string[]): Promise<ServiceGroup[]> {
+  return request<ServiceGroup[]>("/api/groups/reorder", {
+    method: "POST",
+    body: JSON.stringify({ orderedIds })
+  });
+}
+
 export async function createCertificate(input: CertificateInput): Promise<CertificateWithBindings> {
   return request<CertificateWithBindings>("/api/certificates", {
     method: "POST",

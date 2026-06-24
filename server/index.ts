@@ -142,6 +142,18 @@ app.patch("/api/groups/:id", (request, response) => {
   response.json(next.groups.find((item) => item.id === group.id));
 });
 
+app.post("/api/groups/reorder", (request, response) => {
+  const { orderedIds } = reorderSchema.parse(request.body);
+  const state = loadState();
+  const order = new Map(orderedIds.map((id, index) => [id, index + 1]));
+  state.groups = state.groups.map((group) => ({
+    ...group,
+    order: order.get(group.id) ?? group.order
+  }));
+  const next = saveState(state, "group.reorder", "Reordered Web service groups.");
+  response.json(next.groups);
+});
+
 app.delete("/api/groups/:id", (request, response) => {
   const state = loadState();
   const group = state.groups.find((item) => item.id === request.params.id);
