@@ -812,16 +812,17 @@ function RouteDataTable({
   return (
     <div className="overflow-hidden rounded-xl border bg-card/80">
       <div className="overflow-x-auto">
-        <Table className="min-w-[1020px]">
+        <Table className="min-w-[1160px]">
           <TableHeader className="bg-muted/65">
             <TableRow className="hover:bg-transparent">
               <TableHead className="w-6 px-1" />
               <TableHead className="w-7 px-1">
                 <Checkbox aria-label={t("Select visible rules", "选择当前规则")} checked={allVisibleSelected} onCheckedChange={(checked) => onSelectAll(Boolean(checked))} />
               </TableHead>
-              <TableHead className="min-w-[250px]">{t("Frontend domain", "前端域名")}</TableHead>
+              <TableHead className="min-w-[180px]">{t("Title", "标题")}</TableHead>
+              <TableHead className="min-w-[240px]">{t("Frontend domain", "前端域名")}</TableHead>
               <TableHead className="min-w-[210px]">{t("Backend IP:port", "后端 IP:端口")}</TableHead>
-              <TableHead className="min-w-[150px]">{t("Rule", "规则")}</TableHead>
+              <TableHead className="w-24">{t("Type", "类型")}</TableHead>
               <TableHead className="w-28">{t("Status", "状态")}</TableHead>
               <TableHead className="w-20 text-right">QPS</TableHead>
               <TableHead className="w-24 text-right">
@@ -849,7 +850,7 @@ function RouteDataTable({
               <Fragment key={section.root}>
                 {section.showHeader ? (
                   <TableRow key={`${section.root}:heading`} className="bg-muted/25 hover:bg-muted/25">
-                    <TableCell colSpan={11} className="h-9 px-3 py-1.5">
+                    <TableCell colSpan={12} className="h-9 px-3 py-1.5">
                       <div className="flex min-w-0 items-center justify-between gap-3">
                         <div className="flex min-w-0 items-center gap-2">
                           <span className="text-xs text-muted-foreground">{t("Main domain", "主域名")}</span>
@@ -888,7 +889,7 @@ function RouteDataTable({
             ))}
             {routes.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={11} className="h-24 text-center text-sm text-muted-foreground">
+                <TableCell colSpan={12} className="h-24 text-center text-sm text-muted-foreground">
                   {t("No visible rules in this domain view. Expand groups or add a rule.", "这个域名视图里没有可见规则。可以展开分组或新增规则。")}
                 </TableCell>
               </TableRow>
@@ -966,6 +967,12 @@ function RouteTableRow({
         <Checkbox checked={selected} aria-label={t(`Select ${displayName}`, `选择 ${displayName}`)} onClick={(event) => event.stopPropagation()} onCheckedChange={(checked) => onSelect(route.routeId, Boolean(checked))} />
       </TableCell>
       <TableCell className="py-1.5">
+        <div className="grid min-w-0 gap-0.5 leading-tight">
+          <span className="truncate text-sm font-medium text-foreground">{displayName}</span>
+          <span className="truncate text-[10px] text-muted-foreground">{route.groupName}</span>
+        </div>
+      </TableCell>
+      <TableCell className="py-1.5">
         {frontend.href ? (
           <a className="grid min-w-0 max-w-full gap-0 font-mono text-xs font-medium leading-tight text-cyan-100 hover:text-cyan-200" href={frontend.href} target="_blank" rel="noreferrer" onClick={(event) => event.stopPropagation()}>
             <span className="inline-flex min-w-0 items-center gap-1">
@@ -991,15 +998,9 @@ function RouteTableRow({
         </div>
       </TableCell>
       <TableCell className="py-1.5">
-        <div className="grid min-w-0 gap-0.5 leading-tight">
-          <div className="flex min-w-0 items-center gap-1.5">
-            <span className="max-w-36 truncate text-sm font-medium">{displayName}</span>
-            <Badge variant="outline" className="h-5 shrink-0 rounded-md px-1.5 text-[10px]">
-              {routeKindLabel(route, isRootRule, t)}
-            </Badge>
-          </div>
-          <span className="truncate text-[10px] text-muted-foreground">{route.groupName}</span>
-        </div>
+        <Badge variant="outline" className="h-5 rounded-md px-1.5 text-[10px]">
+          {routeKindLabel(route, isRootRule, t)}
+        </Badge>
       </TableCell>
       <TableCell className="py-1.5">
         <div className="flex min-w-0 items-center gap-1">

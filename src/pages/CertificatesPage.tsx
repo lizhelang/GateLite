@@ -755,12 +755,13 @@ function CertificateBindingRowsTable({ rows }: { rows: CertificateBindingRow[] }
   const { t } = useLanguage();
   return (
     <div className="overflow-x-auto rounded-lg border bg-background/45">
-      <Table className="min-w-[760px]">
+      <Table className="min-w-[900px]">
         <TableHeader className="bg-muted/45">
           <TableRow className="hover:bg-transparent">
+            <TableHead>{t("Title", "标题")}</TableHead>
             <TableHead>{t("Frontend domain", "前端域名")}</TableHead>
             <TableHead>{t("Backend IP:port", "后端 IP:端口")}</TableHead>
-            <TableHead>{t("Rule", "规则")}</TableHead>
+            <TableHead>{t("Entrypoints", "入口点")}</TableHead>
             <TableHead>{t("Coverage", "覆盖")}</TableHead>
             <TableHead>TLS</TableHead>
           </TableRow>
@@ -768,6 +769,9 @@ function CertificateBindingRowsTable({ rows }: { rows: CertificateBindingRow[] }
         <TableBody>
           {rows.map((row) => (
             <TableRow key={row.id}>
+              <TableCell>
+                <span className="text-sm font-medium">{row.serviceName}</span>
+              </TableCell>
               <TableCell>
                 <span className="rounded-md border bg-background/55 px-2 py-1 font-mono text-xs text-cyan-100">{row.domain}</span>
               </TableCell>
@@ -780,10 +784,7 @@ function CertificateBindingRowsTable({ rows }: { rows: CertificateBindingRow[] }
                 </div>
               </TableCell>
               <TableCell>
-                <div className="grid gap-0.5 text-xs">
-                  <span className="font-medium">{row.serviceName}</span>
-                  <span className="text-muted-foreground">{row.entryPoints}</span>
-                </div>
+                <span className="text-xs text-muted-foreground">{row.entryPoints}</span>
               </TableCell>
               <TableCell>
                 <Badge variant="outline" className={row.covered ? "border-emerald-400/40 bg-emerald-400/10 text-emerald-200" : "border-amber-400/40 bg-amber-400/10 text-amber-200"}>
