@@ -1,4 +1,5 @@
 import type {
+  CertificatePreview,
   CertificateWithBindings,
   DashboardPayload,
   GateLiteHistoryEvent,
@@ -142,9 +143,23 @@ export async function createCertificate(input: CertificateInput): Promise<Certif
   });
 }
 
+export async function previewCreateCertificate(input: CertificateInput): Promise<CertificatePreview> {
+  return request<CertificatePreview>("/api/certificates/preview", {
+    method: "POST",
+    body: JSON.stringify(input)
+  });
+}
+
 export async function updateCertificate(id: string, input: Partial<CertificateInput>): Promise<CertificateWithBindings> {
   return request<CertificateWithBindings>(`/api/certificates/${id}`, {
     method: "PUT",
+    body: JSON.stringify(input)
+  });
+}
+
+export async function previewUpdateCertificate(id: string, input: Partial<CertificateInput>): Promise<CertificatePreview> {
+  return request<CertificatePreview>(`/api/certificates/${id}/preview`, {
+    method: "POST",
     body: JSON.stringify(input)
   });
 }

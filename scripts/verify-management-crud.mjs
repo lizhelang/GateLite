@@ -204,6 +204,21 @@ async function verifySingleDomainRuleValidation(groupId) {
 }
 
 async function createAndVerifyCertificate() {
+  const previewResponse = await request(`${gateliteApiUrl}/api/certificates/preview`, {
+    method: "POST",
+    body: JSON.stringify({
+      name: `CRUD TLS preview blocked ${suffix}`,
+      enabled: true,
+      source: "self-signed",
+      domains: [httpsHost],
+      days: 90
+    }),
+    headers: { "Content-Type": "application/json" }
+  });
+  if (previewResponse.status !== 400 || !previewResponse.body.includes("generate local PEM")) {
+    throw new Error(`Self-signed certificate preview should reject local PEM generation, got ${previewResponse.status}: ${previewResponse.body.slice(0, 300)}`);
+  }
+
   const certificate = await apiJson("/api/certificates", {
     method: "POST",
     body: {
@@ -217,6 +232,19 @@ async function createAndVerifyCertificate() {
   });
   if (certificate.status !== "valid" || !certificate.notAfter) {
     throw new Error(`Expected created self-signed certificate to be valid with expiry, got ${certificate.status}.`);
+  }
+
+  const namePreview = await apiJson(`/api/certificates/${certificate.id}/preview`, {
+    method: "POST",
+    body: { name: `CRUD TLS renamed ${suffix}` }
+  });
+  if (namePreview.action !== "update" || namePreview.certificate.id !== certificate.id || namePreview.certificate.name !== `CRUD TLS renamed ${suffix}`) {
+    throw new Error("Certificate metadata preview did not preserve the target certificate id or updated name.");
+  }
+  const afterPreview = await apiJson("/api/dashboard");
+  const unchanged = afterPreview.certificates.find((item) => item.id === certificate.id);
+  if (!unchanged || unchanged.name === `CRUD TLS renamed ${suffix}`) {
+    throw new Error("Certificate metadata preview unexpectedly wrote dashboard state.");
   }
 
   const renamed = await apiJson(`/api/certificates/${certificate.id}`, {
@@ -286,15 +314,28 @@ async function reorderAndVerifyCertificates(certificateId) {
 }
 
 async function createRefreshAndDeleteSyncCertificate() {
+  const input = {
+    name: `CRUD sync ${suffix}`,
+    enabled: true,
+    source: "sync",
+    domains: [`sync-${suffix}.localhost`],
+    sync: { target: `https://peer.example.com/sync/${suffix}` }
+  };
+  const preview = await apiJson("/api/certificates/preview", {
+    method: "POST",
+    body: input
+  });
+  if (preview.action !== "create" || preview.certificate.source !== "sync" || preview.certificate.status !== "pending") {
+    throw new Error("Sync certificate create preview did not return a pending sync certificate.");
+  }
+  const afterPreview = await apiJson("/api/dashboard");
+  if (afterPreview.certificates.some((certificate) => certificate.name === input.name)) {
+    throw new Error("Sync certificate create preview unexpectedly wrote dashboard state.");
+  }
+
   const certificate = await apiJson("/api/certificates", {
     method: "POST",
-    body: {
-      name: `CRUD sync ${suffix}`,
-      enabled: true,
-      source: "sync",
-      domains: [`sync-${suffix}.localhost`],
-      sync: { target: `https://peer.example.com/sync/${suffix}` }
-    },
+    body: input,
     expectedStatus: 201
   });
   if (certificate.status !== "pending" || certificate.sync?.target !== `https://peer.example.com/sync/${suffix}`) {
@@ -358,6 +399,22 @@ async function createAndVerifySyncedCertificateRoute(groupId) {
 
 async function createAndVerifyUploadedCertificateRoute(groupId) {
   const { certPem, keyPem } = createTemporaryPemBundle(uploadedHttpsHost);
+  const previewResponse = await request(`${gateliteApiUrl}/api/certificates/preview`, {
+    method: "POST",
+    body: JSON.stringify({
+      name: `CRUD uploaded preview blocked ${suffix}`,
+      enabled: true,
+      source: "upload",
+      domains: [uploadedHttpsHost],
+      certPem,
+      keyPem
+    }),
+    headers: { "Content-Type": "application/json" }
+  });
+  if (previewResponse.status !== 400 || !previewResponse.body.includes("generate local PEM")) {
+    throw new Error(`Uploaded certificate preview should reject local PEM generation, got ${previewResponse.status}: ${previewResponse.body.slice(0, 300)}`);
+  }
+
   const certificate = await apiJson("/api/certificates", {
     method: "POST",
     body: {
@@ -388,17 +445,31 @@ async function createAndVerifyUploadedCertificateRoute(groupId) {
 async function createAndVerifyPathCertificateRoute(groupId) {
   const { certPath, keyPath } = createTemporaryMountedCertificateFiles(pathHttpsHost);
   created.pathCertificateFiles = [certPath, keyPath];
+  const input = {
+    name: `CRUD path TLS ${suffix}`,
+    enabled: true,
+    source: "path",
+    domains: [pathHttpsHost],
+    certPath,
+    keyPath
+  };
+  const preview = await apiJson("/api/certificates/preview", {
+    method: "POST",
+    body: input
+  });
+  if (preview.action !== "create" || preview.certificate.source !== "path" || preview.certificate.status !== "valid") {
+    throw new Error("Existing path certificate preview did not parse the mounted certificate.");
+  }
+  assertDiffIncludes(preview.diff, "added", `/certs/${path.basename(certPath)}`, "path certificate preview cert mount");
+  assertDiffIncludes(preview.diff, "added", `/certs/${path.basename(keyPath)}`, "path certificate preview key mount");
+  const afterPreview = await apiJson("/api/dashboard");
+  if (afterPreview.certificates.some((certificate) => certificate.name === input.name)) {
+    throw new Error("Path certificate create preview unexpectedly wrote dashboard state.");
+  }
 
   const certificate = await apiJson("/api/certificates", {
     method: "POST",
-    body: {
-      name: `CRUD path TLS ${suffix}`,
-      enabled: true,
-      source: "path",
-      domains: [pathHttpsHost],
-      certPath,
-      keyPath
-    },
+    body: input,
     expectedStatus: 201
   });
   created.pathCertificateId = certificate.id;

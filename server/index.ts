@@ -2,7 +2,7 @@ import express from "express";
 import fs from "node:fs";
 import path from "node:path";
 import { z } from "zod";
-import type { CertificateItem, CertificateWithBindings, DashboardPayload, WebService, WebServicePreview, WebServiceWithRuntime } from "../shared/types";
+import type { CertificateItem, CertificatePreview, CertificateWithBindings, DashboardPayload, WebService, WebServicePreview, WebServiceWithRuntime } from "../shared/types";
 import { certificateCoversDomain, resolverName, webServicesBoundToCertificate } from "./bindings";
 import { diffText } from "./config-preview";
 import { config } from "./config";
@@ -200,6 +200,14 @@ app.post("/api/certificates", (request, response) => {
   response.status(201).json(next.certificates.find((item) => item.id === certificate.id));
 });
 
+app.post("/api/certificates/preview", (request, response) => {
+  const parsed = certificateInputSchema.parse(request.body);
+  const state = loadState();
+  const certificate = certificateFromInputForPreview(parsed);
+  certificate.order = state.certificates.length + 1;
+  response.json(previewCertificateChange(state, certificate, "create"));
+});
+
 app.put("/api/certificates/:id", (request, response) => {
   const parsed = certificateInputSchema.partial().parse(request.body);
   const state = loadState();
@@ -217,6 +225,23 @@ app.put("/api/certificates/:id", (request, response) => {
   state.certificates[index] = updated;
   const next = saveState(state, "certificate.update", `Updated certificate ${state.certificates[index].name}.`);
   response.json(next.certificates.find((certificate) => certificate.id === request.params.id));
+});
+
+app.post("/api/certificates/:id/preview", (request, response) => {
+  const parsed = certificateInputSchema.partial().parse(request.body);
+  const state = loadState();
+  const index = state.certificates.findIndex((certificate) => certificate.id === request.params.id);
+  if (index === -1) return response.status(404).json({ error: "Certificate not found." });
+
+  const current = state.certificates[index];
+  const bindingConflict = boundCertificateUpdateConflict(current, parsed, state.webServices);
+  if (bindingConflict) return response.status(409).json({ error: bindingConflict });
+
+  assertCertificatePreviewHasNoLocalWrite(current, parsed);
+  const updated = updateCertificateFromInput(current, parsed);
+  const updatedBindingConflict = boundCertificateResultConflict(updated, state.webServices);
+  if (updatedBindingConflict) return response.status(409).json({ error: updatedBindingConflict });
+  response.json(previewCertificateChange(state, updated, "update"));
 });
 
 app.patch("/api/certificates/:id/toggle", (request, response) => {
@@ -419,6 +444,42 @@ function previewWebServiceChange(state: ReturnType<typeof loadState>, service: W
     valid: true,
     action,
     service,
+    currentYaml,
+    nextYaml,
+    diff: diffText(currentYaml, nextYaml)
+  };
+}
+
+function certificateFromInputForPreview(input: z.infer<typeof certificateInputSchema>): CertificateItem {
+  if (input.source === "self-signed" || input.source === "upload") {
+    throw new BadRequestError("Certificate preview is unavailable for sources that generate local PEM files. Use apply for self-signed/upload certificates, or preview path, ACME, and sync sources.");
+  }
+  return createCertificateFromInput(input);
+}
+
+function assertCertificatePreviewHasNoLocalWrite(current: CertificateItem, input: Partial<z.infer<typeof certificateInputSchema>>): void {
+  const source = input.source ?? current.source;
+  const regeneratesSelfSigned = source === "self-signed" && (current.source !== "self-signed" || input.domains !== undefined || input.days !== undefined);
+  const writesUploadPem = source === "upload" && (current.source !== "upload" || input.certPem !== undefined || input.keyPem !== undefined || !current.certPath || !current.keyPath);
+  if (regeneratesSelfSigned || writesUploadPem) {
+    throw new BadRequestError("Certificate preview would need to generate or replace local PEM files. Apply the certificate change to write files, or preview path, ACME, sync, or metadata-only changes.");
+  }
+}
+
+function previewCertificateChange(state: ReturnType<typeof loadState>, certificate: CertificateItem, action: CertificatePreview["action"]): CertificatePreview {
+  const currentYaml = generateTraefikDynamicConfig(state).yaml;
+  const nextState = {
+    ...state,
+    certificates:
+      action === "create"
+        ? [...state.certificates, certificate]
+        : state.certificates.map((item) => (item.id === certificate.id ? certificate : item))
+  };
+  const nextYaml = generateTraefikDynamicConfig(nextState).yaml;
+  return {
+    valid: true,
+    action,
+    certificate,
     currentYaml,
     nextYaml,
     diff: diffText(currentYaml, nextYaml)

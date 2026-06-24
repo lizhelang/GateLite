@@ -113,6 +113,15 @@ export interface WebServicePreview {
   diff: ConfigDiffLine[];
 }
 
+export interface CertificatePreview {
+  valid: true;
+  action: "create" | "update";
+  certificate: CertificateItem;
+  currentYaml: string;
+  nextYaml: string;
+  diff: ConfigDiffLine[];
+}
+
 export interface RuntimeRouter {
   name: string;
   protocol: RuntimeProtocol;

@@ -78,6 +78,9 @@ GateLite should show Traefik dashboard/API-level information for:
 - Every write supports preview before apply.
 - Web service create/update previews return the current YAML, next YAML, and a
   compact line diff through the same validation layer used by apply.
+- Certificate create/update previews cover side-effect-free sources and
+  metadata changes; sources that generate or replace local PEM files are
+  intentionally rejected during preview and must be applied explicitly.
 - Every apply returns a config diff and rollback handle.
 - Validation errors are structured and repairable.
 - Generated configuration is deterministic.

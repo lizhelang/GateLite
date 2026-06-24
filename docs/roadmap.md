@@ -20,7 +20,10 @@
 - Generate file-provider dynamic configuration for simple HTTP routes.
 - Support dry-run and diff before apply. Current Web service create/update
   endpoints expose dry-run preview APIs that reuse the same validation and
-  deterministic file-provider generator without writing state.
+  deterministic file-provider generator without writing state. Certificate
+  create/update preview covers path, ACME, sync, and metadata-only changes;
+  self-signed/upload operations remain apply-only because they generate local
+  PEM material.
 - Validate domains, backend URLs, entrypoints, middleware references, and TLS
   resolver choices.
 - Add local version history and rollback. Current local module snapshots state
