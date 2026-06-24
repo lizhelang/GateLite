@@ -370,6 +370,7 @@ function CertificateDataTable({
   const { t } = useLanguage();
   const selectedCount = certificates.filter((certificate) => selectedIds.includes(certificate.id)).length;
   const allVisibleSelected = certificates.length > 0 && selectedCount === certificates.length;
+  const hasBoundEnabledSelection = certificates.some((certificate) => selectedIds.includes(certificate.id) && certificate.enabled && certificate.boundServices.length > 0);
 
   return (
     <div className="overflow-hidden rounded-xl border bg-card/80">
@@ -394,6 +395,7 @@ function CertificateDataTable({
           <TableBody>
             {certificates.map((certificate) => {
               const rowSelected = selectedIds.includes(certificate.id);
+              const disableProtected = certificate.enabled && certificate.boundServices.length > 0;
               return (
                 <TableRow
                   key={certificate.id}
@@ -466,7 +468,7 @@ function CertificateDataTable({
                             <FileKey2 className="size-4" />
                             {t("Details", "详情")}
                           </DropdownMenuItem>
-                          <DropdownMenuItem onSelect={() => void onToggle(certificate)}>
+                          <DropdownMenuItem disabled={disableProtected} onSelect={() => void onToggle(certificate)}>
                             <Power className="size-4" />
                             {certificate.enabled ? t("Disable", "停用") : t("Enable", "启用")}
                           </DropdownMenuItem>
@@ -515,7 +517,14 @@ function CertificateDataTable({
             <Power className="size-3.5" />
             {t("Enable", "启用")}
           </Button>
-          <Button type="button" variant="outline" size="sm" disabled={selectedCount === 0} onClick={() => void onBulkToggle(false)}>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={selectedCount === 0 || hasBoundEnabledSelection}
+            title={hasBoundEnabledSelection ? t("Unbind selected certificates before disabling them.", "停用前请先解除所选证书绑定。") : undefined}
+            onClick={() => void onBulkToggle(false)}
+          >
             <Power className="size-3.5" />
             {t("Disable", "停用")}
           </Button>

@@ -69,6 +69,7 @@ try {
   created.httpsServiceId = httpsService.id;
   created.httpsHost = certificate.domains[0] || editedHttpsHost;
   await verifyCertificateBinding(certificate.id, httpsService.id, "HTTPS file certificate");
+  await verifyBoundCertificateToggleProtection(certificate.id, "HTTPS file certificate");
   await createAndVerifyAcmeResolverBinding(group.id);
   await reorderAndVerifyServices([httpsService.id, httpService.id]);
 
@@ -287,6 +288,7 @@ async function createAndVerifyUploadedCertificateRoute(groupId) {
   const service = await createAndVerifyHttpsService(groupId, certificate.id, uploadedHttpsHost);
   created.uploadedServiceId = service.id;
   await verifyCertificateBinding(certificate.id, service.id, "uploaded PEM certificate");
+  await verifyBoundCertificateToggleProtection(certificate.id, "uploaded PEM certificate");
   console.log("[ok] Uploaded PEM certificate binds to a verified HTTPS route.");
 }
 
@@ -317,6 +319,7 @@ async function createAndVerifyPathCertificateRoute(groupId) {
   const service = await createAndVerifyHttpsService(groupId, certificate.id, pathHttpsHost);
   created.pathServiceId = service.id;
   await verifyCertificateBinding(certificate.id, service.id, "existing path certificate");
+  await verifyBoundCertificateToggleProtection(certificate.id, "existing path certificate");
   console.log("[ok] Existing path certificate binds to a verified HTTPS route.");
 }
 
@@ -546,8 +549,27 @@ async function createAndVerifyAcmeResolverBinding(groupId) {
   if (deleteResponse.status !== 409) {
     throw new Error(`Deleting an ACME certificate bound by resolver should return 409, got HTTP ${deleteResponse.status}.`);
   }
+  await verifyBoundCertificateToggleProtection(certificate.id, "ACME resolver certificate");
 
-  console.log("[ok] ACME resolver certificate binding and delete protection work.");
+  console.log("[ok] ACME resolver certificate binding, disable protection, and delete protection work.");
+}
+
+async function verifyBoundCertificateToggleProtection(certificateId, label = "certificate") {
+  const response = await request(`${gateliteApiUrl}/api/certificates/${certificateId}/toggle`, {
+    method: "PATCH",
+    body: JSON.stringify({ enabled: false }),
+    headers: { "Content-Type": "application/json" }
+  });
+  if (response.status !== 409 || !response.body.includes("bound")) {
+    throw new Error(`Disabling a bound ${label} should return HTTP 409, got ${response.status}: ${response.body.slice(0, 300)}`);
+  }
+
+  const certificates = await apiJson("/api/certificates");
+  const certificate = certificates.find((item) => item.id === certificateId);
+  if (!certificate?.enabled) {
+    throw new Error(`Bound ${label} should remain enabled after rejected disable toggle.`);
+  }
+  console.log(`[ok] Bound ${label} disable protection works.`);
 }
 
 async function reorderAndVerifyServices(serviceIds) {

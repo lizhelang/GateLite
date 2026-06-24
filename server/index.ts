@@ -181,6 +181,9 @@ app.patch("/api/certificates/:id/toggle", (request, response) => {
   const state = loadState();
   const certificate = state.certificates.find((item) => item.id === request.params.id);
   if (!certificate) return response.status(404).json({ error: "Certificate not found." });
+  if (!enabled && webServicesBoundToCertificate(certificate, state.webServices).length > 0) {
+    return response.status(409).json({ error: "Certificate is bound to at least one Web service." });
+  }
   certificate.enabled = enabled;
   certificate.updatedAt = new Date().toISOString();
   const next = saveState(state, "certificate.toggle", `${enabled ? "Enabled" : "Disabled"} certificate ${certificate.name}.`);

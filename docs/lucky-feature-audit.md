@@ -131,6 +131,9 @@ GateLite MVP mapping:
   for visible certificate items.
 - Certificate detail view -> explicit row action opens a metadata and binding
   dialog, keeping the primary certificate table dense and scannable.
+- Bound certificate protection -> certificates still bound to Web service
+  rules cannot be disabled or deleted, preventing active TLS routes from losing
+  their generated certificate material.
 
 ## Parallax Storytelling Design Mapping
 
