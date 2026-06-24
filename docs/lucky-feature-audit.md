@@ -174,3 +174,10 @@ GateLite adapts this to an operational tool by using:
 - Sticky section headers as narrative anchors.
 - Progressive page sections for Web services, certificates, and runtime truth.
 - Dense, readable operational rows instead of marketing-only story panels.
+
+## Bilingual UI Verification
+
+- `npm run verify:ui-i18n` uses Playwright against the running local frontend to
+  force Chinese and English language modes through `localStorage`, then checks
+  the Web services and SSL/TLS certificate navigation labels, key actions,
+  table columns, and inline certificate binding expansion.

@@ -11,6 +11,7 @@
     "test": "vitest run",
     "verify:crud": "node scripts/verify-management-crud.mjs",
     "verify:local": "node scripts/verify-local-traefik.mjs",
+    "verify:ui-i18n": "node scripts/verify-ui-i18n.mjs",
     "compose:up": "docker compose up -d",
     "compose:down": "docker compose down"
   },
