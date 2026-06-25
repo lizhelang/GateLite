@@ -37,6 +37,7 @@ import {
 import { ConfigPreviewPanel } from "../components/ConfigPreviewPanel";
 import { Modal } from "../components/Modal";
 import { StatusBadge } from "../components/StatusBadge";
+import { frontendProtocolForService } from "../lib/frontend-endpoints";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -112,8 +113,8 @@ const emptyDraft: DraftService = {
   domainRoot: "",
   subdomainsText: "",
   customRule: "",
-  listenPort: 18080,
-  entryPointsText: "web",
+  listenPort: 16666,
+  entryPointsText: "websecure",
   targetUrl: "",
   passHostHeader: true,
   middlewaresText: "",
@@ -944,6 +945,7 @@ function RouteTableRow({
   const frontend = formatFrontendEndpoint(route, service, t);
   const backend = formatBackendTarget(service.targetUrl);
   const traffic = service.traffic;
+  const frontendProtocol = frontendProtocolForService(service);
   const isRootRule = route.labels.some((label) => label === "@");
   const displayName = displayRouteName(route, t);
   const isExternalReadOnly = service.managementMode === "mapped";
@@ -1006,7 +1008,7 @@ function RouteTableRow({
         <div className="flex min-w-0 items-center gap-1">
           <StatusBadge status={service.runtime?.status || (service.enabled ? "unknown" : "offline")} label={service.enabled ? undefined : t("Disabled", "停用")} className="h-5 rounded-md px-1.5 text-[10px]" />
           <Badge variant="outline" className="h-5 shrink-0 rounded-md px-1.5 text-[10px]">
-            {service.tls.mode === "none" ? "HTTP" : "TLS"}
+            {frontendProtocol.toUpperCase()}
           </Badge>
           {isExternalReadOnly ? <ReadOnlyBadge compact /> : null}
         </div>
@@ -1313,7 +1315,7 @@ function formatFrontendEndpoint(
       meta: service.matchMode === "custom" ? t("Custom match", "自定义匹配") : t("Not openable", "不可直接打开")
     };
   }
-  const scheme = service.tls.mode === "none" ? "http" : "https";
+  const scheme = frontendProtocolForService(service);
   const href = `${scheme}://${route.primaryDomain}:${service.listenPort}`;
   return {
     label: route.primaryDomain,
@@ -1664,7 +1666,7 @@ function ServiceForm({
               <Input type="number" min="1" max="65535" value={draft.listenPort} onChange={(event) => setDraft({ ...draft, listenPort: Number(event.target.value) })} />
             </Field>
             <Field label={t("Entrypoints", "入口点")}>
-              <Input value={draft.entryPointsText} onChange={(event) => setDraft({ ...draft, entryPointsText: event.target.value })} placeholder="web, websecure" required />
+              <Input value={draft.entryPointsText} onChange={(event) => setDraft({ ...draft, entryPointsText: event.target.value })} placeholder="websecure" required />
             </Field>
             <Field className="md:col-span-2" label={t("Middlewares", "中间件")}>
               <Input value={draft.middlewaresText} onChange={(event) => setDraft({ ...draft, middlewaresText: event.target.value })} placeholder="auth@file, compress@file" />
@@ -1864,7 +1866,7 @@ function fallbackRuleText(service: WebServiceWithRuntime): string {
 }
 
 function tlsDetailText(service: WebServiceWithRuntime, t: (english: string, chinese: string) => string): string {
-  if (service.tls.mode === "none") return "HTTP";
+  if (service.tls.mode === "none") return frontendProtocolForService(service).toUpperCase();
   if (service.tls.mode === "resolver") return `${t("Resolver", "解析器")}: ${service.tls.resolver || "letsencrypt"}`;
   return `${t("File certificate", "文件证书")}: ${service.tls.certificateId || t("Not selected", "未选择")}`;
 }

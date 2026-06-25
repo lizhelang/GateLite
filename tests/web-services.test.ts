@@ -149,6 +149,22 @@ describe("validateWebService", () => {
 });
 
 describe("webServiceInputSchema", () => {
+  it("defaults new Web rules to the HTTPS frontend listener", () => {
+    const parsed = webServiceInputSchema.parse({
+      name: "",
+      enabled: true,
+      groupId: "local",
+      domains: ["fnos.1804.surfacer.cc"],
+      targetUrl: "192.168.31.139:5666",
+      middlewares: [],
+      tls: { mode: "none" }
+    });
+
+    expect(parsed.listenPort).toBe(16666);
+    expect(parsed.entryPoints).toEqual(["websecure"]);
+    expect(parsed.targetUrl).toBe("http://192.168.31.139:5666");
+  });
+
   it("accepts Lucky-style bare backend IP:port values and normalizes them for Traefik", () => {
     const parsed = webServiceInputSchema.parse({
       name: "",
