@@ -4,8 +4,6 @@
     <img alt="GateLite" src="public/brand/gatelite/horizontal-light.svg" width="260">
   </picture>
 
-  <h1>GateLite</h1>
-
   <p><strong>把 Traefik 的域名、证书和路由管理，变成一个轻量控制台。</strong></p>
   <p><strong>Turn Traefik domains, certificates, and route operations into a lightweight control plane.</strong></p>
 
