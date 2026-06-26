@@ -1,13 +1,27 @@
-<p align="center">
+<div align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="public/brand/gatelite/horizontal-dark.svg">
     <img alt="GateLite" src="public/brand/gatelite/horizontal-light.svg" width="260">
   </picture>
-</p>
 
-# GateLite
+  <h1>GateLite</h1>
 
-Simple, agent-friendly control panel for Traefik.
+  <p><strong>Turn Traefik domains, certificates, and route operations into a lightweight control plane.</strong></p>
+  <p><strong>把 Traefik 的域名、证书和路由管理，变成一个轻量控制台。</strong></p>
+
+  <p>
+    <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-blue.svg"></a>
+    <a href="https://github.com/lizhelang/GateLite/releases/tag/v0.1.1"><img alt="Release: v0.1.1" src="https://img.shields.io/badge/release-v0.1.1-brightgreen.svg"></a>
+    <a href="https://github.com/users/lizhelang/packages/container/package/gatelite"><img alt="Registry: GHCR" src="https://img.shields.io/badge/registry-GHCR-24292f.svg"></a>
+    <img alt="Platform: Docker and Traefik" src="https://img.shields.io/badge/platform-Docker%20%7C%20Traefik-24a1c1.svg">
+    <img alt="Language: TypeScript" src="https://img.shields.io/badge/language-TypeScript-3178c6.svg">
+    <img alt="Runtime: Node.js" src="https://img.shields.io/badge/runtime-Node.js-43853d.svg">
+  </p>
+
+  <p>
+    <a href="README.md">English</a> | <a href="README.zh-CN.md">简体中文</a>
+  </p>
+</div>
 
 GateLite is a lightweight management panel for Traefik OSS. It aims to combine
 Lucky-style ease of use, Traefik's underlying proxy capabilities, and a stable

@@ -2,6 +2,7 @@
   "name": "gatelite",
   "version": "0.1.1",
   "private": true,
+  "license": "MIT",
   "type": "module",
   "description": "Simple, agent-friendly control panel for Traefik",
   "scripts": {
