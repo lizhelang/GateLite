@@ -1,0 +1,23 @@
+{
+  "name": "GateLite",
+  "short_name": "GateLite",
+  "description": "Simple, agent-friendly control panel for Traefik.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0E1720",
+  "theme_color": "#0E1720",
+  "icons": [
+    {
+      "src": "/brand/gatelite/icon-dark.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/brand/gatelite/icon-light.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}

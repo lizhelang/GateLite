@@ -5,6 +5,7 @@
 GateLite uses semantic versions:
 
 - `0.1.0` starts the private beta line.
+- `0.1.1` starts the easier self-hosted install line with GHCR images.
 - Patch releases, such as `0.1.1`, are bug fixes and deployment fixes.
 - Minor releases, such as `0.2.0`, add user-visible capabilities.
 - Major releases are reserved for incompatible state, API, or deployment
@@ -13,9 +14,12 @@ GateLite uses semantic versions:
 Docker image tags should match the version tag, for example:
 
 ```bash
-gatelite:0.1.0
-gatelite:latest
+ghcr.io/lizhelang/gatelite:0.1.1
+ghcr.io/lizhelang/gatelite:latest
 ```
+
+The release workflow also uploads `gatelite-<version>.tar.gz` for offline
+installs where pulling from GHCR is not practical.
 
 ## Local Release Gate
 

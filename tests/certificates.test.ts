@@ -7,7 +7,7 @@ import { afterAll, describe, expect, it } from "vitest";
 const certDir = fs.mkdtempSync(path.join(os.tmpdir(), "gatelite-certs-"));
 process.env.GATELITE_CERT_DIR = certDir;
 
-const { createCertificateFromInput, receiveSyncedCertificate, refreshCertificateFromAction } = await import("../server/certificates");
+const { createCertificateFromInput, deleteManagedCertificateFiles, receiveSyncedCertificate, refreshCertificateFromAction } = await import("../server/certificates");
 
 afterAll(() => {
   fs.rmSync(certDir, { recursive: true, force: true });
@@ -127,6 +127,75 @@ describe("createCertificateFromInput", () => {
           keyPath: outsidePath
         })
       ).toThrow(/must be inside/);
+    } finally {
+      fs.rmSync(outsidePath, { force: true });
+    }
+  });
+
+  it("deletes GateLite-managed PEM files for uploaded certificates", () => {
+    const { certPem, keyPem } = createTemporaryPemBundle("delete-upload.localhost");
+    const certificate = createCertificateFromInput({
+      name: "Uploaded cleanup cert",
+      enabled: true,
+      source: "upload",
+      domains: ["delete-upload.localhost"],
+      certPem,
+      keyPem
+    });
+
+    expect(certificate.certPath && fs.existsSync(certificate.certPath)).toBe(true);
+    expect(certificate.keyPath && fs.existsSync(certificate.keyPath)).toBe(true);
+
+    const deleted = deleteManagedCertificateFiles(certificate);
+
+    expect(deleted).toHaveLength(2);
+    expect(certificate.certPath && fs.existsSync(certificate.certPath)).toBe(false);
+    expect(certificate.keyPath && fs.existsSync(certificate.keyPath)).toBe(false);
+  });
+
+  it("does not delete existing path certificate files", () => {
+    const certPath = path.join(certDir, "path-preserve.crt");
+    const keyPath = path.join(certDir, "path-preserve.key");
+    const { certPem, keyPem } = createTemporaryPemBundle("path-preserve.localhost");
+    fs.writeFileSync(certPath, certPem, "utf8");
+    fs.writeFileSync(keyPath, keyPem, "utf8");
+    const certificate = createCertificateFromInput({
+      name: "Preserved path cert",
+      enabled: true,
+      source: "path",
+      domains: ["path-preserve.localhost"],
+      certPath,
+      keyPath
+    });
+
+    const deleted = deleteManagedCertificateFiles(certificate);
+
+    expect(deleted).toEqual([]);
+    expect(fs.existsSync(certPath)).toBe(true);
+    expect(fs.existsSync(keyPath)).toBe(true);
+  });
+
+  it("refuses to clean certificate files outside the mounted certificate directory", () => {
+    const outsidePath = path.join(os.tmpdir(), `outside-cleanup-${Date.now()}.crt`);
+    fs.writeFileSync(outsidePath, "");
+
+    try {
+      expect(() =>
+        deleteManagedCertificateFiles({
+          id: "cert-outside",
+          name: "Outside cleanup",
+          enabled: true,
+          source: "upload",
+          domains: ["outside.localhost"],
+          certPath: outsidePath,
+          keyPath: undefined,
+          status: "valid",
+          order: 1,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        })
+      ).toThrow(/must be inside/);
+      expect(fs.existsSync(outsidePath)).toBe(true);
     } finally {
       fs.rmSync(outsidePath, { force: true });
     }

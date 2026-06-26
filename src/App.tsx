@@ -1,8 +1,9 @@
 import { Check, Globe2, Languages, LayoutDashboard, Palette, RefreshCw, ShieldCheck, TerminalSquare, type LucideIcon } from "lucide-react";
-import { useEffect, useState, type CSSProperties } from "react";
+import { lazy, Suspense, useEffect, useState, type CSSProperties } from "react";
 import type { DashboardPayload } from "../shared/types";
 import { getDashboard } from "./api";
 import { Button } from "@/components/ui/button";
+import { GateLiteLogo } from "@/components/GateLiteLogo";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -24,12 +25,13 @@ import {
   SidebarTrigger
 } from "@/components/ui/sidebar";
 import { useLanguage } from "./i18n";
-import { CertificatesPage } from "./pages/CertificatesPage";
-import { DashboardPage } from "./pages/DashboardPage";
-import { WebServicesPage } from "./pages/WebServicesPage";
 import { themeOptions, useTheme } from "./theme";
 
 type ViewKey = "dashboard" | "web" | "certificates";
+
+const DashboardPage = lazy(() => import("./pages/DashboardPage").then((module) => ({ default: module.DashboardPage })));
+const WebServicesPage = lazy(() => import("./pages/WebServicesPage").then((module) => ({ default: module.WebServicesPage })));
+const CertificatesPage = lazy(() => import("./pages/CertificatesPage").then((module) => ({ default: module.CertificatesPage })));
 
 const views: Array<{ key: ViewKey; label: { en: string; zh: string }; description: { en: string; zh: string }; icon: LucideIcon }> = [
   {
@@ -132,9 +134,11 @@ export function App() {
           {error ? <div className="rounded-xl border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">{error}</div> : null}
           {loading && !dashboard ? <div className="rounded-xl border bg-card/70 p-4 text-sm text-muted-foreground">{t("Loading GateLite state and Traefik runtime...", "正在加载 GateLite 状态和 Traefik 运行时...")}</div> : null}
 
-          {activeView === "dashboard" ? <DashboardPage dashboard={dashboard} loading={loading} onRefresh={load} /> : null}
-          {dashboard && activeView === "web" ? <WebServicesPage dashboard={dashboard} onRefresh={load} /> : null}
-          {dashboard && activeView === "certificates" ? <CertificatesPage dashboard={dashboard} onRefresh={load} /> : null}
+          <Suspense fallback={<div className="rounded-xl border bg-card/70 p-4 text-sm text-muted-foreground">{t("Loading view...", "正在加载视图...")}</div>}>
+            {activeView === "dashboard" ? <DashboardPage dashboard={dashboard} loading={loading} onRefresh={load} /> : null}
+            {dashboard && activeView === "web" ? <WebServicesPage dashboard={dashboard} onRefresh={load} /> : null}
+            {dashboard && activeView === "certificates" ? <CertificatesPage dashboard={dashboard} onRefresh={load} /> : null}
+          </Suspense>
         </main>
       </SidebarInset>
     </SidebarProvider>
@@ -157,7 +161,7 @@ function GateLiteSidebar({
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton size="lg" className="gap-3">
-              <span className="flex size-9 items-center justify-center rounded-lg border border-cyan-500/35 bg-cyan-500/10 text-sm font-black text-cyan-700 dark:border-cyan-300/40 dark:bg-cyan-300/10 dark:text-cyan-100">GL</span>
+              <GateLiteLogo alt="" className="size-9" imageClassName="size-9 rounded-lg" />
               <span className="grid min-w-0">
                 <span className="truncate text-base font-semibold">GateLite</span>
                 <span className="truncate text-xs text-muted-foreground">{t("Traefik control plane", "Traefik 控制面")}</span>

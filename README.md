@@ -1,3 +1,10 @@
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="public/brand/gatelite/horizontal-dark.svg">
+    <img alt="GateLite" src="public/brand/gatelite/horizontal-light.svg" width="260">
+  </picture>
+</p>
+
 # GateLite
 
 Simple, agent-friendly control panel for Traefik.
@@ -68,6 +75,14 @@ This repository now contains the first local development module:
 - Optional built-in Basic/Bearer access control, disabled by default
 - Backup/restore and release verification scripts
 
+## Screenshots
+
+![GateLite dashboard overview](docs/assets/screenshots/dashboard.png)
+
+| Web services | SSL/TLS certificates |
+| --- | --- |
+| ![GateLite Web services table](docs/assets/screenshots/web-services.png) | ![GateLite SSL/TLS certificate table](docs/assets/screenshots/certificates.png) |
+
 ## Local Development
 
 Install dependencies:
@@ -104,6 +119,42 @@ to `runtime/traefik/gatelite.yml`.
 The local Traefik container enables Prometheus router/service metrics so the
 GateLite overview can plot managed-domain request activity from real Traefik
 counters instead of static preview data.
+
+## Three-Minute Self-Hosted Start
+
+Use this path when you already run Traefik with a Docker network, file provider
+directory, and certificate directory.
+
+1. Pull the release image:
+
+   ```bash
+   docker pull ghcr.io/lizhelang/gatelite:0.1.1
+   ```
+
+2. Copy `deploy/portainer/gatelite/docker-compose.yml` and set the values that
+   match your environment:
+
+   ```env
+   GATELITE_IMAGE=ghcr.io/lizhelang/gatelite:0.1.1
+   GATELITE_HOST=gatelite.example.com
+   GATELITE_AUTH_ENABLED=true
+   GATELITE_AUTH_USERNAME=admin
+   GATELITE_AUTH_PASSWORD=<strong-password>
+   ```
+
+   Update the compose volume paths if your Traefik dynamic config and
+   certificate directories are not `/data/compose/1/dynamic` and
+   `/data/compose/1/certs`.
+
+3. Start the stack, then verify it:
+
+   ```bash
+   docker compose up -d
+   GATELITE_PUBLIC_URLS=https://gatelite.example.com npm run verify:domains
+   ```
+
+For offline installs, download the release `gatelite-<version>.tar.gz` artifact
+and load it with `docker load < gatelite-<version>.tar.gz`.
 
 Run checks:
 
@@ -162,6 +213,10 @@ the parts they already own:
 
 Do not store DNS provider API tokens in GateLite. Keep those credentials in the
 Traefik or infrastructure layer that performs ACME challenges.
+
+Certificate deletion is metadata-only by default. Admin users can choose to
+clean up GateLite-managed PEM files for `self-signed`, `upload`, and `sync`
+certificates; `path` certificates and Traefik ACME storage are left alone.
 
 ## Access Control
 

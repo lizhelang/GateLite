@@ -158,9 +158,18 @@ export function CertificatesPage({ dashboard, onRefresh }: CertificatesPageProps
 
   const handleDelete = async (certificate: CertificateWithBindings) => {
     if (!window.confirm(t(`Delete certificate "${certificate.name}"?`, `删除证书「${certificate.name}」？`))) return;
+    const canCleanupFiles = ["self-signed", "upload", "sync"].includes(certificate.source) && Boolean(certificate.certPath || certificate.keyPath);
+    const cleanupFiles =
+      canCleanupFiles &&
+      window.confirm(
+        t(
+          "Also delete GateLite-managed PEM files from the certificate directory?",
+          "是否同时删除 GateLite 管理的证书目录内 PEM 文件？"
+        )
+      );
     setError(null);
     try {
-      await deleteCertificate(certificate.id);
+      await deleteCertificate(certificate.id, { cleanupFiles });
       await onRefresh();
     } catch (deleteError) {
       setError(deleteError instanceof Error ? deleteError.message : t("Delete failed.", "删除失败。"));

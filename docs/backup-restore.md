@@ -25,6 +25,11 @@ npm run backup -- --out-dir /safe/backups/gatelite
 The archive includes a `manifest.json` with the original paths and archived
 contents.
 
+Certificate backups include files currently present under `GATELITE_CERT_DIR`.
+If an admin later deletes a GateLite-managed certificate and chooses file
+cleanup, those PEM files are removed from the live certificate directory but
+remain recoverable from backups taken before the cleanup.
+
 ## Restore
 
 Restore is intentionally explicit because it overwrites runtime files:

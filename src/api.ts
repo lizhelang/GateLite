@@ -218,8 +218,9 @@ export async function reorderCertificates(orderedIds: string[]): Promise<Certifi
   });
 }
 
-export async function deleteCertificate(id: string): Promise<void> {
-  await request<void>(`/api/certificates/${id}`, { method: "DELETE" });
+export async function deleteCertificate(id: string, options: { cleanupFiles?: boolean } = {}): Promise<void> {
+  const query = options.cleanupFiles ? "?cleanupFiles=true" : "";
+  await request<void>(`/api/certificates/${id}${query}`, { method: "DELETE" });
 }
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {

@@ -45,6 +45,21 @@ Basic auth currently maps to `admin`, because it is meant for the trusted
 operator opening the browser UI. Use Bearer tokens when agents need narrower
 roles.
 
+## Certificate File Deletion
+
+Deleting a certificate normally removes only GateLite metadata. Admin users can
+also choose to clean up GateLite-managed PEM files during deletion.
+
+File cleanup is intentionally narrow:
+
+- `self-signed`, `upload`, and `sync` certificates can clean up local `.crt` and
+  `.key` files that live inside `GATELITE_CERT_DIR`.
+- `path` certificates never delete their referenced source files; GateLite
+  treats those as externally managed.
+- `acme` certificates do not delete ACME storage because Traefik owns
+  `acme.json` and renewal state.
+- Cleanup refuses any path outside `GATELITE_CERT_DIR`.
+
 ## External Access Control
 
 It is also valid to keep built-in auth disabled and protect GateLite with an

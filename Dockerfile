@@ -12,8 +12,14 @@ RUN npm prune --omit=dev --no-audit --no-fund
 FROM node:22-bookworm-slim AS runtime
 
 WORKDIR /app
+ARG GATELITE_VERSION=local
 ENV NODE_ENV=production
 ENV PORT=3001
+
+LABEL org.opencontainers.image.title="GateLite" \
+  org.opencontainers.image.description="Simple, agent-friendly control panel for Traefik" \
+  org.opencontainers.image.source="https://github.com/lizhelang/GateLite" \
+  org.opencontainers.image.version="${GATELITE_VERSION}"
 
 COPY --from=build /app/package*.json ./
 COPY --from=build /app/node_modules ./node_modules

@@ -2,7 +2,7 @@ name: gatelite
 
 services:
   app:
-    image: ${GATELITE_IMAGE:-gatelite:local}
+    image: ${GATELITE_IMAGE:-ghcr.io/lizhelang/gatelite:latest}
     container_name: gatelite
     restart: unless-stopped
     environment:

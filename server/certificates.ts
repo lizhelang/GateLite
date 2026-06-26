@@ -331,6 +331,24 @@ export function receiveSyncedCertificate(current: CertificateItem, input: Certif
   };
 }
 
+export function deleteManagedCertificateFiles(certificate: CertificateItem): string[] {
+  if (!["self-signed", "upload", "sync"].includes(certificate.source)) return [];
+
+  const deleted: string[] = [];
+  for (const filePath of [certificate.certPath, certificate.keyPath]) {
+    if (!filePath) continue;
+    const resolvedPath = path.resolve(filePath);
+    assertPathIsInsideCertificateDir(resolvedPath, "Certificate cleanup path");
+    if (!fs.existsSync(resolvedPath)) continue;
+    if (!fs.lstatSync(resolvedPath).isFile()) {
+      throw new BadRequestError(`Certificate cleanup path is not a file: ${resolvedPath}`);
+    }
+    fs.rmSync(resolvedPath, { force: true });
+    deleted.push(resolvedPath);
+  }
+  return deleted;
+}
+
 function pendingStatusForSource(source: CertificateInput["source"]): CertificateStatus {
   return source === "acme" || source === "sync" ? "pending" : "invalid";
 }
@@ -358,11 +376,7 @@ function resolveReadablePathCertificate(certPath: string | undefined, keyPath: s
 }
 
 function assertPathIsMountedCertificateFile(filePath: string, label: string): void {
-  const certDir = path.resolve(config.certDir);
-  const relative = path.relative(certDir, filePath);
-  if (relative.startsWith("..") || path.isAbsolute(relative)) {
-    throw new BadRequestError(`${label} must be inside ${certDir} so the Docker Traefik container can read it as ${config.certMountPath}.`);
-  }
+  assertPathIsInsideCertificateDir(filePath, label);
   if (!fs.existsSync(filePath)) {
     throw new BadRequestError(`${label} does not exist: ${filePath}`);
   }
@@ -373,6 +387,14 @@ function assertPathIsMountedCertificateFile(filePath: string, label: string): vo
     fs.accessSync(filePath, fs.constants.R_OK);
   } catch {
     throw new BadRequestError(`${label} is not readable: ${filePath}`);
+  }
+}
+
+function assertPathIsInsideCertificateDir(filePath: string, label: string): void {
+  const certDir = path.resolve(config.certDir);
+  const relative = path.relative(certDir, filePath);
+  if (relative.startsWith("..") || path.isAbsolute(relative)) {
+    throw new BadRequestError(`${label} must be inside ${certDir} so the Docker Traefik container can read it as ${config.certMountPath}.`);
   }
 }
 

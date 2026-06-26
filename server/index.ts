@@ -9,7 +9,7 @@ import { createAuthMiddleware } from "./auth";
 import { certificateCoversDomain, resolverName, webServicesBoundToCertificate } from "./bindings";
 import { diffText } from "./config-preview";
 import { config } from "./config";
-import { createCertificateFromInput, receiveSyncedCertificate, refreshCertificateFromAction, updateCertificateFromInput, type CertificateInput } from "./certificates";
+import { createCertificateFromInput, deleteManagedCertificateFiles, receiveSyncedCertificate, refreshCertificateFromAction, updateCertificateFromInput, type CertificateInput } from "./certificates";
 import { buildDiscoveredRoutes, buildRuntimeTlsBindings, createMappedWebServiceFromRoute, ensureImportedGroup, findDiscoveredRoute, transientServicesForUnmanagedRoutes } from "./discovery";
 import { generateTraefikDynamicConfig } from "./generator";
 import { createId, traefikName } from "./ids";
@@ -423,8 +423,14 @@ app.delete("/api/certificates/:id", (request, response) => {
   if (!certificate) return response.status(404).json({ error: "Certificate not found." });
   const isBound = webServicesBoundToCertificate(certificate, state.webServices).length > 0;
   if (isBound) return response.status(409).json({ error: "Certificate is bound to at least one Web service." });
+  const cleanupFiles = request.query.cleanupFiles === "true" || request.query.cleanupFiles === "1";
+  const deletedFiles = cleanupFiles ? deleteManagedCertificateFiles(certificate) : [];
   state.certificates = state.certificates.filter((item) => item.id !== request.params.id);
-  saveState(state, "certificate.delete", `Deleted certificate ${certificate.name}.`);
+  saveState(
+    state,
+    cleanupFiles ? "certificate.delete-with-files" : "certificate.delete",
+    deletedFiles.length ? `Deleted certificate ${certificate.name} and ${deletedFiles.length} managed PEM file(s).` : `Deleted certificate ${certificate.name}.`
+  );
   response.status(204).send();
 });
 

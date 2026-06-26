@@ -20,11 +20,11 @@ const runtime: TraefikRuntime = {
       name: "erp@docker",
       protocol: "http",
       provider: "docker",
-      rule: "Host(`gl.erp.tjhtj.com`)",
+      rule: "Host(`app.example.com`)",
       service: "erp",
       entryPoints: ["websecure"],
       middlewares: ["compress@docker"],
-      domains: ["gl.erp.tjhtj.com"],
+      domains: ["app.example.com"],
       tls: true,
       status: "online"
     }
@@ -45,11 +45,11 @@ const runtime: TraefikRuntime = {
         name: "erp@docker",
         protocol: "http",
         provider: "docker",
-        rule: "Host(`gl.erp.tjhtj.com`)",
+        rule: "Host(`app.example.com`)",
         service: "erp",
         entryPoints: ["websecure"],
         middlewares: ["compress@docker"],
-        domains: ["gl.erp.tjhtj.com"],
+        domains: ["app.example.com"],
         tls: true,
         status: "online"
       }
@@ -69,7 +69,7 @@ describe("Traefik discovery", () => {
     expect(route).toMatchObject({
       routerName: "erp@docker",
       provider: "docker",
-      domains: ["gl.erp.tjhtj.com"],
+      domains: ["app.example.com"],
       entryPoints: ["websecure"],
       managedMode: "unmanaged",
       importable: true,
@@ -93,7 +93,7 @@ describe("Traefik discovery", () => {
     expect(mappedRoute.managedMode).toBe("mapped");
     expect(mappedRoute.managedServiceId).toBe("svc-imported");
     expect(service.sourceRouterName).toBe("erp@docker");
-    expect(service.domainRoot).toBe("erp.tjhtj.com");
+    expect(service.domainRoot).toBe("example.com");
     expect(generated.object).toEqual({});
     expect(generated.yaml.trim()).toBe("{}");
   });
@@ -104,7 +104,7 @@ describe("Traefik discovery", () => {
 
     expect(binding).toMatchObject({
       routerName: "erp@docker",
-      domains: ["gl.erp.tjhtj.com"],
+      domains: ["app.example.com"],
       status: "online",
       importable: false
     });
