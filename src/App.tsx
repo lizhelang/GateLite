@@ -1,8 +1,15 @@
-import { Globe2, Languages, LayoutDashboard, RefreshCw, ShieldCheck, TerminalSquare, type LucideIcon } from "lucide-react";
+import { Check, Globe2, Languages, LayoutDashboard, Palette, RefreshCw, ShieldCheck, TerminalSquare, type LucideIcon } from "lucide-react";
 import { useEffect, useState, type CSSProperties } from "react";
 import type { DashboardPayload } from "../shared/types";
 import { getDashboard } from "./api";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuTrigger
+} from "@/components/ui/dropdown-menu";
 import { Separator } from "@/components/ui/separator";
 import {
   Sidebar,
@@ -20,6 +27,7 @@ import { useLanguage } from "./i18n";
 import { CertificatesPage } from "./pages/CertificatesPage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { WebServicesPage } from "./pages/WebServicesPage";
+import { themeOptions, useTheme } from "./theme";
 
 type ViewKey = "dashboard" | "web" | "certificates";
 
@@ -46,6 +54,7 @@ const views: Array<{ key: ViewKey; label: { en: string; zh: string }; descriptio
 
 export function App() {
   const { language, t, toggleLanguage } = useLanguage();
+  const { mode, setMode } = useTheme();
   const [activeView, setActiveView] = useState<ViewKey>("dashboard");
   const [dashboard, setDashboard] = useState<DashboardPayload | null>(null);
   const [loading, setLoading] = useState(true);
@@ -92,6 +101,26 @@ export function App() {
               <Languages className="size-4" />
               {language === "en" ? "中文" : "EN"}
             </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="icon-sm" aria-label={t("Change color theme", "切换配色")}>
+                  <Palette className="size-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-36">
+                <DropdownMenuLabel>{t("Theme", "配色")}</DropdownMenuLabel>
+                {themeOptions.map((option) => {
+                  const Icon = option.icon;
+                  return (
+                    <DropdownMenuItem key={option.mode} onClick={() => setMode(option.mode)}>
+                      <Icon className="size-4" />
+                      <span>{t(option.label.en, option.label.zh)}</span>
+                      {mode === option.mode ? <Check className="ml-auto size-4" /> : null}
+                    </DropdownMenuItem>
+                  );
+                })}
+              </DropdownMenuContent>
+            </DropdownMenu>
             <Button variant="outline" size="sm" onClick={() => void load()} disabled={loading}>
               <RefreshCw className={loading ? "size-4 animate-spin" : "size-4"} />
               <span className="hidden sm:inline">{t("Refresh", "刷新")}</span>
@@ -128,7 +157,7 @@ function GateLiteSidebar({
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton size="lg" className="gap-3">
-              <span className="flex size-9 items-center justify-center rounded-lg border border-cyan-300/40 bg-cyan-300/10 text-sm font-black text-cyan-100">GL</span>
+              <span className="flex size-9 items-center justify-center rounded-lg border border-cyan-500/35 bg-cyan-500/10 text-sm font-black text-cyan-700 dark:border-cyan-300/40 dark:bg-cyan-300/10 dark:text-cyan-100">GL</span>
               <span className="grid min-w-0">
                 <span className="truncate text-base font-semibold">GateLite</span>
                 <span className="truncate text-xs text-muted-foreground">{t("Traefik control plane", "Traefik 控制面")}</span>

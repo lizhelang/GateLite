@@ -424,10 +424,10 @@ function InfoTile({ label, value, caption }: { label: string; value: string; cap
 function ProtocolBadge({ protocol }: { protocol: RuntimeProtocol }) {
   const tone =
     protocol === "http"
-      ? "border-cyan-300/35 bg-cyan-300/10 text-cyan-100"
+      ? "border-cyan-500/35 bg-cyan-500/10 text-cyan-700 dark:border-cyan-300/35 dark:bg-cyan-300/10 dark:text-cyan-100"
       : protocol === "tcp"
-        ? "border-amber-300/35 bg-amber-300/10 text-amber-100"
-        : "border-emerald-300/35 bg-emerald-300/10 text-emerald-100";
+        ? "border-amber-500/35 bg-amber-500/10 text-amber-700 dark:border-amber-300/35 dark:bg-amber-300/10 dark:text-amber-100"
+        : "border-emerald-500/35 bg-emerald-500/10 text-emerald-700 dark:border-emerald-300/35 dark:bg-emerald-300/10 dark:text-emerald-100";
   return (
     <Badge variant="outline" className={`rounded-md font-mono text-[11px] uppercase ${tone}`}>
       {protocol}

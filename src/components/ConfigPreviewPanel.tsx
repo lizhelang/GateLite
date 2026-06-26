@@ -52,10 +52,10 @@ export function ConfigPreviewPanel({
           <p className="mt-1 text-xs text-muted-foreground">{description}</p>
         </div>
         <div className="flex shrink-0 items-center gap-2">
-          <Badge variant="outline" className="rounded-md border-emerald-400/35 bg-emerald-400/10 text-emerald-200">
+          <Badge variant="outline" className="rounded-md border-emerald-500/35 bg-emerald-500/10 text-emerald-700 dark:border-emerald-400/35 dark:bg-emerald-400/10 dark:text-emerald-200">
             +{added} {addedLabel}
           </Badge>
-          <Badge variant="outline" className="rounded-md border-rose-400/35 bg-rose-400/10 text-rose-200">
+          <Badge variant="outline" className="rounded-md border-rose-500/35 bg-rose-500/10 text-rose-700 dark:border-rose-400/35 dark:bg-rose-400/10 dark:text-rose-200">
             -{removed} {removedLabel}
           </Badge>
           <Button type="button" variant="ghost" size="sm" onClick={onClear}>
@@ -88,10 +88,10 @@ function PreviewLine({ className, text }: { className: string; text: string }) {
 
 function formatDiffLine(line: ConfigDiffLine): { className: string; text: string } {
   if (line.type === "added") {
-    return { className: "text-emerald-200", text: `+ ${line.line}` };
+    return { className: "text-emerald-700 dark:text-emerald-200", text: `+ ${line.line}` };
   }
   if (line.type === "removed") {
-    return { className: "text-rose-200", text: `- ${line.line}` };
+    return { className: "text-rose-700 dark:text-rose-200", text: `- ${line.line}` };
   }
   return { className: "text-muted-foreground", text: `  ${line.line}` };
 }

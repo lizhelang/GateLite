@@ -10,17 +10,17 @@ interface StatusBadgeProps {
 }
 
 const statusClass: Record<StatusBadgeProps["status"], string> = {
-  online: "border-emerald-400/40 bg-emerald-400/10 text-emerald-200",
-  offline: "border-zinc-400/30 bg-zinc-400/10 text-zinc-300",
-  warning: "border-amber-400/40 bg-amber-400/10 text-amber-200",
-  unknown: "border-zinc-400/30 bg-zinc-400/10 text-zinc-300",
-  valid: "border-emerald-400/40 bg-emerald-400/10 text-emerald-200",
-  expiring: "border-amber-400/40 bg-amber-400/10 text-amber-200",
-  expired: "border-red-400/40 bg-red-400/10 text-red-200",
-  pending: "border-sky-400/40 bg-sky-400/10 text-sky-200",
-  invalid: "border-red-400/40 bg-red-400/10 text-red-200",
-  enabled: "border-cyan-300/40 bg-cyan-300/10 text-cyan-100",
-  disabled: "border-zinc-400/30 bg-zinc-400/10 text-zinc-300"
+  online: "border-emerald-500/35 bg-emerald-500/10 text-emerald-700 dark:border-emerald-400/40 dark:bg-emerald-400/10 dark:text-emerald-200",
+  offline: "border-zinc-500/25 bg-zinc-500/10 text-zinc-600 dark:border-zinc-400/30 dark:bg-zinc-400/10 dark:text-zinc-300",
+  warning: "border-amber-500/35 bg-amber-500/10 text-amber-700 dark:border-amber-400/40 dark:bg-amber-400/10 dark:text-amber-200",
+  unknown: "border-zinc-500/25 bg-zinc-500/10 text-zinc-600 dark:border-zinc-400/30 dark:bg-zinc-400/10 dark:text-zinc-300",
+  valid: "border-emerald-500/35 bg-emerald-500/10 text-emerald-700 dark:border-emerald-400/40 dark:bg-emerald-400/10 dark:text-emerald-200",
+  expiring: "border-amber-500/35 bg-amber-500/10 text-amber-700 dark:border-amber-400/40 dark:bg-amber-400/10 dark:text-amber-200",
+  expired: "border-red-500/35 bg-red-500/10 text-red-700 dark:border-red-400/40 dark:bg-red-400/10 dark:text-red-200",
+  pending: "border-sky-500/35 bg-sky-500/10 text-sky-700 dark:border-sky-400/40 dark:bg-sky-400/10 dark:text-sky-200",
+  invalid: "border-red-500/35 bg-red-500/10 text-red-700 dark:border-red-400/40 dark:bg-red-400/10 dark:text-red-200",
+  enabled: "border-cyan-500/35 bg-cyan-500/10 text-cyan-700 dark:border-cyan-300/40 dark:bg-cyan-300/10 dark:text-cyan-100",
+  disabled: "border-zinc-500/25 bg-zinc-500/10 text-zinc-600 dark:border-zinc-400/30 dark:bg-zinc-400/10 dark:text-zinc-300"
 };
 
 export function StatusBadge({ status, label, className }: StatusBadgeProps) {

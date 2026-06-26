@@ -40,8 +40,12 @@
 
 - Add stable create/update/delete route APIs.
 - Add idempotency keys and machine-readable error codes.
-- Add audit log entries for human and agent actions.
-- Add policy hooks for production safety checks.
+- Add audit log entries for human and agent actions. Current local history
+  records action names and summaries for every successful state write.
+- Add policy hooks for production safety checks. Current release-readiness work
+  adds optional access control with viewer, agent, operator, and admin roles,
+  plus release gates, backup/restore scripts, CI checks, and domain migration
+  verification.
 
 ## Phase 5: Provider Expansion
 

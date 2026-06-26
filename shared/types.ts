@@ -5,6 +5,8 @@ export type CertificateStatus = "valid" | "expiring" | "expired" | "pending" | "
 export type RuntimeStatus = "online" | "offline" | "warning" | "unknown";
 export type RuntimeProtocol = "http" | "tcp" | "udp";
 export type WebServiceManagementMode = "generated" | "mapped";
+export type AcmeChallengeType = "http-01" | "tls-alpn-01" | "dns-01" | "unknown";
+export type AcmeRenewalState = "ok" | "due-soon" | "expired" | "missing" | "unreadable" | "unknown";
 
 export interface ServiceGroup {
   id: string;
@@ -260,6 +262,72 @@ export interface TraefikRuntime {
   error?: string;
 }
 
+export interface AcmeResolverChallenge {
+  type: AcmeChallengeType;
+  entryPoint?: string;
+  provider?: string;
+  delayBeforeCheck?: string;
+  resolvers?: string[];
+}
+
+export interface AcmeResolverState {
+  name: string;
+  status: RuntimeStatus;
+  sources: Array<"static-config" | "traefik-api" | "router" | "acme-storage" | "gatelite-state">;
+  storagePath?: string;
+  storageReadable?: boolean;
+  email?: string;
+  caServer?: string;
+  challenge?: AcmeResolverChallenge;
+  certificateCount: number;
+  renewalState: AcmeRenewalState;
+  statusMessage?: string;
+}
+
+export interface AcmeStorageFileStatus {
+  path: string;
+  source: "env" | "static-config";
+  readable: boolean;
+  resolverNames: string[];
+  error?: string;
+}
+
+export interface AcmeCertificateRuntime {
+  resolver: string;
+  mainDomain?: string;
+  sans: string[];
+  domains: string[];
+  store?: string;
+  notBefore?: string;
+  notAfter?: string;
+  issuer?: string;
+  subject?: string;
+  status: CertificateStatus;
+  renewalState: AcmeRenewalState;
+  statusMessage?: string;
+}
+
+export interface AcmeCertificateMatch {
+  resolver: string;
+  status: CertificateStatus;
+  renewalState: AcmeRenewalState;
+  domains: string[];
+  notAfter?: string;
+  statusMessage?: string;
+}
+
+export interface AcmeStatus {
+  available: boolean;
+  updatedAt: string;
+  staticConfigPath?: string;
+  staticConfigReadable: boolean;
+  staticConfigError?: string;
+  storageFiles: AcmeStorageFileStatus[];
+  resolvers: AcmeResolverState[];
+  certificates: AcmeCertificateRuntime[];
+  warnings: string[];
+}
+
 export interface DomainTrafficSeries {
   domain: string;
   router: string;
@@ -305,10 +373,20 @@ export interface WebServiceWithRuntime extends WebService {
 
 export interface CertificateWithBindings extends CertificateItem {
   boundServices: WebService[];
+  acmeRuntime?: {
+    resolver: string;
+    resolverStatus: RuntimeStatus;
+    storageReadable?: boolean;
+    matches: AcmeCertificateMatch[];
+    status: CertificateStatus;
+    renewalState: AcmeRenewalState;
+    statusMessage?: string;
+  };
 }
 
 export interface DashboardPayload {
   runtime: TraefikRuntime;
+  acme: AcmeStatus;
   groups: ServiceGroup[];
   webServices: WebServiceWithRuntime[];
   certificates: CertificateWithBindings[];

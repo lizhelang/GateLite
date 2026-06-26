@@ -447,7 +447,7 @@ export function WebServicesPage({ dashboard, onRefresh }: WebServicesPageProps) 
   return (
     <section className="grid gap-3">
       {error ? <div className="rounded-xl border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">{error}</div> : null}
-      {notice ? <div className="rounded-xl border border-cyan-300/35 bg-cyan-300/10 p-3 text-sm text-cyan-100">{notice}</div> : null}
+      {notice ? <div className="rounded-xl border border-cyan-500/35 bg-cyan-500/10 p-3 text-sm text-cyan-700 dark:border-cyan-300/35 dark:bg-cyan-300/10 dark:text-cyan-100">{notice}</div> : null}
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex min-w-0 flex-wrap items-center gap-2">
@@ -700,10 +700,10 @@ function DiscoveredRouteTable({
               const backend = formatBackendTarget(route.backend.targetUrl || route.backend.servers[0] || "");
               const canImport = route.importable && route.managedMode === "unmanaged";
               return (
-                <TableRow key={route.routerName} className={`h-11 ${route.managedMode === "mapped" || route.managedMode === "unmanaged" ? "bg-amber-300/[0.025]" : ""}`}>
+                <TableRow key={route.routerName} className={`h-11 ${route.managedMode === "mapped" || route.managedMode === "unmanaged" ? "bg-amber-400/[0.06] dark:bg-amber-300/[0.025]" : ""}`}>
                   <TableCell className="py-1.5">
                     <div className="grid min-w-0 gap-0.5">
-                      <span className="truncate font-mono text-xs font-medium text-cyan-100">{frontend.label}</span>
+                      <span className="truncate font-mono text-xs font-medium text-cyan-700 dark:text-cyan-100">{frontend.label}</span>
                       <span className="truncate text-[10px] text-muted-foreground">{frontend.meta}</span>
                     </div>
                   </TableCell>
@@ -953,7 +953,7 @@ function RouteTableRow({
   return (
     <TableRow
       data-state={selected ? "selected" : undefined}
-      className={`${dragging ? "outline outline-1 outline-cyan-300/70" : ""} ${isExternalReadOnly ? "bg-amber-300/[0.035]" : ""} h-10`}
+      className={`${dragging ? "outline outline-1 outline-cyan-600/60 dark:outline-cyan-300/70" : ""} ${isExternalReadOnly ? "bg-amber-400/[0.07] dark:bg-amber-300/[0.035]" : ""} h-10`}
       draggable
       onDragStart={() => onDragStart(service.id)}
       onDragOver={(event) => event.preventDefault()}
@@ -976,7 +976,7 @@ function RouteTableRow({
       </TableCell>
       <TableCell className="py-1.5">
         {frontend.href ? (
-          <a className="grid min-w-0 max-w-full gap-0 font-mono text-xs font-medium leading-tight text-cyan-100 hover:text-cyan-200" href={frontend.href} target="_blank" rel="noreferrer" onClick={(event) => event.stopPropagation()}>
+          <a className="grid min-w-0 max-w-full gap-0 font-mono text-xs font-medium leading-tight text-cyan-700 hover:text-cyan-800 dark:text-cyan-100 dark:hover:text-cyan-200" href={frontend.href} target="_blank" rel="noreferrer" onClick={(event) => event.stopPropagation()}>
             <span className="inline-flex min-w-0 items-center gap-1">
               <span className="truncate">{frontend.label}</span>
               <ExternalLink className="size-3 shrink-0" />
@@ -984,7 +984,7 @@ function RouteTableRow({
             <span className="truncate text-[10px] font-normal text-muted-foreground">{frontend.meta}</span>
           </a>
         ) : (
-          <span className="grid min-w-0 gap-0 font-mono text-xs leading-tight text-cyan-100">
+          <span className="grid min-w-0 gap-0 font-mono text-xs leading-tight text-cyan-700 dark:text-cyan-100">
             <span className="truncate">{frontend.label}</span>
             <span className="truncate text-[10px] text-muted-foreground">{frontend.meta}</span>
           </span>
@@ -1117,7 +1117,7 @@ function QpsValue({ traffic }: { traffic?: WebServiceTrafficStats }) {
 
   return (
     <span className="grid justify-items-end gap-0 leading-tight">
-      <span className="font-mono text-[13px] text-emerald-100">{formatNumber(traffic.requestsPerSecond, 2)}</span>
+      <span className="font-mono text-[13px] text-emerald-700 dark:text-emerald-100">{formatNumber(traffic.requestsPerSecond, 2)}</span>
       <span className="font-mono text-[10px] text-muted-foreground">{t(`${formatNumber(traffic.totalRequests, 0)} req`, `${formatNumber(traffic.totalRequests, 0)} 次`)}</span>
     </span>
   );
@@ -1132,7 +1132,7 @@ function TrafficValue({ traffic, direction }: { traffic?: WebServiceTrafficStats
 
   const value = direction === "down" ? traffic.responseBytes : traffic.requestBytes;
   const rate = direction === "down" ? traffic.responseBytesPerSecond : traffic.requestBytesPerSecond;
-  const toneClass = direction === "down" ? "text-cyan-100" : "text-amber-100";
+  const toneClass = direction === "down" ? "text-cyan-700 dark:text-cyan-100" : "text-amber-700 dark:text-amber-100";
 
   return (
     <span className="grid justify-items-end gap-0 leading-tight">
@@ -1338,7 +1338,7 @@ function SourceBadge({ provider, mode }: { provider?: string; mode: "external" |
   if (mode === "generated") {
     return (
       <div className="flex flex-wrap gap-1">
-        <Badge variant="secondary" className="rounded-md border-cyan-300/35 bg-cyan-300/10 text-cyan-100">
+        <Badge variant="secondary" className="rounded-md border-cyan-500/35 bg-cyan-500/10 text-cyan-700 dark:border-cyan-300/35 dark:bg-cyan-300/10 dark:text-cyan-100">
           {t("GateLite", "GateLite")}
         </Badge>
         <Badge variant="outline" className="rounded-md text-muted-foreground">
@@ -1350,7 +1350,7 @@ function SourceBadge({ provider, mode }: { provider?: string; mode: "external" |
   if (mode === "internal") {
     return (
       <div className="flex flex-wrap gap-1">
-        <Badge variant="outline" className="rounded-md border-zinc-400/30 bg-zinc-400/10 text-zinc-300">
+        <Badge variant="outline" className="rounded-md border-zinc-500/25 bg-zinc-500/10 text-zinc-600 dark:border-zinc-400/30 dark:bg-zinc-400/10 dark:text-zinc-300">
           {t("Traefik internal", "Traefik 内部")}
         </Badge>
       </div>
@@ -1359,7 +1359,7 @@ function SourceBadge({ provider, mode }: { provider?: string; mode: "external" |
   return (
     <div className="flex flex-wrap gap-1">
       <ReadOnlyBadge />
-      <Badge variant="outline" className="rounded-md border-amber-300/25 bg-amber-300/5 text-amber-100/85">
+      <Badge variant="outline" className="rounded-md border-amber-500/30 bg-amber-500/10 text-amber-700 dark:border-amber-300/25 dark:bg-amber-300/5 dark:text-amber-100/85">
         {provider || "unknown"} provider
       </Badge>
     </div>
@@ -1369,7 +1369,7 @@ function SourceBadge({ provider, mode }: { provider?: string; mode: "external" |
 function ReadOnlyBadge({ compact = false }: { compact?: boolean }) {
   const { t } = useLanguage();
   return (
-    <Badge variant="outline" className={`rounded-md border-amber-300/40 bg-amber-300/10 text-amber-100 ${compact ? "h-5 px-1.5 text-[10px]" : ""}`}>
+    <Badge variant="outline" className={`rounded-md border-amber-500/35 bg-amber-500/10 text-amber-700 dark:border-amber-300/40 dark:bg-amber-300/10 dark:text-amber-100 ${compact ? "h-5 px-1.5 text-[10px]" : ""}`}>
       {compact ? t("Read-only", "只读") : t("External read-only", "外部只读")}
     </Badge>
   );
@@ -1406,7 +1406,7 @@ function GroupStrip({
         return (
           <div
             key={group.id}
-            className={`flex items-center gap-1 rounded-lg border bg-background/45 px-1.5 py-1 ${draggingGroupId === group.id ? "outline outline-1 outline-cyan-300/70" : ""}`}
+            className={`flex items-center gap-1 rounded-lg border bg-background/45 px-1.5 py-1 ${draggingGroupId === group.id ? "outline outline-1 outline-cyan-600/60 dark:outline-cyan-300/70" : ""}`}
             draggable
             onDragStart={() => onDragStart(group.id)}
             onDragOver={(event) => event.preventDefault()}
@@ -1594,7 +1594,7 @@ function ServiceForm({
             isDefaultRule={isDefaultRule}
           />
           {hostDomainTooMany ? (
-            <div className="md:col-span-2 rounded-lg border border-amber-300/25 bg-amber-300/10 px-3 py-2 text-xs text-amber-100">
+            <div className="md:col-span-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-800 dark:border-amber-300/25 dark:bg-amber-300/10 dark:text-amber-100">
               {t("One reverse proxy rule maps one frontend domain to one backend. Create separate rules or sub-rules for additional domains.", "一条反代规则只对应一个前端域名和一个后端。多个域名请分别创建规则或子规则。")}
             </div>
           ) : null}
@@ -1774,9 +1774,9 @@ function RoutePairPreview({
   const frontendLabel = visibleFrontends.length > 1 ? `${visibleFrontends[0]} +${visibleFrontends.length - 1}` : visibleFrontends[0];
   return (
     <div className="flex min-w-0 items-center gap-2 rounded-lg border bg-background/40 px-3 py-2 text-xs md:col-span-2">
-      <span className="min-w-0 truncate font-mono text-cyan-100">{frontendLabel}</span>
+      <span className="min-w-0 truncate font-mono text-cyan-700 dark:text-cyan-100">{frontendLabel}</span>
       <ArrowRight className="size-3.5 shrink-0 text-muted-foreground" />
-      <span className="min-w-0 truncate font-mono text-amber-100">{backendTarget.hostPort || t("No backend yet", "还没有后端")}</span>
+      <span className="min-w-0 truncate font-mono text-amber-700 dark:text-amber-100">{backendTarget.hostPort || t("No backend yet", "还没有后端")}</span>
       {backendTarget.hostPort ? (
         <Badge variant="outline" className="ml-auto h-5 rounded-md px-1.5 text-[10px] text-muted-foreground">
           {backendTarget.scheme}

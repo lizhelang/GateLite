@@ -49,6 +49,48 @@
 }
 
 :root {
+  color-scheme: light;
+  --background: oklch(0.975 0.004 247);
+  --foreground: oklch(0.22 0.023 251);
+  --card: oklch(0.995 0.002 247 / 0.88);
+  --card-foreground: oklch(0.22 0.023 251);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.22 0.023 251);
+  --primary: oklch(0.55 0.105 190);
+  --primary-foreground: oklch(0.985 0.004 247);
+  --secondary: oklch(0.93 0.011 247);
+  --secondary-foreground: oklch(0.26 0.024 251);
+  --muted: oklch(0.94 0.01 247);
+  --muted-foreground: oklch(0.49 0.031 251);
+  --accent: oklch(0.6 0.18 28);
+  --accent-foreground: oklch(0.99 0.004 247);
+  --destructive: oklch(0.58 0.22 24);
+  --border: oklch(0.78 0.02 251 / 44%);
+  --input: oklch(0.76 0.025 251 / 48%);
+  --ring: oklch(0.55 0.105 190);
+  --chart-1: oklch(0.55 0.105 190);
+  --chart-2: oklch(0.62 0.16 78);
+  --chart-3: oklch(0.6 0.18 28);
+  --chart-4: oklch(0.55 0.12 255);
+  --chart-5: oklch(0.56 0.14 145);
+  --radius: 0.625rem;
+  --sidebar: oklch(0.965 0.006 247);
+  --sidebar-foreground: oklch(0.23 0.024 251);
+  --sidebar-primary: oklch(0.55 0.105 190);
+  --sidebar-primary-foreground: oklch(0.985 0.004 247);
+  --sidebar-accent: oklch(0.92 0.013 247);
+  --sidebar-accent-foreground: oklch(0.22 0.023 251);
+  --sidebar-border: oklch(0.78 0.02 251 / 42%);
+  --sidebar-ring: oklch(0.55 0.105 190);
+  --app-bg-top: oklch(0.985 0.004 247 / 0.98);
+  --app-bg-bottom: oklch(0.94 0.014 247);
+  --app-glow-primary: oklch(0.7 0.11 190 / 0.18);
+  --app-glow-accent: oklch(0.72 0.18 28 / 0.12);
+  --app-grid-line: oklch(0.32 0.026 251 / 0.075);
+  --app-scrollbar-thumb: oklch(0.55 0.105 190 / 0.48);
+}
+
+.dark {
   color-scheme: dark;
   --background: oklch(0.17 0.018 251);
   --foreground: oklch(0.985 0.004 247);
@@ -73,7 +115,6 @@
   --chart-3: oklch(0.66 0.21 26);
   --chart-4: oklch(0.72 0.12 255);
   --chart-5: oklch(0.74 0.15 145);
-  --radius: 0.625rem;
   --sidebar: oklch(0.16 0.016 251);
   --sidebar-foreground: oklch(0.985 0.004 247);
   --sidebar-primary: oklch(0.78 0.116 183);
@@ -82,6 +123,12 @@
   --sidebar-accent-foreground: oklch(0.985 0.004 247);
   --sidebar-border: oklch(1 0 0 / 12%);
   --sidebar-ring: oklch(0.78 0.116 183);
+  --app-bg-top: oklch(0.17 0.018 251 / 0.96);
+  --app-bg-bottom: oklch(0.115 0.015 251);
+  --app-glow-primary: oklch(0.78 0.116 183 / 0.16);
+  --app-glow-accent: oklch(0.66 0.21 26 / 0.12);
+  --app-grid-line: oklch(1 0 0 / 0.045);
+  --app-scrollbar-thumb: oklch(0.78 0.116 183 / 0.5);
 }
 
 @layer base {
@@ -97,9 +144,9 @@
     @apply min-w-80 bg-background text-foreground antialiased;
     min-height: 100vh;
     background:
-      linear-gradient(180deg, oklch(0.17 0.018 251 / 0.96), oklch(0.115 0.015 251)),
-      radial-gradient(circle at 78% 8%, oklch(0.78 0.116 183 / 0.16), transparent 32rem),
-      radial-gradient(circle at 12% 88%, oklch(0.66 0.21 26 / 0.12), transparent 28rem);
+      linear-gradient(180deg, var(--app-bg-top), var(--app-bg-bottom)),
+      radial-gradient(circle at 78% 8%, var(--app-glow-primary), transparent 32rem),
+      radial-gradient(circle at 12% 88%, var(--app-glow-accent), transparent 28rem);
   }
 
   button:not(:disabled),
@@ -110,12 +157,12 @@
 
 .gate-grid {
   background-image:
-    linear-gradient(oklch(1 0 0 / 0.045) 1px, transparent 1px),
-    linear-gradient(90deg, oklch(1 0 0 / 0.045) 1px, transparent 1px);
+    linear-gradient(var(--app-grid-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--app-grid-line) 1px, transparent 1px);
   background-size: 64px 64px;
 }
 
 .yaml-scroll {
   scrollbar-width: thin;
-  scrollbar-color: oklch(0.78 0.116 183 / 0.5) transparent;
+  scrollbar-color: var(--app-scrollbar-thumb) transparent;
 }

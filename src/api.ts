@@ -1,6 +1,7 @@
 import type {
   CertificatePreview,
   CertificateWithBindings,
+  AcmeStatus,
   DashboardPayload,
   ImportRoutePreview,
   ImportRoutesResult,
@@ -47,6 +48,10 @@ export async function getDashboard(): Promise<DashboardPayload> {
 
 export async function getRuntime(): Promise<TraefikRuntime> {
   return request<TraefikRuntime>("/api/traefik/runtime");
+}
+
+export async function getAcmeStatus(): Promise<AcmeStatus> {
+  return request<AcmeStatus>("/api/acme/status");
 }
 
 export async function getGeneratedConfig(): Promise<string> {

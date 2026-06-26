@@ -4,6 +4,8 @@ import path from "node:path";
 import zlib from "node:zlib";
 import { z } from "zod";
 import type { CertificateItem, CertificatePreview, CertificateWithBindings, DashboardPayload, DiscoveredRoute, ImportRoutePreview, ImportRoutesResult, WebService, WebServicePreview, WebServiceWithRuntime } from "../shared/types";
+import { enrichCertificatesWithAcmeRuntime, getAcmeStatus } from "./acme";
+import { createAuthMiddleware } from "./auth";
 import { certificateCoversDomain, resolverName, webServicesBoundToCertificate } from "./bindings";
 import { diffText } from "./config-preview";
 import { config } from "./config";
@@ -22,6 +24,7 @@ ensureState();
 
 const app = express();
 app.use(express.json({ limit: "4mb" }));
+app.use(createAuthMiddleware(config.auth));
 const gzipAssetCache = new Map<string, { mtimeMs: number; content: Buffer }>();
 
 const importRouteSchema = z.object({
@@ -33,7 +36,10 @@ app.get("/api/health", (_request, response) => {
   response.json({
     ok: true,
     traefikApiUrl: config.traefikApiUrl,
-    dynamicFile: config.dynamicFile
+    dynamicFile: config.dynamicFile,
+    auth: {
+      enabled: config.auth.enabled
+    }
   });
 });
 
@@ -44,6 +50,12 @@ app.get("/api/dashboard", async (_request, response) => {
 
 app.get("/api/traefik/runtime", async (_request, response) => {
   response.json(await getTraefikRuntime());
+});
+
+app.get("/api/acme/status", async (_request, response) => {
+  const state = loadState();
+  const runtime = await getTraefikRuntime();
+  response.json(getAcmeStatus(runtime, state));
 });
 
 app.get("/api/web-services", async (_request, response) => {
@@ -458,6 +470,7 @@ app.listen(config.port, () => {
 async function dashboardPayload(): Promise<DashboardPayload> {
   const state = loadState();
   const runtime = await getTraefikRuntime();
+  const acme = getAcmeStatus(runtime, state);
   const transientServices = transientServicesForUnmanagedRoutes(runtime, state);
   const trafficSnapshot = await getTrafficSnapshot([...state.webServices, ...transientServices]);
   const discoveredRoutes = buildDiscoveredRoutes(runtime, state, trafficSnapshot.statsByServiceId);
@@ -475,13 +488,14 @@ async function dashboardPayload(): Promise<DashboardPayload> {
     };
   });
 
-  const certificates: CertificateWithBindings[] = state.certificates.map((certificate) => ({
+  const certificates: CertificateWithBindings[] = enrichCertificatesWithAcmeRuntime(state.certificates.map((certificate) => ({
     ...certificate,
     boundServices: webServicesBoundToCertificate(certificate, state.webServices)
-  }));
+  })), acme);
 
   return {
     runtime,
+    acme,
     groups: state.groups,
     webServices,
     certificates,

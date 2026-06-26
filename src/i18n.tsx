@@ -21,7 +21,6 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     document.documentElement.lang = language === "zh" ? "zh-CN" : "en";
-    document.documentElement.classList.add("dark");
   }, [language]);
 
   const value = useMemo<LanguageContextValue>(

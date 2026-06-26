@@ -13,6 +13,16 @@ services:
       GATELITE_DYNAMIC_FILE: /dynamic/gatelite.yml
       GATELITE_CERT_DIR: /certs
       GATELITE_CERT_MOUNT_PATH: /certs
+      GATELITE_TRAEFIK_STATIC_CONFIG_FILE: ${GATELITE_TRAEFIK_STATIC_CONFIG_FILE:-}
+      GATELITE_ACME_STORAGE_FILE: ${GATELITE_ACME_STORAGE_FILE:-}
+      GATELITE_AUTH_ENABLED: ${GATELITE_AUTH_ENABLED:-false}
+      GATELITE_AUTH_USERNAME: ${GATELITE_AUTH_USERNAME:-}
+      GATELITE_AUTH_PASSWORD: ${GATELITE_AUTH_PASSWORD:-}
+      GATELITE_VIEWER_TOKEN: ${GATELITE_VIEWER_TOKEN:-}
+      GATELITE_AGENT_TOKEN: ${GATELITE_AGENT_TOKEN:-}
+      GATELITE_OPERATOR_TOKEN: ${GATELITE_OPERATOR_TOKEN:-}
+      GATELITE_ADMIN_TOKEN: ${GATELITE_ADMIN_TOKEN:-}
+      GATELITE_AUTH_TOKENS: ${GATELITE_AUTH_TOKENS:-}
     volumes:
       - gatelite_data:/app/runtime
       - /data/compose/1/dynamic:/dynamic
@@ -22,7 +32,7 @@ services:
     labels:
       - traefik.enable=true
       - traefik.docker.network=proxy
-      - traefik.http.routers.gatelite.rule=Host(`${GATELITE_HOST:-gl.erp.tjhtj.com}`)
+      - traefik.http.routers.gatelite.rule=Host(`${GATELITE_HOST:-gatelite.example.com}`)
       - traefik.http.routers.gatelite.entrypoints=websecure
       - traefik.http.routers.gatelite.tls=true
       - traefik.http.services.gatelite.loadbalancer.server.port=3001

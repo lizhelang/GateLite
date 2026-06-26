@@ -65,6 +65,8 @@ This repository now contains the first local development module:
 - Local state history with rollback handles
 - Docker Compose Traefik + whoami test environment
 - Web services and SSL/TLS certificate management pages
+- Optional built-in Basic/Bearer access control, disabled by default
+- Backup/restore and release verification scripts
 
 ## Local Development
 
@@ -106,8 +108,11 @@ counters instead of static preview data.
 Run checks:
 
 ```bash
+npm run typecheck
 npm run build
 npm run test
+npm run audit:prod
+npm run verify:release
 npm run verify:local
 npm run verify:ui-i18n
 npm run verify:crud
@@ -125,6 +130,62 @@ binding expansion.
 service, group, certificate, history rollback, create/edit/toggle/reorder/delete
 flows against the same local Traefik stack, then removes those temporary
 resources.
+
+Release and operations helpers:
+
+```bash
+npm run backup
+npm run restore -- <backup.tar.gz> --force
+npm run verify:domains
+```
+
+`npm run backup` archives GateLite state, rollback snapshots, generated dynamic
+config, and mounted certificates. `npm run verify:domains` checks the public
+hosts listed in `GATELITE_PUBLIC_URLS`; set that variable to your own deployed
+GateLite URLs before running the check.
+
+## Certificate Ownership
+
+GateLite is not a certificate authority, ACME client, or renewal daemon.
+Traefik, Cloudflare, your DNS provider, and any DDNS tool remain responsible for
+the parts they already own:
+
+- Traefik owns TLS termination, ACME challenge execution, issuance, renewal, and
+  the `acme.json` storage file.
+- Cloudflare or another CDN may terminate browser-facing TLS before traffic
+  reaches Traefik.
+- DDNS tools update DNS records or public IP targets; they do not issue
+  certificates.
+- GateLite manages route-to-certificate intent, local PEM metadata, uploaded or
+  synced PEM files under `GATELITE_CERT_DIR`, resolver references, and read-only
+  ACME status display when Traefik config/storage are mounted into GateLite.
+
+Do not store DNS provider API tokens in GateLite. Keep those credentials in the
+Traefik or infrastructure layer that performs ACME challenges.
+
+## Access Control
+
+GateLite access control is optional and off by default. To protect the browser
+UI and API with built-in Basic auth:
+
+```bash
+GATELITE_AUTH_ENABLED=true
+GATELITE_AUTH_USERNAME=admin
+GATELITE_AUTH_PASSWORD=<strong-password>
+```
+
+API clients can use role-scoped Bearer tokens such as
+`GATELITE_VIEWER_TOKEN`, `GATELITE_AGENT_TOKEN`, `GATELITE_OPERATOR_TOKEN`, and
+`GATELITE_ADMIN_TOKEN`. See [security.md](docs/security.md).
+
+## Release And Deployment
+
+GateLite releases are project releases, not deployments of any maintainer's
+private domains. When deploying your copy, point `GATELITE_HOST`,
+`TRAEFIK_API_URL`, `GATELITE_DYNAMIC_FILE`, `GATELITE_CERT_DIR`, and optional
+ACME observability mounts at your own Traefik environment. See
+[domain-migration.md](docs/domain-migration.md) and [release.md](docs/release.md)
+for the release gate, domain checks, versioning, and rollback procedure.
 
 Useful Agent API endpoints:
 

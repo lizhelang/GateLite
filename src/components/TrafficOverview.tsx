@@ -61,7 +61,7 @@ export function TrafficOverview({ dashboard, loading }: TrafficOverviewProps) {
           <CardDescription>{t("Local Traefik companion", "本地 Traefik 伴侣面板")}</CardDescription>
           <CardTitle className="text-2xl">{t("Reverse proxy traffic", "反代域名流量")}</CardTitle>
           <CardAction>
-            <Badge variant="outline" className="gap-1 border-cyan-300/40 bg-cyan-300/10 text-cyan-100">
+            <Badge variant="outline" className="gap-1 border-cyan-500/35 bg-cyan-500/10 text-cyan-700 dark:border-cyan-300/40 dark:bg-cyan-300/10 dark:text-cyan-100">
               <Activity className="size-3.5" />
               {hasPrometheusTraffic ? t("Prometheus metrics", "Prometheus 指标") : dashboard?.runtime.connected ? t("Preview data", "预览数据") : loading ? t("Connecting", "连接中") : t("Offline", "离线")}
             </Badge>
