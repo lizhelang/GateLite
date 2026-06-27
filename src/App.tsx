@@ -1,7 +1,7 @@
-import { Check, Globe2, Languages, LayoutDashboard, Palette, RefreshCw, ShieldCheck, TerminalSquare, type LucideIcon } from "lucide-react";
-import { lazy, Suspense, useEffect, useState, type CSSProperties } from "react";
-import type { DashboardPayload } from "../shared/types";
-import { getDashboard } from "./api";
+import { Check, CloudCog, Globe2, Languages, LayoutDashboard, LogOut, Palette, RefreshCw, ShieldCheck, TerminalSquare, UserRound, type LucideIcon } from "lucide-react";
+import { lazy, Suspense, useCallback, useEffect, useState, type CSSProperties } from "react";
+import type { DashboardPayload, HealthPayload } from "../shared/types";
+import { getDashboard, getHealth, isAuthError } from "./api";
 import { Button } from "@/components/ui/button";
 import { GateLiteLogo } from "@/components/GateLiteLogo";
 import {
@@ -24,14 +24,17 @@ import {
   SidebarProvider,
   SidebarTrigger
 } from "@/components/ui/sidebar";
+import { useAuth } from "./auth";
 import { useLanguage } from "./i18n";
+import { LoginPage } from "./pages/LoginPage";
 import { themeOptions, useTheme } from "./theme";
 
-type ViewKey = "dashboard" | "web" | "certificates";
+type ViewKey = "dashboard" | "web" | "certificates" | "dns";
 
 const DashboardPage = lazy(() => import("./pages/DashboardPage").then((module) => ({ default: module.DashboardPage })));
 const WebServicesPage = lazy(() => import("./pages/WebServicesPage").then((module) => ({ default: module.WebServicesPage })));
 const CertificatesPage = lazy(() => import("./pages/CertificatesPage").then((module) => ({ default: module.CertificatesPage })));
+const DnsPage = lazy(() => import("./pages/DnsPage").then((module) => ({ default: module.DnsPage })));
 
 const views: Array<{ key: ViewKey; label: { en: string; zh: string }; description: { en: string; zh: string }; icon: LucideIcon }> = [
   {
@@ -51,34 +54,115 @@ const views: Array<{ key: ViewKey; label: { en: string; zh: string }; descriptio
     label: { en: "SSL/TLS", zh: "SSL/TLS 证书" },
     description: { en: "Certificates and bindings", zh: "证书与绑定关系" },
     icon: ShieldCheck
+  },
+  {
+    key: "dns",
+    label: { en: "DNS", zh: "DNS 管理" },
+    description: { en: "Cloudflare records and DDNS", zh: "Cloudflare 记录与 DDNS" },
+    icon: CloudCog
   }
 ];
 
 export function App() {
   const { language, t, toggleLanguage } = useLanguage();
   const { mode, setMode } = useTheme();
+  const { auth, isAuthenticated, signIn, signOut } = useAuth();
   const [activeView, setActiveView] = useState<ViewKey>("dashboard");
+  const [health, setHealth] = useState<HealthPayload | null>(null);
+  const [healthLoading, setHealthLoading] = useState(true);
   const [dashboard, setDashboard] = useState<DashboardPayload | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [loginError, setLoginError] = useState<string | null>(null);
+  const [loginLoading, setLoginLoading] = useState(false);
 
-  const load = async () => {
+  const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
       setDashboard(await getDashboard());
     } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : t("Unable to load GateLite dashboard.", "无法加载 GateLite 控制台。"));
+      if (isAuthError(loadError)) {
+        signOut();
+        setDashboard(null);
+        setLoginError(t("Session expired. Sign in again.", "登录状态已失效，请重新登录。"));
+      } else {
+        setError(loadError instanceof Error ? loadError.message : t("Unable to load GateLite dashboard.", "无法加载 GateLite 控制台。"));
+      }
     } finally {
       setLoading(false);
     }
-  };
+  }, [signOut, t]);
 
   useEffect(() => {
+    const loadHealth = async () => {
+      setHealthLoading(true);
+      try {
+        setHealth(await getHealth());
+      } catch (healthError) {
+        setError(healthError instanceof Error ? healthError.message : t("Unable to reach GateLite.", "无法连接 GateLite。"));
+      } finally {
+        setHealthLoading(false);
+      }
+    };
+
+    void loadHealth();
+  }, [t]);
+
+  useEffect(() => {
+    const authRequired = health?.auth.enabled === true;
+    if (healthLoading || (authRequired && !isAuthenticated)) {
+      setLoading(false);
+      return;
+    }
+
     void load();
-  }, []);
+  }, [health, healthLoading, isAuthenticated, load]);
+
+  const handleLogin = async (username: string, password: string) => {
+    setLoginLoading(true);
+    setLoginError(null);
+    signIn(username, password);
+    try {
+      setDashboard(await getDashboard());
+      setError(null);
+    } catch (loginFailure) {
+      signOut();
+      setDashboard(null);
+      setLoginError(
+        isAuthError(loginFailure)
+          ? t("Account or password is incorrect.", "账号或密码不正确。")
+          : loginFailure instanceof Error
+            ? loginFailure.message
+            : t("Unable to sign in.", "无法登录。")
+      );
+    } finally {
+      setLoginLoading(false);
+    }
+  };
+
+  const handleLogout = () => {
+    signOut();
+    setDashboard(null);
+    setError(null);
+    setLoginError(null);
+    setActiveView("dashboard");
+  };
+
+  if (healthLoading) {
+    return <AppLoading label={t("Loading GateLite...", "正在加载 GateLite...")} />;
+  }
+
+  if (health?.auth.enabled && !isAuthenticated) {
+    return <LoginPage loading={loginLoading} error={loginError} onSubmit={handleLogin} />;
+  }
+
+  if (!health && error) {
+    return <AppLoading label={error} tone="error" />;
+  }
 
   const active = views.find((view) => view.key === activeView) || views[0];
+  const authSubject = health?.auth.enabled ? auth?.subject || "admin" : undefined;
 
   return (
     <SidebarProvider
@@ -90,15 +174,21 @@ export function App() {
       }
     >
       <GateLiteSidebar activeView={activeView} onViewChange={setActiveView} dashboard={dashboard} />
-      <SidebarInset>
+      <SidebarInset className="min-w-0 overflow-x-hidden">
         <header className="sticky top-0 z-20 flex h-(--header-height) shrink-0 items-center gap-2 border-b bg-background/80 backdrop-blur-xl">
-          <div className="flex w-full items-center gap-2 px-4 lg:px-6">
+          <div className="flex min-w-0 w-full items-center gap-2 px-4 lg:px-6">
             <SidebarTrigger className="-ml-1" />
             <Separator orientation="vertical" className="mx-1 data-[orientation=vertical]:h-4" />
             <div className="min-w-0 flex-1">
-              <p className="text-xs text-muted-foreground">{t(active.description.en, active.description.zh)}</p>
+              <p className="truncate text-xs text-muted-foreground">{t(active.description.en, active.description.zh)}</p>
               <h1 className="truncate text-base font-medium">{t(active.label.en, active.label.zh)}</h1>
             </div>
+            {authSubject ? (
+              <div className="hidden max-w-40 items-center gap-1.5 rounded-lg border bg-background/60 px-2 py-1 text-xs text-muted-foreground md:flex">
+                <UserRound className="size-3.5" />
+                <span className="truncate">{authSubject}</span>
+              </div>
+            ) : null}
             <Button variant="outline" size="sm" onClick={toggleLanguage} aria-label={t("Switch language", "切换语言")}>
               <Languages className="size-4" />
               {language === "en" ? "中文" : "EN"}
@@ -127,10 +217,15 @@ export function App() {
               <RefreshCw className={loading ? "size-4 animate-spin" : "size-4"} />
               <span className="hidden sm:inline">{t("Refresh", "刷新")}</span>
             </Button>
+            {health?.auth.enabled ? (
+              <Button variant="outline" size="icon-sm" onClick={handleLogout} aria-label={t("Sign out", "退出登录")}>
+                <LogOut className="size-4" />
+              </Button>
+            ) : null}
           </div>
         </header>
 
-        <main className="gate-grid @container/main flex min-h-svh flex-1 flex-col gap-4 p-4 md:gap-6 md:p-6">
+        <main className="gate-grid @container/main flex min-h-[calc(100svh-var(--header-height))] min-w-0 flex-1 flex-col gap-4 overflow-x-hidden p-4 md:gap-6 md:p-6">
           {error ? <div className="rounded-xl border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">{error}</div> : null}
           {loading && !dashboard ? <div className="rounded-xl border bg-card/70 p-4 text-sm text-muted-foreground">{t("Loading GateLite state and Traefik runtime...", "正在加载 GateLite 状态和 Traefik 运行时...")}</div> : null}
 
@@ -138,10 +233,21 @@ export function App() {
             {activeView === "dashboard" ? <DashboardPage dashboard={dashboard} loading={loading} onRefresh={load} /> : null}
             {dashboard && activeView === "web" ? <WebServicesPage dashboard={dashboard} onRefresh={load} /> : null}
             {dashboard && activeView === "certificates" ? <CertificatesPage dashboard={dashboard} onRefresh={load} /> : null}
+            {activeView === "dns" ? <DnsPage /> : null}
           </Suspense>
         </main>
       </SidebarInset>
     </SidebarProvider>
+  );
+}
+
+function AppLoading({ label, tone = "muted" }: { label: string; tone?: "muted" | "error" }) {
+  return (
+    <main className="gate-grid flex min-h-svh items-center justify-center p-4">
+      <div className={tone === "error" ? "rounded-xl border border-destructive/40 bg-destructive/10 p-4 text-sm text-destructive" : "rounded-xl border bg-card/80 p-4 text-sm text-muted-foreground"}>
+        {label}
+      </div>
+    </main>
   );
 }
 

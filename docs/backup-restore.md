@@ -30,6 +30,11 @@ If an admin later deletes a GateLite-managed certificate and chooses file
 cleanup, those PEM files are removed from the live certificate directory but
 remain recoverable from backups taken before the cleanup.
 
+Cloudflare DNS/DDNS tokens are deployment environment configuration, not
+GateLite state. Backups do not include `GATELITE_CLOUDFLARE_ZONE_TOKENS`; keep
+those tokens in your deployment secret store or Portainer environment
+separately.
+
 ## Restore
 
 Restore is intentionally explicit because it overwrites runtime files:

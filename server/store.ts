@@ -5,6 +5,11 @@ import { config } from "./config";
 import { createSelfSignedCertificate, refreshCertificateMetadata } from "./certificates";
 import { writeTraefikDynamicConfig } from "./generator";
 
+export interface SaveStateResult {
+  state: GateLiteState;
+  event: GateLiteHistoryEvent;
+}
+
 export function loadState(): GateLiteState {
   ensureState();
   const raw = fs.readFileSync(config.stateFile, "utf8");
@@ -14,9 +19,20 @@ export function loadState(): GateLiteState {
 }
 
 export function saveState(state: GateLiteState, action = "state.save", summary = "Saved GateLite state."): GateLiteState {
+  return saveStateWithEvent(state, action, summary).state;
+}
+
+export function saveStateWithEvent(state: GateLiteState, action = "state.save", summary = "Saved GateLite state."): SaveStateResult {
   const now = new Date().toISOString();
   const eventId = createHistoryId("evt");
   const rollbackId = saveRollbackSnapshot(eventId);
+  const event = {
+    id: eventId,
+    at: now,
+    action,
+    summary,
+    rollbackId
+  };
   const next: GateLiteState = {
     ...state,
     groups: normalizeGroupOrders(state.groups),
@@ -34,13 +50,7 @@ export function saveState(state: GateLiteState, action = "state.save", summary =
     }),
     certificates: normalizeCertificateOrders(state.certificates).map(refreshCertificateMetadata),
     history: [
-      {
-        id: eventId,
-        at: now,
-        action,
-        summary,
-        rollbackId
-      },
+      event,
       ...state.history
     ].slice(0, 100)
   };
@@ -48,7 +58,10 @@ export function saveState(state: GateLiteState, action = "state.save", summary =
   fs.mkdirSync(path.dirname(config.stateFile), { recursive: true });
   fs.writeFileSync(config.stateFile, JSON.stringify(next, null, 2), "utf8");
   writeTraefikDynamicConfig(next);
-  return next;
+  return {
+    state: next,
+    event: historyEventsForState(next).find((item) => item.id === eventId) || { ...event, rollbackAvailable: rollbackAvailable(rollbackId) }
+  };
 }
 
 export function listHistory(): GateLiteHistoryEvent[] {
@@ -63,18 +76,23 @@ export function historyEventsForState(state: GateLiteState): GateLiteHistoryEven
 }
 
 export function rollbackToHistoryEvent(eventId: string): GateLiteState | undefined {
+  return rollbackToHistoryEventWithEvent(eventId)?.state;
+}
+
+export function rollbackToHistoryEventWithEvent(eventId: string): SaveStateResult | undefined {
   const state = loadState();
   const event = state.history.find((item) => item.id === eventId);
   if (!event?.rollbackId) return undefined;
   const snapshotPath = rollbackSnapshotPath(event.rollbackId);
   if (!fs.existsSync(snapshotPath)) return undefined;
 
+  const rollbackEventId = createHistoryId("evt");
   const snapshot = JSON.parse(fs.readFileSync(snapshotPath, "utf8")) as GateLiteState;
   const restored: GateLiteState = {
     ...snapshot,
     history: [
       {
-        id: createHistoryId("evt"),
+        id: rollbackEventId,
         at: new Date().toISOString(),
         action: "state.rollback",
         summary: `Rolled back to before ${event.summary}`,
@@ -83,7 +101,10 @@ export function rollbackToHistoryEvent(eventId: string): GateLiteState | undefin
       ...state.history
     ].slice(0, 100)
   };
-  return saveRestoredState(restored);
+  const next = saveRestoredState(restored);
+  const rollbackEvent = historyEventsForState(next).find((item) => item.id === rollbackEventId);
+  if (!rollbackEvent) throw new Error("Rollback event was not written to history.");
+  return { state: next, event: rollbackEvent };
 }
 
 export function ensureState(): void {

@@ -38,7 +38,9 @@ export function createAuthMiddleware(auth: AuthConfig): express.RequestHandler {
 
     const identity = authenticateRequest(auth, request);
     if (!identity) {
-      response.setHeader("WWW-Authenticate", 'Basic realm="GateLite"');
+      if (shouldAdvertiseBasicAuth(request)) {
+        response.setHeader("WWW-Authenticate", 'Basic realm="GateLite"');
+      }
       response.status(401).json({ error: "Authentication required." });
       return;
     }
@@ -57,12 +59,13 @@ export function requiredRoleForRequest(method: string, path: string): RequiredRo
   const normalizedMethod = method.toUpperCase();
   if (normalizedMethod === "GET" && path === "/api/health") return "public";
 
-  if (!path.startsWith("/api/")) return "viewer";
+  if (!path.startsWith("/api/")) return "public";
 
   if (normalizedMethod === "GET" && /^\/api\/certificates\/[^/]+\/download$/.test(path)) return "admin";
   if (normalizedMethod === "POST" && /^\/api\/certificates\/[^/]+\/sync$/.test(path)) return "admin";
   if (normalizedMethod === "POST" && /^\/api\/history\/[^/]+\/rollback$/.test(path)) return "admin";
   if (normalizedMethod === "POST" && path === "/api/discovered-routes/import-all") return "admin";
+  if (normalizedMethod === "POST" && path === "/api/dns/sync") return "admin";
   if (normalizedMethod === "DELETE" && /^\/api\/certificates\/[^/]+$/.test(path)) return "admin";
 
   if (normalizedMethod === "GET") return "viewer";
@@ -127,6 +130,11 @@ function authenticateBearer(auth: AuthConfig, authorization: string): AuthIdenti
 function hasAnyCredential(auth: AuthConfig): boolean {
   if (auth.username && auth.password) return true;
   return Object.values(auth.tokens).some((tokens) => tokens.length > 0);
+}
+
+function shouldAdvertiseBasicAuth(request: express.Request): boolean {
+  if (request.header("X-GateLite-Client") === "web") return false;
+  return true;
 }
 
 function safeEqual(left: string, right: string): boolean {

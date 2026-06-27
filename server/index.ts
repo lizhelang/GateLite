@@ -3,19 +3,22 @@ import fs from "node:fs";
 import path from "node:path";
 import zlib from "node:zlib";
 import { z } from "zod";
-import type { CertificateItem, CertificatePreview, CertificateWithBindings, DashboardPayload, DiscoveredRoute, ImportRoutePreview, ImportRoutesResult, WebService, WebServicePreview, WebServiceWithRuntime } from "../shared/types";
+import type { CertificateItem, CertificatePreview, CertificateWithBindings, DashboardPayload, DeleteResult, DiscoveredRoute, ImportRoutePreview, ImportRoutesResult, WebService, WebServicePreview, WebServiceWithRuntime } from "../shared/types";
 import { enrichCertificatesWithAcmeRuntime, getAcmeStatus } from "./acme";
+import { applyNoopResponse, applyResponse } from "./apply-contract";
 import { createAuthMiddleware } from "./auth";
 import { certificateCoversDomain, resolverName, webServicesBoundToCertificate } from "./bindings";
 import { diffText } from "./config-preview";
 import { config } from "./config";
 import { createCertificateFromInput, deleteManagedCertificateFiles, receiveSyncedCertificate, refreshCertificateFromAction, updateCertificateFromInput, type CertificateInput } from "./certificates";
 import { buildDiscoveredRoutes, buildRuntimeTlsBindings, createMappedWebServiceFromRoute, ensureImportedGroup, findDiscoveredRoute, transientServicesForUnmanagedRoutes } from "./discovery";
+import { getDnsStatus, startDnsScheduler, syncDnsNow } from "./dns";
 import { generateTraefikDynamicConfig } from "./generator";
 import { createId, traefikName } from "./ids";
+import { createIdempotencyMiddleware } from "./idempotency";
 import { getTrafficSnapshot } from "./metrics";
 import { certificateInputSchema, certificateSyncInputSchema, groupInputSchema, reorderSchema, webServiceInputSchema } from "./schemas";
-import { ensureState, historyEventsForState, listHistory, loadState, rollbackToHistoryEvent, saveState } from "./store";
+import { ensureState, historyEventsForState, listHistory, loadState, rollbackToHistoryEventWithEvent, saveStateWithEvent } from "./store";
 import { getTraefikRuntime } from "./traefik";
 import { validateWebService, webServiceLabel } from "./web-services";
 import { BadRequestError } from "./errors";
@@ -25,6 +28,7 @@ ensureState();
 const app = express();
 app.use(express.json({ limit: "4mb" }));
 app.use(createAuthMiddleware(config.auth));
+app.use(createIdempotencyMiddleware());
 const gzipAssetCache = new Map<string, { mtimeMs: number; content: Buffer }>();
 
 const importRouteSchema = z.object({
@@ -39,6 +43,9 @@ app.get("/api/health", (_request, response) => {
     dynamicFile: config.dynamicFile,
     auth: {
       enabled: config.auth.enabled
+    },
+    dns: {
+      enabled: config.dns.enabled
     }
   });
 });
@@ -56,6 +63,14 @@ app.get("/api/acme/status", async (_request, response) => {
   const state = loadState();
   const runtime = await getTraefikRuntime();
   response.json(getAcmeStatus(runtime, state));
+});
+
+app.get("/api/dns/status", async (_request, response) => {
+  response.json(await getDnsStatus());
+});
+
+app.post("/api/dns/sync", async (_request, response) => {
+  response.json(await syncDnsNow());
 });
 
 app.get("/api/web-services", async (_request, response) => {
@@ -83,8 +98,8 @@ app.post("/api/discovered-routes/import", async (request, response) => {
   const service = createMappedWebServiceFromRoute(route, createId("svc"), groupId, state.webServices.length + 1, now);
   validateWebService(service, state);
   state.webServices.push(service);
-  const next = saveState(state, "web-service.import-map", `Mapped existing Traefik router ${route.routerName} into GateLite.`);
-  response.status(201).json(next.webServices.find((item) => item.id === service.id));
+  const saved = saveStateWithEvent(state, "web-service.import-map", `Mapped existing Traefik router ${route.routerName} into GateLite.`);
+  response.status(201).json(applyResponse(saved, saved.state.webServices.find((item) => item.id === service.id)));
 });
 
 app.post("/api/discovered-routes/import-all", async (_request, response) => {
@@ -130,9 +145,11 @@ app.post("/api/discovered-routes/import-all", async (_request, response) => {
 
   if (result.created.length > 0) {
     state.webServices.push(...result.created);
-    saveState(state, "web-service.import-map-all", `Mapped ${result.created.length} existing external Traefik router(s) into GateLite.`);
+    const saved = saveStateWithEvent(state, "web-service.import-map-all", `Mapped ${result.created.length} existing external Traefik router(s) into GateLite.`);
+    response.json(applyResponse(saved, result));
+    return;
   }
-  response.json(result);
+  response.json(applyNoopResponse("web-service.import-map-all", "No importable external Traefik routers were mapped.", result));
 });
 
 app.post("/api/web-services", (request, response) => {
@@ -142,8 +159,8 @@ app.post("/api/web-services", (request, response) => {
   const service = webServiceFromInput(createId("svc"), parsed, state.webServices.length + 1, now);
   validateWebService(service, state);
   state.webServices.push(service);
-  const next = saveState(state, "web-service.create", `Created Web service ${webServiceLabel(service)}.`);
-  response.status(201).json(next.webServices.find((item) => item.id === service.id));
+  const saved = saveStateWithEvent(state, "web-service.create", `Created Web service ${webServiceLabel(service)}.`);
+  response.status(201).json(applyResponse(saved, saved.state.webServices.find((item) => item.id === service.id)));
 });
 
 app.post("/api/web-services/preview", (request, response) => {
@@ -170,8 +187,8 @@ app.put("/api/web-services/:id", (request, response) => {
   };
   validateWebService(updated, state);
   state.webServices[index] = updated;
-  const next = saveState(state, "web-service.update", `Updated Web service ${webServiceLabel(updated)}.`);
-  response.json(next.webServices.find((service) => service.id === updated.id));
+  const saved = saveStateWithEvent(state, "web-service.update", `Updated Web service ${webServiceLabel(updated)}.`);
+  response.json(applyResponse(saved, saved.state.webServices.find((service) => service.id === updated.id)));
 });
 
 app.post("/api/web-services/:id/preview", (request, response) => {
@@ -191,6 +208,13 @@ app.post("/api/web-services/:id/preview", (request, response) => {
   response.json(previewWebServiceChange(state, updated, "update"));
 });
 
+app.post("/api/web-services/:id/delete-preview", (request, response) => {
+  const state = loadState();
+  const service = state.webServices.find((item) => item.id === request.params.id);
+  if (!service) return response.status(404).json({ error: "Web service not found." });
+  response.json(previewWebServiceChange(state, service, "delete"));
+});
+
 app.patch("/api/web-services/:id/toggle", (request, response) => {
   const enabled = z.object({ enabled: z.boolean() }).parse(request.body).enabled;
   const state = loadState();
@@ -206,8 +230,8 @@ app.patch("/api/web-services/:id/toggle", (request, response) => {
   };
   validateWebService(updated, state);
   Object.assign(service, updated);
-  const next = saveState(state, "web-service.toggle", `${enabled ? "Enabled" : "Disabled"} Web service ${webServiceLabel(service)}.`);
-  response.json(next.webServices.find((item) => item.id === service.id));
+  const saved = saveStateWithEvent(state, "web-service.toggle", `${enabled ? "Enabled" : "Disabled"} Web service ${webServiceLabel(service)}.`);
+  response.json(applyResponse(saved, saved.state.webServices.find((item) => item.id === service.id)));
 });
 
 app.delete("/api/web-services/:id", (request, response) => {
@@ -215,8 +239,8 @@ app.delete("/api/web-services/:id", (request, response) => {
   const service = state.webServices.find((item) => item.id === request.params.id);
   if (!service) return response.status(404).json({ error: "Web service not found." });
   state.webServices = state.webServices.filter((item) => item.id !== request.params.id);
-  saveState(state, "web-service.delete", `Deleted Web service ${webServiceLabel(service)}.`);
-  response.status(204).send();
+  const saved = saveStateWithEvent(state, "web-service.delete", `Deleted Web service ${webServiceLabel(service)}.`);
+  response.json(applyResponse<DeleteResult>(saved, { id: service.id, deleted: true }));
 });
 
 app.post("/api/web-services/reorder", (request, response) => {
@@ -227,8 +251,8 @@ app.post("/api/web-services/reorder", (request, response) => {
     ...service,
     order: order.get(service.id) ?? service.order
   }));
-  const next = saveState(state, "web-service.reorder", "Reordered Web services.");
-  response.json(next.webServices);
+  const saved = saveStateWithEvent(state, "web-service.reorder", "Reordered Web services.");
+  response.json(applyResponse(saved, saved.state.webServices));
 });
 
 app.post("/api/groups", (request, response) => {
@@ -241,8 +265,8 @@ app.post("/api/groups", (request, response) => {
     order: state.groups.length + 1
   };
   state.groups.push(group);
-  const next = saveState(state, "group.create", `Created group ${group.name}.`);
-  response.status(201).json(next.groups.find((item) => item.id === group.id));
+  const saved = saveStateWithEvent(state, "group.create", `Created group ${group.name}.`);
+  response.status(201).json(applyResponse(saved, saved.state.groups.find((item) => item.id === group.id)));
 });
 
 app.patch("/api/groups/:id", (request, response) => {
@@ -251,8 +275,8 @@ app.patch("/api/groups/:id", (request, response) => {
   const group = state.groups.find((item) => item.id === request.params.id);
   if (!group) return response.status(404).json({ error: "Group not found." });
   Object.assign(group, parsed);
-  const next = saveState(state, "group.update", `Updated group ${group.name}.`);
-  response.json(next.groups.find((item) => item.id === group.id));
+  const saved = saveStateWithEvent(state, "group.update", `Updated group ${group.name}.`);
+  response.json(applyResponse(saved, saved.state.groups.find((item) => item.id === group.id)));
 });
 
 app.post("/api/groups/reorder", (request, response) => {
@@ -263,8 +287,8 @@ app.post("/api/groups/reorder", (request, response) => {
     ...group,
     order: order.get(group.id) ?? group.order
   }));
-  const next = saveState(state, "group.reorder", "Reordered Web service groups.");
-  response.json(next.groups);
+  const saved = saveStateWithEvent(state, "group.reorder", "Reordered Web service groups.");
+  response.json(applyResponse(saved, saved.state.groups));
 });
 
 app.delete("/api/groups/:id", (request, response) => {
@@ -275,8 +299,8 @@ app.delete("/api/groups/:id", (request, response) => {
   const serviceCount = state.webServices.filter((service) => service.groupId === group.id).length;
   if (serviceCount > 0) return response.status(409).json({ error: "Group is not empty. Move or delete its Web services first." });
   state.groups = state.groups.filter((item) => item.id !== group.id);
-  const next = saveState(state, "group.delete", `Deleted group ${group.name}.`);
-  response.json(next.groups);
+  const saved = saveStateWithEvent(state, "group.delete", `Deleted group ${group.name}.`);
+  response.json(applyResponse(saved, saved.state.groups));
 });
 
 app.get("/api/certificates", async (_request, response) => {
@@ -290,8 +314,8 @@ app.post("/api/certificates", (request, response) => {
   const certificate = createCertificateFromInput(parsed);
   certificate.order = state.certificates.length + 1;
   state.certificates.push(certificate);
-  const next = saveState(state, "certificate.create", `Created certificate ${certificate.name}.`);
-  response.status(201).json(next.certificates.find((item) => item.id === certificate.id));
+  const saved = saveStateWithEvent(state, "certificate.create", `Created certificate ${certificate.name}.`);
+  response.status(201).json(applyResponse(saved, saved.state.certificates.find((item) => item.id === certificate.id)));
 });
 
 app.post("/api/certificates/preview", (request, response) => {
@@ -317,8 +341,8 @@ app.put("/api/certificates/:id", (request, response) => {
   if (updatedBindingConflict) return response.status(409).json({ error: updatedBindingConflict });
 
   state.certificates[index] = updated;
-  const next = saveState(state, "certificate.update", `Updated certificate ${state.certificates[index].name}.`);
-  response.json(next.certificates.find((certificate) => certificate.id === request.params.id));
+  const saved = saveStateWithEvent(state, "certificate.update", `Updated certificate ${state.certificates[index].name}.`);
+  response.json(applyResponse(saved, saved.state.certificates.find((certificate) => certificate.id === request.params.id)));
 });
 
 app.post("/api/certificates/:id/preview", (request, response) => {
@@ -348,8 +372,8 @@ app.patch("/api/certificates/:id/toggle", (request, response) => {
   }
   certificate.enabled = enabled;
   certificate.updatedAt = new Date().toISOString();
-  const next = saveState(state, "certificate.toggle", `${enabled ? "Enabled" : "Disabled"} certificate ${certificate.name}.`);
-  response.json(next.certificates.find((item) => item.id === certificate.id));
+  const saved = saveStateWithEvent(state, "certificate.toggle", `${enabled ? "Enabled" : "Disabled"} certificate ${certificate.name}.`);
+  response.json(applyResponse(saved, saved.state.certificates.find((item) => item.id === certificate.id)));
 });
 
 app.patch("/api/certificates/:id/refresh", (request, response) => {
@@ -357,8 +381,8 @@ app.patch("/api/certificates/:id/refresh", (request, response) => {
   const index = state.certificates.findIndex((item) => item.id === request.params.id);
   if (index === -1) return response.status(404).json({ error: "Certificate not found." });
   state.certificates[index] = refreshCertificateFromAction(state.certificates[index]);
-  const next = saveState(state, "certificate.refresh", `Refreshed certificate ${state.certificates[index].name}.`);
-  response.json(next.certificates.find((item) => item.id === request.params.id));
+  const saved = saveStateWithEvent(state, "certificate.refresh", `Refreshed certificate ${state.certificates[index].name}.`);
+  response.json(applyResponse(saved, saved.state.certificates.find((item) => item.id === request.params.id)));
 });
 
 app.post("/api/certificates/:id/sync", (request, response) => {
@@ -376,8 +400,8 @@ app.post("/api/certificates/:id/sync", (request, response) => {
   }
 
   state.certificates[index] = synced;
-  const next = saveState(state, "certificate.sync.receive", `Received synced certificate ${synced.name}.`);
-  response.json(next.certificates.find((item) => item.id === request.params.id));
+  const saved = saveStateWithEvent(state, "certificate.sync.receive", `Received synced certificate ${synced.name}.`);
+  response.json(applyResponse(saved, saved.state.certificates.find((item) => item.id === request.params.id)));
 });
 
 app.post("/api/certificates/reorder", (request, response) => {
@@ -388,8 +412,8 @@ app.post("/api/certificates/reorder", (request, response) => {
     ...certificate,
     order: order.get(certificate.id) ?? certificate.order
   }));
-  const next = saveState(state, "certificate.reorder", "Reordered certificates.");
-  response.json(next.certificates);
+  const saved = saveStateWithEvent(state, "certificate.reorder", "Reordered certificates.");
+  response.json(applyResponse(saved, saved.state.certificates));
 });
 
 app.get("/api/certificates/:id/download", (request, response) => {
@@ -426,12 +450,12 @@ app.delete("/api/certificates/:id", (request, response) => {
   const cleanupFiles = request.query.cleanupFiles === "true" || request.query.cleanupFiles === "1";
   const deletedFiles = cleanupFiles ? deleteManagedCertificateFiles(certificate) : [];
   state.certificates = state.certificates.filter((item) => item.id !== request.params.id);
-  saveState(
+  const saved = saveStateWithEvent(
     state,
     cleanupFiles ? "certificate.delete-with-files" : "certificate.delete",
     deletedFiles.length ? `Deleted certificate ${certificate.name} and ${deletedFiles.length} managed PEM file(s).` : `Deleted certificate ${certificate.name}.`
   );
-  response.status(204).send();
+  response.json(applyResponse<DeleteResult>(saved, { id: certificate.id, deleted: true }));
 });
 
 app.get("/api/generated-config", (_request, response) => {
@@ -444,8 +468,9 @@ app.get("/api/history", (_request, response) => {
 });
 
 app.post("/api/history/:id/rollback", async (request, response) => {
-  if (!rollbackToHistoryEvent(request.params.id)) return response.status(404).json({ error: "Rollback snapshot not found for this history event." });
-  response.json(await dashboardPayload());
+  const saved = rollbackToHistoryEventWithEvent(request.params.id);
+  if (!saved) return response.status(404).json({ error: "Rollback snapshot not found for this history event." });
+  response.json(applyResponse(saved, await dashboardPayload()));
 });
 
 const distDir = path.resolve(process.cwd(), "dist");
@@ -459,19 +484,20 @@ if (fs.existsSync(distDir)) {
 
 app.use((error: unknown, _request: express.Request, response: express.Response, _next: express.NextFunction) => {
   if (error instanceof z.ZodError) {
-    return response.status(400).json({ error: "Validation failed.", issues: error.issues });
+    return response.status(400).json({ error: "Validation failed.", code: "VALIDATION_FAILED", issues: error.issues });
   }
   if (error instanceof BadRequestError) {
-    return response.status(error.statusCode).json({ error: error.message });
+    return response.status(error.statusCode).json({ error: error.message, code: "BAD_REQUEST" });
   }
   console.error(error);
-  return response.status(500).json({ error: error instanceof Error ? error.message : "Unexpected server error." });
+  return response.status(500).json({ error: error instanceof Error ? error.message : "Unexpected server error.", code: "INTERNAL_SERVER_ERROR" });
 });
 
 app.listen(config.port, () => {
   console.log(`GateLite API listening on http://localhost:${config.port}`);
   console.log(`Traefik API target: ${config.traefikApiUrl}`);
 });
+startDnsScheduler();
 
 async function dashboardPayload(): Promise<DashboardPayload> {
   const state = loadState();
@@ -607,6 +633,8 @@ function previewWebServiceChange(state: ReturnType<typeof loadState>, service: W
     webServices:
       action === "create"
         ? [...state.webServices, service]
+        : action === "delete"
+          ? state.webServices.filter((item) => item.id !== service.id)
         : state.webServices.map((item) => (item.id === service.id ? service : item))
   };
   const nextYaml = generateTraefikDynamicConfig(nextState).yaml;

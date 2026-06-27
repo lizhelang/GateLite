@@ -1,0 +1,425 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>GateLite social posters</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --ink: #111827;
+        --muted: #536273;
+        --teal: #008f8b;
+        --cyan: #0ea5b7;
+        --amber: #d98a00;
+        --line: rgba(15, 23, 42, 0.12);
+        --paper: #f7fafb;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: grid;
+        gap: 40px;
+        place-items: center;
+        padding: 40px;
+        background: #dfe7ec;
+        font-family:
+          Inter, Geist, -apple-system, BlinkMacSystemFont, "Segoe UI",
+          "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+      }
+
+      .poster {
+        position: relative;
+        overflow: hidden;
+        background: var(--paper);
+        color: var(--ink);
+        isolation: isolate;
+      }
+
+      .poster::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        z-index: -2;
+        background-image:
+          linear-gradient(rgba(0, 143, 139, 0.06) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(0, 143, 139, 0.06) 1px, transparent 1px);
+        background-size: 72px 72px;
+      }
+
+      .poster::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        z-index: -1;
+        background:
+          radial-gradient(circle at 12% 18%, rgba(0, 143, 139, 0.12), transparent 28%),
+          radial-gradient(circle at 84% 80%, rgba(217, 138, 0, 0.14), transparent 26%),
+          linear-gradient(135deg, rgba(255, 255, 255, 0.86), rgba(247, 250, 251, 0.74));
+      }
+
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+      }
+
+      .brand img {
+        display: block;
+      }
+
+      .logo-horizontal {
+        width: 214px;
+        height: auto;
+      }
+
+      .badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        width: max-content;
+        padding: 8px 13px;
+        border: 1px solid rgba(0, 143, 139, 0.22);
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.78);
+        color: #006d69;
+        font-size: 18px;
+        font-weight: 720;
+      }
+
+      .pill-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+      }
+
+      .pill {
+        padding: 10px 14px;
+        border: 1px solid rgba(15, 23, 42, 0.12);
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.82);
+        color: #263445;
+        font-size: 18px;
+        font-weight: 690;
+      }
+
+      .screen {
+        display: block;
+        border: 1px solid rgba(15, 23, 42, 0.12);
+        border-radius: 24px;
+        box-shadow:
+          0 28px 80px rgba(15, 23, 42, 0.18),
+          0 8px 24px rgba(15, 23, 42, 0.1);
+      }
+
+      .x-poster {
+        width: 1600px;
+        height: 900px;
+        padding: 64px 68px;
+      }
+
+      .x-bg {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        opacity: 0.54;
+        z-index: -3;
+      }
+
+      .x-content {
+        position: relative;
+        z-index: 2;
+        width: 650px;
+      }
+
+      .x-kicker {
+        margin-top: 58px;
+      }
+
+      .x-title {
+        margin: 28px 0 0;
+        max-width: 690px;
+        font-size: 82px;
+        line-height: 0.98;
+        letter-spacing: 0;
+        font-weight: 820;
+      }
+
+      .x-title span {
+        color: var(--teal);
+      }
+
+      .x-subtitle {
+        margin: 28px 0 0;
+        max-width: 620px;
+        color: var(--muted);
+        font-size: 29px;
+        line-height: 1.34;
+        font-weight: 540;
+      }
+
+      .x-pills {
+        margin-top: 34px;
+        max-width: 620px;
+      }
+
+      .x-url {
+        position: absolute;
+        left: 68px;
+        bottom: 56px;
+        color: #2d3b4c;
+        font-size: 24px;
+        font-weight: 720;
+      }
+
+      .x-shot-main {
+        position: absolute;
+        right: 54px;
+        bottom: 76px;
+        width: 770px;
+        height: 480px;
+        object-fit: cover;
+        object-position: top left;
+      }
+
+      .x-shot-mini {
+        position: absolute;
+        right: 144px;
+        top: 70px;
+        width: 500px;
+        height: 285px;
+        object-fit: cover;
+        object-position: top left;
+      }
+
+      .x-callout {
+        position: absolute;
+        right: 70px;
+        top: 384px;
+        display: grid;
+        gap: 8px;
+        width: 390px;
+        padding: 20px 22px;
+        border: 1px solid rgba(0, 143, 139, 0.22);
+        border-radius: 22px;
+        background: rgba(255, 255, 255, 0.9);
+        box-shadow: 0 18px 44px rgba(15, 23, 42, 0.12);
+      }
+
+      .x-callout strong {
+        color: #0b5d5a;
+        font-size: 24px;
+      }
+
+      .x-callout span {
+        color: var(--muted);
+        font-size: 18px;
+        line-height: 1.35;
+      }
+
+      .xhs-poster {
+        width: 1080px;
+        height: 1440px;
+        padding: 58px 56px;
+      }
+
+      .xhs-bg {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        opacity: 0.33;
+        z-index: -3;
+      }
+
+      .xhs-brand {
+        justify-content: space-between;
+      }
+
+      .xhs-brand .logo-horizontal {
+        width: 250px;
+      }
+
+      .xhs-tag {
+        padding: 8px 14px;
+        border: 1px solid rgba(217, 138, 0, 0.28);
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.76);
+        color: #9a5d00;
+        font-size: 24px;
+        font-weight: 760;
+      }
+
+      .xhs-title {
+        margin: 86px 0 0;
+        width: 900px;
+        font-size: 82px;
+        line-height: 1.07;
+        letter-spacing: 0;
+        font-weight: 850;
+      }
+
+      .xhs-title span {
+        color: var(--teal);
+      }
+
+      .xhs-subtitle {
+        margin: 26px 0 0;
+        width: 840px;
+        color: #435164;
+        font-size: 34px;
+        line-height: 1.42;
+        font-weight: 560;
+      }
+
+      .xhs-points {
+        margin-top: 42px;
+        display: grid;
+        gap: 16px;
+        width: 840px;
+      }
+
+      .xhs-point {
+        display: grid;
+        grid-template-columns: 38px 1fr;
+        gap: 16px;
+        align-items: start;
+        padding: 18px 20px;
+        border: 1px solid rgba(15, 23, 42, 0.12);
+        border-radius: 22px;
+        background: rgba(255, 255, 255, 0.78);
+        box-shadow: 0 14px 34px rgba(15, 23, 42, 0.07);
+        color: #233044;
+        font-size: 28px;
+        line-height: 1.28;
+        font-weight: 690;
+      }
+
+      .xhs-dot {
+        width: 32px;
+        height: 32px;
+        margin-top: 2px;
+        border-radius: 999px;
+        background: linear-gradient(135deg, var(--teal), #25c1d0);
+        box-shadow: inset 0 0 0 8px rgba(255, 255, 255, 0.6);
+      }
+
+      .xhs-screen-wrap {
+        position: absolute;
+        left: 56px;
+        right: 56px;
+        bottom: 118px;
+        height: 370px;
+      }
+
+      .xhs-screen {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        object-position: top left;
+      }
+
+      .xhs-bottom {
+        position: absolute;
+        left: 56px;
+        right: 56px;
+        bottom: 48px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        color: #2d3b4c;
+        font-size: 25px;
+        font-weight: 720;
+      }
+
+      .xhs-mini-pills {
+        display: flex;
+        gap: 10px;
+      }
+
+      .xhs-mini-pills span {
+        padding: 7px 11px;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.8);
+        border: 1px solid rgba(15, 23, 42, 0.12);
+      }
+    </style>
+  </head>
+  <body>
+    <section class="poster x-poster" id="x-card" aria-label="GateLite X social card">
+      <img class="x-bg" src="./gatelite-social-background-wide.png" alt="" />
+      <div class="brand">
+        <img class="logo-horizontal" src="../../public/brand/gatelite/horizontal-light.png" alt="GateLite" />
+      </div>
+
+      <div class="x-content">
+        <div class="badge x-kicker">Traefik OSS companion</div>
+        <h1 class="x-title">A lightweight <span>control plane</span> for Traefik</h1>
+        <p class="x-subtitle">
+          Manage domains, TLS, route rules, previews, rollback, and Agent APIs without starting from raw YAML.
+        </p>
+        <div class="pill-row x-pills">
+          <span class="pill">Docker</span>
+          <span class="pill">TLS</span>
+          <span class="pill">Rollback</span>
+          <span class="pill">Agent API</span>
+          <span class="pill">MIT</span>
+        </div>
+      </div>
+
+      <img class="screen x-shot-mini" src="../assets/screenshots/dashboard.png" alt="GateLite dashboard screenshot" />
+      <img class="screen x-shot-main" src="../assets/screenshots/web-services.png" alt="GateLite web services screenshot" />
+      <div class="x-callout">
+        <strong>Not a Traefik fork.</strong>
+        <span>GateLite sits above Traefik and keeps Traefik as the runtime source of truth.</span>
+      </div>
+      <div class="x-url">github.com/lizhelang/GateLite</div>
+    </section>
+
+    <section class="poster xhs-poster" id="xhs-card" aria-label="GateLite Xiaohongshu cover">
+      <img class="xhs-bg" src="./gatelite-social-background-vertical.png" alt="" />
+      <div class="brand xhs-brand">
+        <img class="logo-horizontal" src="../../public/brand/gatelite/horizontal-light.png" alt="GateLite" />
+        <div class="xhs-tag">开源自托管</div>
+      </div>
+
+      <h1 class="xhs-title">给 Traefik 加一个<span>轻量控制台</span></h1>
+      <p class="xhs-subtitle">域名、证书、反代规则、预览回滚和 Agent API，放到一个更顺手的 companion 里。</p>
+
+      <div class="xhs-points">
+        <div class="xhs-point">
+          <span class="xhs-dot"></span>
+          <span>不是 fork，也不是替代 Traefik core</span>
+        </div>
+        <div class="xhs-point">
+          <span class="xhs-dot"></span>
+          <span>常见反代配置不用一上来手写 YAML</span>
+        </div>
+        <div class="xhs-point">
+          <span class="xhs-dot"></span>
+          <span>适合人操作，也适合脚本和 AI Agent 调用</span>
+        </div>
+      </div>
+
+      <div class="xhs-screen-wrap">
+        <img class="screen xhs-screen" src="../assets/screenshots/web-services.png" alt="GateLite web services screenshot" />
+      </div>
+      <div class="xhs-bottom">
+        <span>GitHub: lizhelang/GateLite</span>
+        <div class="xhs-mini-pills">
+          <span>Traefik</span>
+          <span>Docker</span>
+          <span>MIT</span>
+        </div>
+      </div>
+    </section>
+  </body>
+</html>

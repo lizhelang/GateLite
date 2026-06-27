@@ -1,8 +1,9 @@
 # GateLite Security And Access Control
 
-GateLite can change Traefik routes and certificate bindings, so public
-deployments should put it behind access control. The built-in access control is
-off by default for local development and existing private deployments.
+GateLite can change Traefik routes, certificate bindings, and optionally
+Cloudflare DNS records, so public deployments should put it behind access
+control. The built-in access control is off by default for local development and
+existing private deployments.
 
 ## Enable Built-In Access Control
 
@@ -39,11 +40,19 @@ GATELITE_AUTH_TOKENS=viewer:<token>,agent:<token>,operator:<token>,admin:<token>
 | `viewer` | Open the UI and read dashboard, runtime, services, certificates, history, and generated config. |
 | `agent` | Same write level as `operator`, intended for machine clients. Cannot perform admin-only secret or rollback operations. |
 | `operator` | Create, edit, toggle, reorder, and preview Web services, groups, and normal certificate metadata. |
-| `admin` | Everything, including private-key download, certificate sync receive, history rollback, bulk import, and certificate deletion. |
+| `admin` | Everything, including private-key download, certificate sync receive, DNS sync, history rollback, bulk import, and certificate deletion. |
 
 Basic auth currently maps to `admin`, because it is meant for the trusted
 operator opening the browser UI. Use Bearer tokens when agents need narrower
 roles.
+
+## Agent API Idempotency
+
+State-changing API requests can include `Idempotency-Key` or
+`X-Idempotency-Key`. GateLite stores successful apply responses server-side next
+to the state file and replays them only when the method, path, query, and JSON
+body match. Reusing a key for a different request returns a conflict instead of
+applying a second change.
 
 ## Certificate File Deletion
 
@@ -59,6 +68,17 @@ File cleanup is intentionally narrow:
 - `acme` certificates do not delete ACME storage because Traefik owns
   `acme.json` and renewal state.
 - Cleanup refuses any path outside `GATELITE_CERT_DIR`.
+
+## Cloudflare DNS Tokens
+
+Cloudflare DNS/DDNS management is disabled by default. If
+`GATELITE_DNS_ENABLED=true`, GateLite also requires `GATELITE_AUTH_ENABLED=true`
+at startup. This prevents a public unauthenticated GateLite instance from
+exposing DNS write operations.
+
+Cloudflare tokens should be provided through
+`GATELITE_CLOUDFLARE_ZONE_TOKENS`. GateLite uses them only server-side and does
+not write them to state, backups, API responses, or the browser UI.
 
 ## External Access Control
 

@@ -6,9 +6,10 @@ describe("GateLite access policy", () => {
     expect(requiredRoleForRequest("GET", "/api/health")).toBe("public");
   });
 
-  it("allows viewer access to read-only API and UI routes", () => {
+  it("keeps the SPA shell public and protects read-only API data", () => {
     expect(requiredRoleForRequest("GET", "/api/dashboard")).toBe("viewer");
-    expect(requiredRoleForRequest("GET", "/")).toBe("viewer");
+    expect(requiredRoleForRequest("GET", "/")).toBe("public");
+    expect(requiredRoleForRequest("GET", "/assets/app.js")).toBe("public");
     expect(roleCanAccess("viewer", "viewer")).toBe(true);
   });
 
@@ -28,6 +29,7 @@ describe("GateLite access policy", () => {
       ["POST", "/api/certificates/cert-local/sync"],
       ["POST", "/api/history/evt-local/rollback"],
       ["POST", "/api/discovered-routes/import-all"],
+      ["POST", "/api/dns/sync"],
       ["DELETE", "/api/certificates/cert-local"]
     ]) {
       const requiredRole = requiredRoleForRequest(method, path);

@@ -45,6 +45,12 @@ private domains:
 GATELITE_PUBLIC_URLS=https://gatelite.example.com npm run verify:domains
 ```
 
+If built-in auth is enabled, provide read credentials for the HTML shell check:
+
+```bash
+GATELITE_PUBLIC_URLS=https://gatelite.example.com GATELITE_VERIFY_AUTH_USERNAME=admin GATELITE_VERIFY_AUTH_PASSWORD=<password> npm run verify:domains
+```
+
 ## CI Gate
 
 GitHub Actions runs the same core checks on pushes and pull requests:

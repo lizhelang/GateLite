@@ -46,6 +46,9 @@
   adds optional access control with viewer, agent, operator, and admin roles,
   plus release gates, backup/restore scripts, CI checks, and domain migration
   verification.
+- Add narrow provider-backed DNS operations. Current DNS work lets GateLite
+  manage an explicit Cloudflare DDNS allowlist without becoming a full DNS
+  registrar UI.
 
 ## Phase 5: Provider Expansion
 

@@ -1,4 +1,4 @@
-import { ArrowRight, CalendarClock, ChevronDown, ChevronRight, Copy, Download, EllipsisVertical, FileKey2, FileText, GripVertical, KeyRound, Pencil, Plus, Power, RefreshCw, Trash2, Upload } from "lucide-react";
+import { ArrowRight, CalendarClock, ChevronDown, ChevronRight, Cloud, Copy, Download, EllipsisVertical, FileKey2, FileText, GripVertical, KeyRound, Pencil, Plus, Power, RefreshCw, ShieldCheck, Trash2, Upload } from "lucide-react";
 import { Fragment, useMemo, useState, type ChangeEvent, type FormEvent, type ReactNode } from "react";
 import type { AcmeStatus, CertificatePreview, CertificateStatus, CertificateWithBindings, DashboardPayload, RuntimeStatus, RuntimeTlsBinding } from "../../shared/types";
 import { createCertificate, deleteCertificate, previewCreateCertificate, previewUpdateCertificate, receiveCertificateSync, refreshCertificate, reorderCertificates, toggleCertificate, updateCertificate, type CertificateInput, type CertificateSyncInput } from "../api";
@@ -307,6 +307,8 @@ export function CertificatesPage({ dashboard, onRefresh }: CertificatesPageProps
 
       {error ? <div className="rounded-xl border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">{error}</div> : null}
 
+      <CertificateOwnershipPanel certificates={certificates} acme={dashboard.acme} runtimeTlsBindings={dashboard.runtimeTlsBindings} />
+
       <CertificateDataTable
         certificates={filteredCertificates}
         selectedIds={selectedIds}
@@ -330,7 +332,7 @@ export function CertificatesPage({ dashboard, onRefresh }: CertificatesPageProps
 
       <AcmeOperationsPanel acme={dashboard.acme} />
 
-      <RuntimeTlsBindingTable bindings={dashboard.runtimeTlsBindings} open={runtimeTlsOpen} onOpenChange={setRuntimeTlsOpen} />
+      <RuntimeTlsBindingTable bindings={dashboard.runtimeTlsBindings} certificates={certificates} open={runtimeTlsOpen} onOpenChange={setRuntimeTlsOpen} />
 
       {showForm ? (
         <CertificateForm
@@ -393,15 +395,124 @@ export function CertificatesPage({ dashboard, onRefresh }: CertificatesPageProps
   );
 }
 
+function CertificateOwnershipPanel({
+  certificates,
+  acme,
+  runtimeTlsBindings
+}: {
+  certificates: CertificateWithBindings[];
+  acme: AcmeStatus;
+  runtimeTlsBindings: RuntimeTlsBinding[];
+}) {
+  const { t } = useLanguage();
+  const activeLocalCertificates = certificates.filter(isUsableGateLiteCertificate);
+  const pendingSyncMetadata = certificates.filter(isPendingSyncMetadata);
+  const resolverNames = acme.resolvers.map((resolver) => resolver.name);
+  const acmeRouterCount = runtimeTlsBindings.filter((binding) => Boolean(binding.tlsResolver)).length;
+  const zooeDomainVisible = runtimeTlsBindings.some((binding) => binding.domains.some((domain) => domain === "zooe.cc" || domain.endsWith(".zooe.cc")));
+  const storageReadable = acme.storageFiles.some((file) => file.readable);
+
+  return (
+    <div className="grid gap-3 xl:grid-cols-3">
+      <CertificateOwnerTile
+        icon={<Cloud className="size-4" />}
+        label={t("Public edge", "公网边缘")}
+        title={t("Cloudflare edge certificate", "Cloudflare 边缘证书")}
+        value={zooeDomainVisible ? "zooe.cc / *.zooe.cc" : t("Proxied domains", "代理域名")}
+        tone="sky"
+        description={t(
+          "Browsers see this certificate when a domain is proxied by Cloudflare. GateLite does not issue or renew the Cloudflare edge certificate.",
+          "域名走 Cloudflare 代理时，浏览器看到的是 Cloudflare 边缘证书；GateLite 不申请也不续期这张证书。"
+        )}
+      />
+      <CertificateOwnerTile
+        icon={<RefreshCw className="size-4" />}
+        label={t("Origin ACME", "源站 ACME")}
+        title={t("Traefik ACME resolver", "Traefik ACME 解析器")}
+        value={resolverNames.length ? resolverNames.join(", ") : t("No resolver visible", "未看到解析器")}
+        tone="emerald"
+        description={
+          storageReadable
+            ? t(
+                `${acme.certificates.length} ACME certificate(s) are readable from Traefik storage; renewal remains Traefik's job.`,
+                `已从 Traefik storage 读到 ${acme.certificates.length} 张 ACME 证书；申请和续期仍由 Traefik 执行。`
+              )
+            : t(
+                `${acmeRouterCount} TLS router(s) reference ACME, but GateLite has not mounted acme.json, so it can only show resolver references.`,
+                `${acmeRouterCount} 个 TLS 路由引用 ACME；GateLite 当前没挂载 acme.json，所以只能显示 resolver 引用。`
+              )
+        }
+      />
+      <CertificateOwnerTile
+        icon={<ShieldCheck className="size-4" />}
+        label={t("GateLite local", "GateLite 本地")}
+        title={t("GateLite file certificates", "GateLite 文件证书")}
+        value={activeLocalCertificates.length ? t(`${activeLocalCertificates.length} usable`, `${activeLocalCertificates.length} 张可用`) : t("0 usable", "0 张可用")}
+        tone={activeLocalCertificates.length ? "emerald" : "slate"}
+        description={
+          pendingSyncMetadata.length
+            ? t(
+                `${pendingSyncMetadata.length} sync record is only disabled metadata until a PEM bundle is received.`,
+                `${pendingSyncMetadata.length} 条同步记录只是停用元数据；接收到 PEM 之前不参与线上流量。`
+              )
+            : t(
+                "Only enabled certificates with readable certificate and key files can be bound to GateLite-managed Web services.",
+                "只有已启用且证书/私钥文件可读的证书，才会参与 GateLite 管理的 Web 服务绑定。"
+              )
+        }
+      />
+    </div>
+  );
+}
+
+function CertificateOwnerTile({
+  icon,
+  label,
+  title,
+  value,
+  description,
+  tone
+}: {
+  icon: ReactNode;
+  label: string;
+  title: string;
+  value: string;
+  description: string;
+  tone: "sky" | "emerald" | "slate";
+}) {
+  const toneClass =
+    tone === "sky"
+      ? "border-sky-500/30 bg-sky-500/10 text-sky-700 dark:border-sky-300/25 dark:bg-sky-300/10 dark:text-sky-100"
+      : tone === "emerald"
+        ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:border-emerald-300/25 dark:bg-emerald-300/10 dark:text-emerald-100"
+        : "border-border bg-muted/35 text-muted-foreground";
+
+  return (
+    <div className="grid gap-3 rounded-xl border bg-card/80 p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="text-xs text-muted-foreground">{label}</div>
+          <div className="mt-1 truncate text-base font-semibold">{title}</div>
+        </div>
+        <div className={`grid size-8 shrink-0 place-items-center rounded-lg border ${toneClass}`}>{icon}</div>
+      </div>
+      <div className="truncate font-mono text-sm font-medium">{value}</div>
+      <p className="text-xs leading-5 text-muted-foreground">{description}</p>
+    </div>
+  );
+}
+
 function AcmeOperationsPanel({ acme }: { acme: AcmeStatus }) {
   const { t } = useLanguage();
   const storageReadable = acme.storageFiles.some((file) => file.readable);
+  const resolverNames = acme.resolvers.map((resolver) => resolver.name).join(", ");
+  const warning = acmeWarningSummary(acme, t);
   return (
     <div className="overflow-hidden rounded-xl border bg-card/80">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3">
         <div className="min-w-0">
-          <div className="text-xs text-muted-foreground">{t("Read-only ACME state from Traefik resolver config and storage", "来自 Traefik resolver 配置与 storage 的只读 ACME 状态")}</div>
-          <div className="mt-1 text-base font-semibold">{t("ACME operations", "ACME 运维状态")}</div>
+          <div className="text-xs text-muted-foreground">{t("Read-only view of Traefik certificate issuance and renewal state", "Traefik 证书签发与续期状态的只读视图")}</div>
+          <div className="mt-1 text-base font-semibold">{t("Traefik ACME", "Traefik ACME")}</div>
         </div>
         <div className="flex flex-wrap gap-2">
           <Badge variant="secondary" className="rounded-md">
@@ -410,71 +521,83 @@ function AcmeOperationsPanel({ acme }: { acme: AcmeStatus }) {
           <StatusBadge status={storageReadable ? "online" : acme.storageFiles.length ? "warning" : "unknown"} label={storageReadable ? t("storage readable", "storage 可读") : t("storage not mounted", "storage 未挂载")} className="h-6 rounded-md px-2 text-[11px]" />
         </div>
       </div>
-      {acme.warnings.length ? (
-        <div className="grid gap-1 border-b bg-amber-500/5 px-4 py-3 text-xs text-amber-700 dark:text-amber-200">
-          {acme.warnings.slice(0, 3).map((warning) => (
-            <div key={warning}>{warning}</div>
-          ))}
+      <div className="grid gap-3 p-4 xl:grid-cols-[1.25fr_1fr]">
+        <div className="grid gap-3 sm:grid-cols-3">
+          <AcmeFact label={t("Resolver", "解析器")} value={resolverNames || t("Not visible", "不可见")} caption={t("Referenced by Traefik routers", "由 Traefik 路由引用")} />
+          <AcmeFact label={t("Challenge", "验证方式")} value={acme.resolvers[0]?.challenge ? challengeText(acme.resolvers[0].challenge, t) : t("Unknown", "未知")} caption={acme.resolvers[0]?.challenge?.provider || t("Provider not exposed", "未暴露 provider")} />
+          <AcmeFact label={t("Readable certificates", "可读证书")} value={String(acme.certificates.length)} caption={storageReadable ? t("from acme.json", "来自 acme.json") : t("storage not mounted", "storage 未挂载")} />
         </div>
-      ) : null}
-      <div className="grid gap-0 xl:grid-cols-[1fr_1.25fr]">
-        <div className="overflow-x-auto border-b xl:border-b-0 xl:border-r">
-          <Table className="min-w-[720px]">
-            <TableHeader className="bg-muted/65">
-              <TableRow className="hover:bg-transparent">
-                <TableHead>{t("Resolver", "解析器")}</TableHead>
-                <TableHead>{t("Challenge", "验证方式")}</TableHead>
-                <TableHead>{t("Storage", "Storage")}</TableHead>
-                <TableHead>{t("Renewal", "续期")}</TableHead>
-                <TableHead>{t("Status", "状态")}</TableHead>
+        <div className={`grid content-center gap-2 rounded-lg border px-4 py-3 ${warning ? "border-amber-500/30 bg-amber-500/10 text-amber-800 dark:border-amber-300/25 dark:bg-amber-300/10 dark:text-amber-100" : "bg-background/35"}`}>
+          <div className="text-sm font-medium">
+            {warning ? t("GateLite can only show part of the ACME state", "GateLite 当前只能显示部分 ACME 状态") : t("ACME storage is readable", "ACME storage 可读")}
+          </div>
+          <p className="text-xs leading-5 text-current/80">
+            {warning ||
+              t(
+                "GateLite can read Traefik ACME storage and show certificate expiry. Issuing and renewal still stay inside Traefik.",
+                "GateLite 可以读取 Traefik ACME storage 并展示过期时间；申请和续期仍由 Traefik 执行。"
+              )}
+          </p>
+        </div>
+      </div>
+      <div className="overflow-x-auto border-t">
+        <Table className="min-w-[820px]">
+          <TableHeader className="bg-muted/65">
+            <TableRow className="hover:bg-transparent">
+              <TableHead>{t("Resolver", "解析器")}</TableHead>
+              <TableHead>{t("Challenge", "验证方式")}</TableHead>
+              <TableHead>{t("Storage", "Storage")}</TableHead>
+              <TableHead>{t("Renewal", "续期")}</TableHead>
+              <TableHead>{t("Status", "状态")}</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {acme.resolvers.map((resolver) => (
+              <TableRow key={resolver.name} className="h-12">
+                <TableCell>
+                  <div className="grid min-w-0 gap-0.5 text-xs leading-tight">
+                    <span className="truncate font-medium">{resolver.name}</span>
+                    <span className="truncate text-muted-foreground">{resolver.sources.join(", ")}</span>
+                  </div>
+                </TableCell>
+                <TableCell>
+                  <div className="grid gap-0.5 text-xs leading-tight">
+                    <span>{challengeText(resolver.challenge, t)}</span>
+                    {resolver.challenge?.provider ? <span className="text-muted-foreground">{resolver.challenge.provider}</span> : null}
+                  </div>
+                </TableCell>
+                <TableCell>
+                  <div className="grid max-w-56 gap-0.5 text-xs leading-tight">
+                    <span className="truncate font-mono">{resolver.storagePath || t("not mounted", "未挂载")}</span>
+                    <span className="text-muted-foreground">{t(`${resolver.certificateCount} readable cert(s)`, `${resolver.certificateCount} 张可读证书`)}</span>
+                  </div>
+                </TableCell>
+                <TableCell>
+                  <Badge variant="outline" className="rounded-md">
+                    {renewalLabel(resolver.renewalState, t)}
+                  </Badge>
+                </TableCell>
+                <TableCell>
+                  <div className="grid gap-1">
+                    <StatusBadge status={resolver.status} className="w-fit rounded-md px-1.5 text-[10px]" />
+                    {resolver.statusMessage ? <span className="max-w-80 text-xs text-muted-foreground">{resolverStatusMessage(resolver.statusMessage, t)}</span> : null}
+                  </div>
+                </TableCell>
               </TableRow>
-            </TableHeader>
-            <TableBody>
-              {acme.resolvers.map((resolver) => (
-                <TableRow key={resolver.name} className="h-12">
-                  <TableCell>
-                    <div className="grid min-w-0 gap-0.5 text-xs leading-tight">
-                      <span className="truncate font-medium">{resolver.name}</span>
-                      <span className="truncate text-muted-foreground">{resolver.sources.join(", ")}</span>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <div className="grid gap-0.5 text-xs leading-tight">
-                      <span>{challengeText(resolver.challenge, t)}</span>
-                      {resolver.challenge?.provider ? <span className="text-muted-foreground">{resolver.challenge.provider}</span> : null}
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <div className="grid max-w-48 gap-0.5 text-xs leading-tight">
-                      <span className="truncate font-mono">{resolver.storagePath || t("not visible", "不可见")}</span>
-                      <span className="text-muted-foreground">{t(`${resolver.certificateCount} cert(s)`, `${resolver.certificateCount} 张证书`)}</span>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant="outline" className="rounded-md">
-                      {renewalLabel(resolver.renewalState, t)}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>
-                    <div className="grid gap-1">
-                      <StatusBadge status={resolver.status} className="w-fit rounded-md px-1.5 text-[10px]" />
-                      {resolver.statusMessage ? <span className="max-w-52 text-xs text-muted-foreground">{resolver.statusMessage}</span> : null}
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
-              {acme.resolvers.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={5} className="h-24 text-center text-sm text-muted-foreground">
-                    {t("No ACME resolver is visible yet. Mount Traefik static config or acme.json read-only to enable this view.", "尚未看到 ACME resolver。只读挂载 Traefik 静态配置或 acme.json 后可启用此视图。")}
-                  </TableCell>
-                </TableRow>
-              ) : null}
-            </TableBody>
-          </Table>
-        </div>
-        <div className="overflow-x-auto">
-          <Table className="min-w-[760px]">
+            ))}
+            {acme.resolvers.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={5} className="h-20 text-center text-sm text-muted-foreground">
+                  {t("No ACME resolver is visible yet.", "尚未看到 ACME resolver。")}
+                </TableCell>
+              </TableRow>
+            ) : null}
+          </TableBody>
+        </Table>
+      </div>
+      {acme.certificates.length ? (
+        <div className="overflow-x-auto border-t">
+          <Table className="min-w-[820px]">
             <TableHeader className="bg-muted/65">
               <TableRow className="hover:bg-transparent">
                 <TableHead>{t("Domains", "域名")}</TableHead>
@@ -507,41 +630,65 @@ function AcmeOperationsPanel({ acme }: { acme: AcmeStatus }) {
                   <TableCell>
                     <div className="grid gap-1">
                       <StatusBadge status={certificate.status} className="w-fit rounded-md px-1.5 text-[10px]" />
-                      {certificate.statusMessage ? <span className="max-w-52 text-xs text-muted-foreground">{certificate.statusMessage}</span> : null}
+                      {certificate.statusMessage ? <span className="max-w-80 text-xs text-muted-foreground">{resolverStatusMessage(certificate.statusMessage, t)}</span> : null}
                     </div>
                   </TableCell>
                 </TableRow>
               ))}
-              {acme.certificates.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={5} className="h-24 text-center text-sm text-muted-foreground">
-                    {t("No ACME certificates were readable from storage.", "未从 storage 读取到 ACME 证书。")}
-                  </TableCell>
-                </TableRow>
-              ) : null}
             </TableBody>
           </Table>
         </div>
-      </div>
+      ) : null}
     </div>
   );
 }
 
-function RuntimeTlsBindingTable({ bindings, open, onOpenChange }: { bindings: RuntimeTlsBinding[]; open: boolean; onOpenChange: (open: boolean) => void }) {
+function AcmeFact({ label, value, caption }: { label: string; value: string; caption: string }) {
+  return (
+    <div className="grid gap-1 rounded-lg border bg-background/35 p-3">
+      <span className="text-xs text-muted-foreground">{label}</span>
+      <span className="truncate text-sm font-semibold">{value}</span>
+      <span className="truncate text-xs text-muted-foreground">{caption}</span>
+    </div>
+  );
+}
+
+function RuntimeTlsBindingTable({
+  bindings,
+  certificates,
+  open,
+  onOpenChange
+}: {
+  bindings: RuntimeTlsBinding[];
+  certificates: CertificateWithBindings[];
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
   const { t } = useLanguage();
+  const activeCertificateIds = new Set(certificates.filter(isUsableGateLiteCertificate).map((certificate) => certificate.id));
+  const acmeCount = bindings.filter((binding) => Boolean(binding.tlsResolver)).length;
+  const activeGateLiteCount = bindings.filter((binding) => binding.managedCertificateId && activeCertificateIds.has(binding.managedCertificateId)).length;
   return (
     <div className="overflow-hidden rounded-xl border bg-card/80">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3">
         <button type="button" className="flex min-w-0 items-center gap-2 text-left" onClick={() => onOpenChange(!open)} aria-expanded={open}>
           {open ? <ChevronDown className="size-4 shrink-0 text-muted-foreground" /> : <ChevronRight className="size-4 shrink-0 text-muted-foreground" />}
           <span className="min-w-0">
-            <span className="block text-xs text-muted-foreground">{t("Read-only TLS reference from Traefik", "来自 Traefik 的只读 TLS 参考")}</span>
-            <span className="block truncate text-base font-semibold">{t("Runtime TLS coverage", "运行时 TLS 覆盖")}</span>
+            <span className="block text-xs text-muted-foreground">{t("Actual Traefik TLS routers; read-only evidence, not a GateLite ownership claim", "Traefik 实际 TLS 路由；这是只读证据，不等于 GateLite 拥有证书")}</span>
+            <span className="block truncate text-base font-semibold">{t("Runtime TLS routers", "运行时 TLS 路由")}</span>
           </span>
         </button>
-        <Badge variant="secondary" className="rounded-md">
-          {t(`${bindings.length} TLS routers`, `${bindings.length} 个 TLS 路由`)}
-        </Badge>
+        <div className="flex flex-wrap gap-2">
+          <Badge variant="secondary" className="rounded-md">
+            {t(`${bindings.length} TLS routers`, `${bindings.length} 个 TLS 路由`)}
+          </Badge>
+          <Badge variant="outline" className="rounded-md">
+            {t(`${acmeCount} via ACME`, `${acmeCount} 个走 ACME`)}
+          </Badge>
+          <Badge variant="outline" className="rounded-md">
+            {t(`${activeGateLiteCount} GateLite file certs`, `${activeGateLiteCount} 个 GateLite 文件证书`)}
+          </Badge>
+        </div>
       </div>
       {open ? <div className="overflow-x-auto">
         <Table className="min-w-[900px]">
@@ -569,15 +716,23 @@ function RuntimeTlsBindingTable({ bindings, open, onOpenChange }: { bindings: Ru
                 </TableCell>
                 <TableCell>
                   <div className="flex flex-wrap gap-1">
-                    {binding.tlsResolver ? <Badge variant="outline" className="rounded-md">ACME {binding.tlsResolver}</Badge> : null}
-                    {binding.tlsOptions ? <Badge variant="outline" className="rounded-md">{binding.tlsOptions}</Badge> : null}
+                    {binding.tlsResolver ? <Badge variant="outline" className="rounded-md">Traefik ACME {binding.tlsResolver}</Badge> : null}
+                    {binding.tlsOptions ? <Badge variant="outline" className="rounded-md">{binding.tlsResolver ? binding.tlsOptions : t("Entrypoint default", "入口默认")}</Badge> : null}
                     {!binding.tlsResolver && !binding.tlsOptions ? <Badge variant="outline" className="rounded-md">{t("Router TLS", "路由 TLS")}</Badge> : null}
                   </div>
                 </TableCell>
                 <TableCell>
-                  {binding.managedCertificateId || binding.managedServiceId ? (
+                  {binding.managedCertificateId && activeCertificateIds.has(binding.managedCertificateId) ? (
                     <Badge variant="secondary" className="rounded-md">
-                      {binding.managedCertificateId ? t("Certificate mapped", "证书已映射") : t("Route mapped", "路由已映射")}
+                      {t("GateLite file cert", "GateLite 文件证书")}
+                    </Badge>
+                  ) : binding.managedCertificateId ? (
+                    <Badge variant="outline" className="rounded-md">
+                      {t("Metadata match", "仅元数据匹配")}
+                    </Badge>
+                  ) : binding.managedServiceId ? (
+                    <Badge variant="secondary" className="rounded-md">
+                      {t("Route mapped", "路由已映射")}
                     </Badge>
                   ) : (
                     <Badge variant="outline" className="rounded-md">
@@ -590,9 +745,7 @@ function RuntimeTlsBindingTable({ bindings, open, onOpenChange }: { bindings: Ru
                 </TableCell>
                 <TableCell>
                   <span className="text-xs text-muted-foreground">
-                    {binding.importable
-                      ? t("Can be represented as an ACME resolver certificate.", "可映射为 ACME 解析器证书。")
-                      : binding.importWarnings.join(" ") || t("Traefik did not expose certificate material.", "Traefik 没有暴露证书材料。")}
+                    {runtimeTlsImportNote(binding, activeCertificateIds, t)}
                   </span>
                 </TableCell>
               </TableRow>
@@ -682,12 +835,13 @@ function CertificateDataTable({
               const bindingRows = buildCertificateBindingRows(certificate);
               const bindingsExpanded = expandedBindingIds.includes(certificate.id);
               const runtimeBadge = acmeRuntimeBadge(certificate, t);
+              const pendingSyncMetadata = isPendingSyncMetadata(certificate);
               return (
                 <Fragment key={certificate.id}>
                   <TableRow
                     aria-expanded={bindingsExpanded}
                     data-state={rowSelected ? "selected" : undefined}
-                    className={`${draggingId === certificate.id ? "outline outline-1 outline-cyan-600/60 dark:outline-cyan-300/70" : ""} h-12`}
+                    className={`${draggingId === certificate.id ? "outline outline-1 outline-cyan-600/60 dark:outline-cyan-300/70" : ""} ${pendingSyncMetadata ? "bg-muted/20 text-muted-foreground" : ""} h-12`}
                     draggable
                     onDragStart={() => onDragStart(certificate.id)}
                     onDragOver={(event) => event.preventDefault()}
@@ -704,8 +858,15 @@ function CertificateDataTable({
                     </TableCell>
                     <TableCell>
                       <div className="grid min-w-0 gap-1">
-                        <span className="truncate font-medium">{certificate.name}</span>
-                        <span className="truncate text-xs text-muted-foreground">{certificate.subject || t("No subject metadata", "无主体元数据")}</span>
+                        <div className="flex min-w-0 items-center gap-1.5">
+                          <span className="truncate font-medium">{certificate.name}</span>
+                          {pendingSyncMetadata ? (
+                            <Badge variant="outline" className="shrink-0 rounded-md text-[10px]">
+                              {t("metadata only", "仅元数据")}
+                            </Badge>
+                          ) : null}
+                        </div>
+                        <span className="truncate text-xs text-muted-foreground">{certificateSubjectLine(certificate, t)}</span>
                       </div>
                     </TableCell>
                     <TableCell>
@@ -1366,6 +1527,84 @@ function Field({ label, children, className }: { label: string; children: ReactN
   );
 }
 
+function isPendingSyncMetadata(certificate: CertificateWithBindings): boolean {
+  return certificate.source === "sync" && !certificate.enabled && certificate.status === "pending" && !certificate.certPath && !certificate.keyPath;
+}
+
+function isUsableGateLiteCertificate(certificate: CertificateWithBindings): boolean {
+  return Boolean(
+    certificate.enabled &&
+      certificate.certPath &&
+      certificate.keyPath &&
+      certificate.status !== "pending" &&
+      certificate.status !== "invalid" &&
+      certificate.status !== "expired"
+  );
+}
+
+function certificateSubjectLine(certificate: CertificateWithBindings, t: (english: string, chinese: string) => string): string {
+  if (isPendingSyncMetadata(certificate)) return t("Disabled sync metadata; no PEM bundle has been received.", "停用的同步元数据；尚未接收 PEM 证书包。");
+  return certificate.subject || t("No subject metadata", "无主体元数据");
+}
+
+function acmeWarningSummary(acme: AcmeStatus, t: (english: string, chinese: string) => string): string | undefined {
+  if (!acme.warnings.length) return undefined;
+  if (!acme.staticConfigReadable && !acme.storageFiles.some((file) => file.readable)) {
+    return t(
+      "Traefik is still issuing and renewing ACME certificates, but GateLite has not mounted the static config or acme.json. GateLite can show resolver references only, not ACME certificate material or expiry.",
+      "Traefik 仍在负责 ACME 申请和续期，但 GateLite 当前没有挂载静态配置或 acme.json。这里能显示 resolver 引用，不能显示 ACME 证书材料和过期时间。"
+    );
+  }
+  return acme.warnings.slice(0, 2).map((warning) => resolverStatusMessage(warning, t)).join(" ");
+}
+
+function resolverStatusMessage(message: string, t: (english: string, chinese: string) => string): string {
+  if (message.includes("Resolver is referenced by Traefik routers")) {
+    return t(
+      "This resolver is referenced by Traefik routers, but no readable ACME storage certificate is visible to GateLite.",
+      "Traefik 路由正在引用这个 resolver，但 GateLite 当前看不到可读的 ACME storage 证书。"
+    );
+  }
+  if (message.includes("Set GATELITE_ACME_STORAGE_FILE")) {
+    return t(
+      "Mount acme.json or set GATELITE_ACME_STORAGE_FILE if GateLite should show ACME certificate expiry.",
+      "如果要让 GateLite 显示 ACME 证书过期时间，需要挂载 acme.json 或设置 GATELITE_ACME_STORAGE_FILE。"
+    );
+  }
+  if (message.includes("Traefik static config is not mounted")) {
+    return t(
+      "Traefik static config is not mounted into GateLite; resolver details are inferred from runtime routers.",
+      "Traefik 静态配置没有挂进 GateLite；resolver 信息来自运行时路由推断。"
+    );
+  }
+  return message;
+}
+
+function runtimeTlsImportNote(
+  binding: RuntimeTlsBinding,
+  activeCertificateIds: Set<string>,
+  t: (english: string, chinese: string) => string
+): string {
+  if (binding.managedCertificateId && !activeCertificateIds.has(binding.managedCertificateId)) {
+    return t(
+      "The domains match GateLite certificate metadata, but that certificate is not an enabled readable PEM bundle.",
+      "域名匹配到了 GateLite 证书元数据，但那张证书不是已启用且可读的 PEM 文件证书。"
+    );
+  }
+  if (binding.managedCertificateId) {
+    return t("This TLS route is represented by an enabled GateLite file certificate.", "这个 TLS 路由由已启用的 GateLite 文件证书表示。");
+  }
+  if (binding.importable) return t("This can be registered as an ACME resolver reference, but renewal remains Traefik's job.", "可登记为 ACME resolver 引用；申请和续期仍由 Traefik 负责。");
+  if (binding.importWarnings.some((warning) => warning.includes("Traefik does not expose certificate material"))) {
+    return t(
+      "Traefik did not expose certificate material or an ACME resolver for this router.",
+      "Traefik 没有为这个路由暴露证书材料或 ACME resolver。"
+    );
+  }
+  if (binding.importWarnings.length) return binding.importWarnings.map((warning) => resolverStatusMessage(warning, t)).join(" ");
+  return t("Runtime TLS reference only.", "仅运行时 TLS 参考。");
+}
+
 function matchesFilter(certificate: CertificateWithBindings, filter: CertificateFilter): boolean {
   if (filter === "all") return true;
   if (filter === "file") return sourceGroup(certificate.source) === "file";
@@ -1401,6 +1640,7 @@ function certificateValidityDays(certificate: CertificateWithBindings): number {
 }
 
 function bindingSummary(certificate: CertificateWithBindings, t: (english: string, chinese: string) => string): string {
+  if (isPendingSyncMetadata(certificate)) return t("Not in live traffic", "不参与线上流量");
   if (!certificate.boundServices.length) return t("Not bound", "未绑定");
   return certificate.boundServices.map((service) => service.domains[0] || service.name).join(", ");
 }
@@ -1450,7 +1690,8 @@ function formatBackendTarget(value: string): { hostPort: string; scheme: string 
 
 function storagePrimary(certificate: CertificateWithBindings, t: (english: string, chinese: string) => string): string {
   if (certificate.source === "acme") return certificate.acme?.resolver || "letsencrypt";
-  if (certificate.source === "sync") return certificate.sync?.target || t("Sync target", "同步目标");
+  if (isPendingSyncMetadata(certificate)) return t("PEM not received", "未接收 PEM");
+  if (certificate.source === "sync") return certificate.certPath ? tailPath(certificate.certPath) : certificate.sync?.target || t("Sync target", "同步目标");
   if (certificate.certPath) return tailPath(certificate.certPath);
   return t("Not readable", "不可读");
 }
@@ -1458,6 +1699,7 @@ function storagePrimary(certificate: CertificateWithBindings, t: (english: strin
 function sourceDetail(certificate: CertificateWithBindings, t: (english: string, chinese: string) => string): string {
   if (certificate.source === "sync") {
     const lastSync = certificate.sync?.lastSyncTime ? formatDateTime(certificate.sync.lastSyncTime) : t("Never refreshed", "尚未刷新");
+    if (isPendingSyncMetadata(certificate)) return `${certificate.sync?.target || t("Sync target", "同步目标")} · ${t("PEM not received", "未接收 PEM")}`;
     return `${certificate.sync?.target || t("Sync target", "同步目标")} · ${lastSync}`;
   }
   if (certificate.source === "acme") {

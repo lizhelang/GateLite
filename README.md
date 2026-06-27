@@ -85,6 +85,7 @@ This repository now contains the first local development module:
 - Docker Compose Traefik + whoami test environment
 - Web services and SSL/TLS certificate management pages
 - Optional built-in Basic/Bearer access control, disabled by default
+- Optional Cloudflare DNS/DDNS management for declared records
 - Backup/restore and release verification scripts
 
 ## Screenshots
@@ -205,7 +206,19 @@ npm run verify:domains
 `npm run backup` archives GateLite state, rollback snapshots, generated dynamic
 config, and mounted certificates. `npm run verify:domains` checks the public
 hosts listed in `GATELITE_PUBLIC_URLS`; set that variable to your own deployed
-GateLite URLs before running the check.
+GateLite URLs before running the check. If built-in auth is enabled, also set
+`GATELITE_VERIFY_AUTH_USERNAME` and `GATELITE_VERIFY_AUTH_PASSWORD` for the
+HTML shell check.
+
+## DNS/DDNS Management
+
+GateLite can replace a small DDNS-Go style loop for Cloudflare records. It is
+disabled by default and requires GateLite auth when enabled. Records are
+configured as an explicit allowlist, and GateLite only creates or updates those
+records; it does not delete DNS records or resolve A/CNAME conflicts for you.
+
+See [docs/dns-management.md](docs/dns-management.md) for the environment
+format and the current `zooe.cc` / `1804.surfacer.cc` migration shape.
 
 ## Certificate Ownership
 
@@ -218,13 +231,16 @@ the parts they already own:
 - Cloudflare or another CDN may terminate browser-facing TLS before traffic
   reaches Traefik.
 - DDNS tools update DNS records or public IP targets; they do not issue
-  certificates.
+  certificates. GateLite can take over that DNS update loop only when its
+  Cloudflare DNS management feature is explicitly enabled.
 - GateLite manages route-to-certificate intent, local PEM metadata, uploaded or
   synced PEM files under `GATELITE_CERT_DIR`, resolver references, and read-only
   ACME status display when Traefik config/storage are mounted into GateLite.
 
-Do not store DNS provider API tokens in GateLite. Keep those credentials in the
-Traefik or infrastructure layer that performs ACME challenges.
+Do not store DNS provider API tokens in GateLite state. When GateLite owns
+Cloudflare DDNS updates, keep those credentials in environment variables only;
+they are not returned through the GateLite API or UI. Traefik still owns ACME
+challenge credentials for certificate issuance.
 
 Certificate deletion is metadata-only by default. Admin users can choose to
 clean up GateLite-managed PEM files for `self-signed`, `upload`, and `sync`
@@ -258,9 +274,24 @@ Useful Agent API endpoints:
 
 - `GET /api/dashboard` returns runtime, Web service, certificate, traffic, and
   recent history data.
+- `GET /api/web-services` returns groups, managed Web services, and discovered
+  Traefik routes for route read workflows.
+- `POST /api/web-services/preview`, `POST /api/web-services/:id/preview`,
+  `POST /api/web-services/:id/delete-preview`, and
+  `POST /api/discovered-routes/import-preview` are dry-runs that return current
+  YAML, next YAML, and a compact generated-config diff without writing state.
+- Mutating GateLite state endpoints return `{ data, apply }`. `apply` includes
+  the action, summary, `historyId`, `rollbackId`, `rollbackAvailable`, and
+  idempotency replay metadata when an idempotency key is supplied.
+- Send `Idempotency-Key` or `X-Idempotency-Key` on state-changing
+  `POST`/`PUT`/`PATCH`/`DELETE` requests. Reusing the same key with the same
+  method, path, query, and body replays the saved apply response; reusing it for
+  a different request returns `409` with `code: "IDEMPOTENCY_KEY_CONFLICT"`.
+- Validation failures return `400` with `code: "VALIDATION_FAILED"` and
+  structured `issues`.
 - `GET /api/history` returns recent changes with `rollbackAvailable` flags.
 - `POST /api/history/:id/rollback` restores the state snapshot captured before
-  that change and regenerates Traefik dynamic config.
+  that change, regenerates Traefik dynamic config, and returns an apply result.
 
 ## References
 

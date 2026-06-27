@@ -75,13 +75,19 @@ GateLite should show Traefik dashboard/API-level information for:
 
 ## Agent API Principles
 
-- Every write supports preview before apply.
+- Route create/update/delete/import workflows expose dry-run preview endpoints
+  before apply.
 - Web service create/update previews return the current YAML, next YAML, and a
   compact line diff through the same validation layer used by apply.
+- Web service delete previews return the YAML diff that removing the route would
+  generate, without changing GateLite state.
 - Certificate create/update previews cover side-effect-free sources and
   metadata changes; sources that generate or replace local PEM files are
   intentionally rejected during preview and must be applied explicitly.
-- Every apply returns a config diff and rollback handle.
+- Mutating GateLite state applies return a structured `{ data, apply }` body
+  with history and rollback metadata.
+- Agent clients can send idempotency keys and safely replay matching apply
+  requests.
 - Validation errors are structured and repairable.
 - Generated configuration is deterministic.
 - Human UI and Agent API use the same backend validation layer.

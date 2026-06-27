@@ -7,6 +7,21 @@ export type RuntimeProtocol = "http" | "tcp" | "udp";
 export type WebServiceManagementMode = "generated" | "mapped";
 export type AcmeChallengeType = "http-01" | "tls-alpn-01" | "dns-01" | "unknown";
 export type AcmeRenewalState = "ok" | "due-soon" | "expired" | "missing" | "unreadable" | "unknown";
+export type DnsRecordType = "A" | "AAAA" | "CNAME";
+export type DnsRecordStatus = "ok" | "missing" | "needs-update" | "conflict" | "error" | "unknown";
+export type DnsRecordAction = "none" | "create" | "update" | "blocked";
+
+export interface HealthPayload {
+  ok: boolean;
+  traefikApiUrl: string;
+  dynamicFile: string;
+  auth: {
+    enabled: boolean;
+  };
+  dns: {
+    enabled: boolean;
+  };
+}
 
 export interface ServiceGroup {
   id: string;
@@ -108,6 +123,26 @@ export interface GateLiteHistoryEvent {
   rollbackAvailable: boolean;
 }
 
+export interface ApplyMetadata {
+  action: string;
+  summary: string;
+  historyId?: string;
+  rollbackId?: string;
+  rollbackAvailable: boolean;
+  idempotencyKey?: string;
+  replayed: boolean;
+}
+
+export interface ApplyResponse<T> {
+  data: T;
+  apply: ApplyMetadata;
+}
+
+export interface DeleteResult {
+  id: string;
+  deleted: true;
+}
+
 export interface ConfigDiffLine {
   type: "context" | "added" | "removed";
   line: string;
@@ -115,7 +150,7 @@ export interface ConfigDiffLine {
 
 export interface WebServicePreview {
   valid: true;
-  action: "create" | "update";
+  action: "create" | "update" | "delete";
   service: WebService;
   currentYaml: string;
   nextYaml: string;
@@ -382,6 +417,68 @@ export interface CertificateWithBindings extends CertificateItem {
     renewalState: AcmeRenewalState;
     statusMessage?: string;
   };
+}
+
+export interface DnsZoneStatus {
+  zoneName: string;
+  configured: boolean;
+  tokenConfigured: boolean;
+  cloudflareZoneId?: string;
+  status: RuntimeStatus;
+  error?: string;
+}
+
+export interface DnsManagedRecord {
+  zoneName: string;
+  type: DnsRecordType;
+  name: string;
+  content: string;
+  proxied?: boolean;
+  ttl?: number;
+  comment?: string;
+}
+
+export interface DnsManagedRecordStatus {
+  zoneName: string;
+  type: DnsRecordType;
+  name: string;
+  desiredContent: string;
+  currentContent?: string;
+  proxied?: boolean;
+  currentProxied?: boolean;
+  ttl?: number;
+  currentTtl?: number;
+  comment?: string;
+  currentComment?: string;
+  status: DnsRecordStatus;
+  action: DnsRecordAction;
+  message?: string;
+  cloudflareRecordId?: string;
+}
+
+export interface DnsSyncResult {
+  at: string;
+  applied: boolean;
+  currentIpv4?: string;
+  created: number;
+  updated: number;
+  unchanged: number;
+  blocked: number;
+  failed: number;
+  warnings: string[];
+}
+
+export interface DnsStatus {
+  enabled: boolean;
+  provider: "cloudflare";
+  intervalSeconds: number;
+  updatedAt: string;
+  currentIpv4?: string;
+  currentIpv4Source?: string;
+  zones: DnsZoneStatus[];
+  records: DnsManagedRecordStatus[];
+  warnings: string[];
+  lastSync?: DnsSyncResult;
 }
 
 export interface DashboardPayload {

@@ -3,8 +3,9 @@ import https from "node:https";
 
 try {
   const urls = readUrls();
+  const authHeader = readBasicAuthHeader();
   for (const baseUrl of urls) {
-    await verifyUrl(baseUrl);
+    await verifyUrl(baseUrl, authHeader);
   }
   console.log("[ok] GateLite public-domain verification passed.");
 } catch (error) {
@@ -23,14 +24,14 @@ function readUrls() {
     .filter(Boolean);
 }
 
-async function verifyUrl(baseUrl) {
+async function verifyUrl(baseUrl, authHeader) {
   const health = await requestJson(`${baseUrl}/api/health`);
   if (health?.ok !== true) throw new Error(`${baseUrl}/api/health did not return ok=true.`);
   if (health?.auth?.enabled !== false && health?.auth?.enabled !== true) {
     throw new Error(`${baseUrl}/api/health did not expose auth.enabled.`);
   }
 
-  const root = await requestText(baseUrl);
+  const root = await requestText(baseUrl, authHeader);
   if (!root.includes("<title>GateLite</title>")) throw new Error(`${baseUrl}/ did not return the GateLite HTML shell.`);
   console.log(`[ok] ${baseUrl} serves GateLite and health is reachable.`);
 }
@@ -40,10 +41,10 @@ async function requestJson(url) {
   return JSON.parse(body);
 }
 
-function requestText(url) {
+function requestText(url, authHeader) {
   return new Promise((resolve, reject) => {
     const client = url.startsWith("http://") ? http : https;
-    const request = client.get(url, { timeout: 8000 }, (response) => {
+    const request = client.get(url, { timeout: 8000, headers: authHeader ? { Authorization: authHeader } : undefined }, (response) => {
       let body = "";
       response.setEncoding("utf8");
       response.on("data", (chunk) => {
@@ -60,4 +61,11 @@ function requestText(url) {
     request.on("timeout", () => request.destroy(new Error(`${url} timed out after 8000ms.`)));
     request.on("error", reject);
   });
+}
+
+function readBasicAuthHeader() {
+  const username = process.env.GATELITE_VERIFY_AUTH_USERNAME;
+  const password = process.env.GATELITE_VERIFY_AUTH_PASSWORD;
+  if (!username || !password) return undefined;
+  return `Basic ${Buffer.from(`${username}:${password}`).toString("base64")}`;
 }
